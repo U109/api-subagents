@@ -16,33 +16,39 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: '24'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+          go-version-file: go.mod
+          cache: true
       - name: Check release versions
         shell: pwsh
         run: |
-          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $release = Get-Content packaging/release.json -Raw | ConvertFrom-Json
           $plugin = Get-Content .codex-plugin/plugin.json -Raw | ConvertFrom-Json
-          if ($package.version -ne $plugin.version) { throw 'App and plugin versions must match.' }
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $package.version)) { throw 'Tag must match package.json version.' }
-      - name: Build and test plugin
+          $wails = Get-Content wails.json -Raw | ConvertFrom-Json
+          $versionSource = Get-Content internal/buildinfo/version.go -Raw
+          if ($plugin.version -ne $release.version -or $wails.info.productVersion -ne $release.version -or -not $versionSource.Contains('"' + $release.version + '"')) { throw 'Release versions must match.' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $release.version)) { throw 'Tag must match the release version.' }
+      - name: Build standalone plugin and verify payload
+        run: ./scripts/build.ps1 -Target plugin
+      - name: Test protocols, tasks, configuration, installation and updates
+        shell: pwsh
         run: |
-          npm run build
+          $env:WORKER_TEST_BIN = Join-Path $pwd 'build/bin/api-subagents-worker.exe'
+          go test ./... -timeout 90s
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          npm test
+          go vet ./...
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build desktop
+        run: ./scripts/build.ps1 -Target desktop
+      - name: Verify actual WebView2 and Go bindings
+        run: ./scripts/smoke.ps1
+      - name: Install NSIS
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: choco install nsis --yes --no-progress
       - name: Build installer and updater metadata
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        run: npm run desktop:dist
-      - name: Verify Electron startup and isolated configuration
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        run: npm run desktop:smoke
-      - name: Verify packaged files exclude local configuration
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        run: npm run desktop:verify
+        run: ./scripts/build.ps1 -Target installer
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         with:
@@ -50,7 +56,7 @@ jobs:
           if-no-files-found: error
           path: |
             release/API-Subagents-Setup-*.exe
-            release/API-Subagents-Setup-*.exe.blockmap
+            release/update.json
             release/latest.yml
 
   publish:
@@ -65,21 +71,21 @@ jobs:
         with:
           name: windows-x64
           path: release
-      - name: Publish a complete GitHub Release
+      - name: Publish complete release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          target=$(node -p "const c=require('./desktop/release.json');c.owner+'/'+c.repo")
+          target=$(python3 -c "import json; c=json.load(open('packaging/release.json')); print(c['owner']+'/'+c['repo'])")
           if [ "$target" != "$GITHUB_REPOSITORY" ]; then
             if [ -z "$RELEASE_TOKEN" ]; then
-              echo 'Cross-repository publishing requires the RELEASE_TOKEN repository secret.' >&2
+              echo 'Cross-repository publishing requires RELEASE_TOKEN.' >&2
               exit 1
             fi
             export GH_TOKEN="$RELEASE_TOKEN"
           fi
-          # 先上传完整产物再公开 Release，避免客户端读到尚未上传的安装包。
-          gh release create "$GITHUB_REF_NAME" --repo "$target" --draft --title "API Subagents $GITHUB_REF_NAME" --notes-file desktop/release-notes.md release/*.exe release/*.blockmap release/latest.yml
+          # 完整产物上传后才公开版本，避免更新器读到尚未上传的安装包。
+          gh release create "$GITHUB_REF_NAME" --repo "$target" --draft --title "API Subagents $GITHUB_REF_NAME" --notes-file packaging/release-notes.md release/*.exe release/update.json release/latest.yml
           gh release edit "$GITHUB_REF_NAME" --repo "$target" --draft=false --latest

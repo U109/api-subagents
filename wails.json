@@ -1,0 +1,11 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "API Subagents",
+  "outputfilename": "API Subagents",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "author": {"name": "U109"},
+  "info": {"productName": "API Subagents", "productVersion": "0.3.0", "comments": "Go + Wails desktop and standalone MCP worker"}
+}

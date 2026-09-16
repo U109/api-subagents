@@ -1,22 +1,22 @@
 {
   "name": "api-subagents",
-  "version": "0.2.2",
-  "description": "\u628a\u660e\u786e\u7684\u91cd\u590d\u4efb\u52a1\u4ea4\u7ed9\u5916\u90e8\u6a21\u578b\uff0c\u51cf\u5c11 Codex \u4e3b\u6a21\u578b\u7684\u9605\u8bfb\u548c\u751f\u6210",
+  "version": "0.3.0",
+  "description": "把明确的重复任务交给外部模型，减少 Codex 主模型的阅读和生成",
   "author": {
     "name": "zzz"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "API Subagents",
-    "shortDescription": "\u5916\u90e8\u6a21\u578b\u5904\u7406\u91cd\u590d\u5de5\u4f5c\uff0c\u4e3b\u6a21\u578b\u53ea\u505a\u5fc5\u8981\u9a8c\u6536",
-    "longDescription": "\u8fde\u63a5\u7528\u6237\u914d\u7f6e\u7684\u6a21\u578b API\uff0c\u628a\u6279\u91cf\u6ce8\u91ca\u3001\u673a\u68b0\u4fee\u6539\u548c\u5b9a\u70b9\u8c03\u67e5\u4ea4\u7ed9\u5916\u90e8\u6a21\u578b\uff1b\u9ed8\u8ba4\u7cbe\u7b80\u7ed3\u679c\u3001\u6309\u9700\u8bfb\u53d6\u8be6\u7ec6\u5185\u5bb9\uff0c\u5e76\u7531\u4e3b Agent \u6821\u9a8c\u548c\u5e94\u7528\u5efa\u8bae\u3002\u652f\u6301\u6d41\u5f0f\u54cd\u5e94\u4e0e\u53ef\u914d\u7f6e\u7b49\u5f85\u65f6\u95f4\u3002",
+    "shortDescription": "外部模型处理重复工作，主模型只做必要验收",
+    "longDescription": "连接用户配置的模型 API，把批量注释、机械修改和定点调查交给外部模型；默认精简结果、按需读取详细内容，并由主 Agent 校验和应用建议。支持流式响应与可配置等待时间。",
     "developerName": "zzz",
     "category": "Productivity",
     "capabilities": [
       "Read"
     ],
     "defaultPrompt": [
-      "\u628a\u5f53\u524d\u4efb\u52a1\u4e2d\u660e\u786e\u3001\u91cd\u590d\u7684\u5de5\u4f5c\u4ea4\u7ed9\u6211\u5141\u8bb8\u7684\u5916\u90e8\u6a21\u578b\uff0c\u51cf\u5c11\u4e3b\u6a21\u578b\u91cd\u590d\u9605\u8bfb\u548c\u751f\u6210\uff0c\u5e76\u5b8c\u6210\u5fc5\u8981\u9a8c\u6536\u3002"
+      "把当前任务中明确、重复的工作交给我允许的外部模型，减少主模型重复阅读和生成，并完成必要验收。"
     ],
     "brandColor": "#265EB5"
   },

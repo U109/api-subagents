@@ -1,10 +1,16 @@
-# 本地依赖与构建产物；从源码获取后运行 npm ci && npm run build。
+# 本地工具与生成物；Install.cmd 自动准备 Go 并构建。
 node_modules/
 dist/
 dist-desktop/
 .desktop-resources/
 .runtime/
 release/
+.tools/
+build/
+*.test.exe
+bundle/payload.zip
+frontend/wailsjs/
+*.syso
 coverage/
 .nyc_output/
 
@@ -20,7 +26,7 @@ credentials.json
 *.p12
 *.pfx
 CodexApiSubagents/
-tasks/
+/tasks/
 .codex/
 
 # 临时文件、日志、备份与编辑器状态。

@@ -1,0 +1,7 @@
+{
+  "owner": "U109",
+  "repo": "api-subagents",
+  "private": false,
+  "version": "0.3.0",
+  "goVersion": "1.27.1"
+}
