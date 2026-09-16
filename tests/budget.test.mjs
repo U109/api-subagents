@@ -41,7 +41,8 @@ async function fixture(t) {
 async function record(f, changes, overrides = {}) {
   const value = {
     task_id: crypto.randomUUID(),
-    workspace: f.workspace,
+    // 与 TaskManager 一致保存真实路径，兼容 Windows 的 RUNNER~1 等短路径别名。
+    workspace: f.ws.root,
     status: 'completed',
     result: 'Done',
     changes,

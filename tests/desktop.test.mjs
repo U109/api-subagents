@@ -375,7 +375,8 @@ test(
       (await execute('powershell.exe', args, {env, windowsHide: true})).stdout.trim(),
     );
     assert.equal(result.installed, true);
-    assert.match(result.version, /^0\.2\.0\+codex\./);
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+    assert.equal(result.version.split('+')[0], pkg.version);
     env.CODEX_TEST_EXIT = '9';
     await assert.rejects(
       execute('powershell.exe', args, {env, windowsHide: true}),

@@ -6,4 +6,4 @@ Windows x64 桌面版首次发布。
 - 关闭或更新 App 后，已安装插件仍可独立运行；模型配置继续保存在本机。
 - 源码使用者双击 Install.cmd 即可自动准备 Node、安装依赖、构建和安装插件。
 
-下载 `API-Subagents-Setup-0.2.0-x64.exe` 并运行。该安装包尚未配置代码签名证书，Windows 可能提示发布者未知。
+下载 `API-Subagents-Setup-0.2.1-x64.exe` 并运行。该安装包尚未配置代码签名证书，Windows 可能提示发布者未知。

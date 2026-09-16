@@ -1,6 +1,6 @@
 {
   "name": "api-subagents",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "桌面管理外部模型，一键安装 Codex 插件。",
   "author": "U109",
   "main": "dist-desktop/main.cjs",
