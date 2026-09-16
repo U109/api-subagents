@@ -1,0 +1,82 @@
+name: Windows desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check release versions
+        shell: pwsh
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $plugin = Get-Content .codex-plugin/plugin.json -Raw | ConvertFrom-Json
+          if ($package.version -ne $plugin.version) { throw 'App and plugin versions must match.' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $package.version)) { throw 'Tag must match package.json version.' }
+      - name: Build and test plugin
+        run: |
+          npm run build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm test
+      - name: Build installer and updater metadata
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: npm run desktop:dist
+      - name: Verify Electron startup and isolated configuration
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: npm run desktop:smoke
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          name: windows-x64
+          if-no-files-found: error
+          path: |
+            release/API-Subagents-Setup-*.exe
+            release/API-Subagents-Setup-*.exe.blockmap
+            release/latest.yml
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: release
+      - name: Publish a complete GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          target=$(node -p "const c=require('./desktop/release.json');c.owner+'/'+c.repo")
+          if [ "$target" != "$GITHUB_REPOSITORY" ]; then
+            if [ -z "$RELEASE_TOKEN" ]; then
+              echo 'Cross-repository publishing requires the RELEASE_TOKEN repository secret.' >&2
+              exit 1
+            fi
+            export GH_TOKEN="$RELEASE_TOKEN"
+          fi
+          # 先上传完整产物再公开 Release，避免客户端读到尚未上传的安装包。
+          gh release create "$GITHUB_REF_NAME" --repo "$target" --draft --title "API Subagents $GITHUB_REF_NAME" --notes-file desktop/release-notes.md release/*.exe release/*.blockmap release/latest.yml
+          gh release edit "$GITHUB_REF_NAME" --repo "$target" --draft=false --latest

@@ -1,6 +1,10 @@
 # 本地依赖与构建产物；从源码获取后运行 npm ci && npm run build。
 node_modules/
 dist/
+dist-desktop/
+.desktop-resources/
+.runtime/
+release/
 coverage/
 .nyc_output/
 

@@ -113,7 +113,10 @@ export async function startSetup({
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.end(await fs.readFile(htmlPath));
       }
-      if (['/config-ui.js', '/config.css'].includes(req.url) && req.method === 'GET') {
+      if (
+        ['/config-ui.js', '/config.css', '/desktop-ui.js', '/desktop.css'].includes(req.url) &&
+        req.method === 'GET'
+      ) {
         res.setHeader(
           'Content-Type',
           req.url.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8',

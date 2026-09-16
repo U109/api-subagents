@@ -1,5 +1,12 @@
 API Subagents third-party notices
 
+Desktop distributions additionally include Electron, Chromium, Node.js,
+electron-updater and their runtime dependencies. Their complete notices are
+included in the application's resources/licenses directory (Electron-LICENSE.txt,
+Chromium-LICENSES.html, Node-LICENSE.txt and Dependency-LICENSES.txt). The plugin's
+standalone Node runtime retains its Node license next to the cached executable.
+These third-party licenses do not specify a license for API Subagents itself.
+
 Runtime dependencies are bundled into dist/server.mjs. The list below also includes build dependencies used to produce that bundle.
 
 ======================================================================

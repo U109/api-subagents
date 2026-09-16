@@ -17,6 +17,6 @@ await build({
     js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
   },
 });
-for (const asset of ['config.html', 'config-ui.js', 'config.css']) {
+for (const asset of ['config.html', 'config-ui.js', 'config.css', 'desktop-ui.js', 'desktop.css']) {
   await fs.copyFile(path.join(root, 'src', asset), path.join(root, 'dist', asset));
 }

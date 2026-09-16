@@ -1,20 +1,31 @@
 {
   "name": "api-subagents",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "桌面管理外部模型，一键安装 Codex 插件。",
+  "author": "U109",
+  "main": "dist-desktop/main.cjs",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "configure": "node dist/server.mjs --configure"
+    "configure": "node dist/server.mjs --configure",
+    "desktop:build": "npm run build && node scripts/build-desktop.mjs",
+    "desktop:dev": "npm run desktop:build && electron .",
+    "desktop:smoke": "electron tests/electron-smoke.cjs",
+    "desktop:pack": "npm run desktop:build && electron-builder --config electron-builder.config.cjs --dir --publish never",
+    "desktop:dist": "npm run desktop:build && electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3"
   }
 }

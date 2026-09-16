@@ -420,6 +420,8 @@ function add() {
 function setBusy(value) {
   busy = value;
   document.querySelectorAll('button, input, select, textarea').forEach((control) => {
+    // 桌面按钮由安装和更新状态独立管理，不能被配置请求结束时的旧快照覆盖。
+    if (control.closest('#desktop-panel')) return;
     // 保留本来就不可用的下拉框状态；请求结束不应把空列表误启用。
     if (value) {
       control.dataset.wasDisabled = String(control.disabled);
@@ -545,6 +547,26 @@ removeDialog.onclose = () => {
   if (removeDialog.returnValue === 'remove' && name) void removeModel(name);
 };
 byId('add').onclick = add;
+// 桌面版关闭或更新前保留未保存草稿；浏览器入口沿用原有行为。
+if (window.desktopApp) {
+  /** 检查新增连接、改名和字段草稿，避免更新安装丢失用户输入。 */
+  const hasDrafts = () =>
+    dirty.size > 0 ||
+    Object.values(config.models).some((profile) => !profile.savedName) ||
+    (byId('name') && byId('name').value.trim() !== selected);
+  window.addEventListener('desktop:before-update', (event) => {
+    if (hasDrafts() || busy) {
+      event.preventDefault();
+      status('请先保存配置并等待当前操作完成，再重启更新。', false);
+    }
+  });
+  window.addEventListener('beforeunload', (event) => {
+    if (hasDrafts()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+}
 render();
 void action(async () => {
   const result = await api('/api/config');

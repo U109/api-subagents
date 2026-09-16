@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>API Subagents · 模型配置</title>
     <link rel="stylesheet" href="/config.css" />
+    <link rel="stylesheet" href="/desktop.css" />
     <script src="/config-ui.js" defer></script>
+    <script src="/desktop-ui.js" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -22,6 +24,34 @@
     </aside>
     <main>
       <div class="content">
+        <section id="desktop-panel" class="desktop-panel" aria-label="桌面应用与插件" hidden>
+          <div class="desktop-intro">
+            <strong>连接你的模型，交给 Codex 使用</strong><span id="desktop-version"></span>
+          </div>
+          <div class="desktop-controls">
+            <section class="desktop-control">
+              <h2>Codex 插件</h2>
+              <p id="plugin-state" role="status">正在检查安装状态…</p>
+              <button id="install-plugin" class="primary" disabled>安装到 Codex</button>
+            </section>
+            <section class="desktop-control">
+              <h2>应用更新</h2>
+              <p id="update-state" role="status">检查是否有新版本</p>
+              <div class="desktop-links">
+                <button id="check-update" class="secondary" disabled>检查更新</button
+                ><button id="open-releases" class="text-button" hidden>打开版本下载页</button>
+              </div>
+              <progress
+                id="update-progress"
+                max="100"
+                value="0"
+                aria-label="更新下载进度"
+                hidden
+              ></progress>
+            </section>
+          </div>
+          <p id="desktop-error" role="alert"></p>
+        </section>
         <header class="page-header">
           <div>
             <h1>模型配置</h1>
