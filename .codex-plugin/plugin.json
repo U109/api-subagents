@@ -1,6 +1,6 @@
 {
   "name": "api-subagents",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "\u628a\u660e\u786e\u7684\u91cd\u590d\u4efb\u52a1\u4ea4\u7ed9\u5916\u90e8\u6a21\u578b\uff0c\u51cf\u5c11 Codex \u4e3b\u6a21\u578b\u7684\u9605\u8bfb\u548c\u751f\u6210",
   "author": {
     "name": "zzz"

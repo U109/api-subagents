@@ -1,6 +1,6 @@
 {
   "owner": "U109",
   "repo": "api-subagents",
-  "private": true,
+  "private": false,
   "nodeVersion": "24.21.0"
 }

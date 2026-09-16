@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {writeDesktopNotices} from './desktop-notices.mjs';
+import payload from '../desktop/payload.cjs';
 
 const execute = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,27 +48,10 @@ await fs.copyFile(node, path.join(runtime, 'node.exe'));
 await fs.copyFile(path.join(path.dirname(node), 'LICENSE'), path.join(runtime, 'LICENSE'));
 await writeDesktopNotices(root, resources);
 
-for (const item of [
-  '.codex-plugin',
-  '.mcp.json',
-  'dist/server.mjs',
-  'dist/apply-proposals.mjs',
-  'dist/config.html',
-  'dist/config-ui.js',
-  'dist/config.css',
-  'dist/desktop-ui.js',
-  'dist/desktop.css',
-  'skills',
-  'scripts',
-  'desktop/release.json',
-  'Configure.cmd',
-  'Install.cmd',
-  'README.md',
-  'THIRD-PARTY-NOTICES.txt',
-]) {
+for (const item of payload.pluginFiles) {
   const destination = path.join(plugin, item);
   await fs.mkdir(path.dirname(destination), {recursive: true});
-  await fs.cp(path.join(root, item), destination, {recursive: true});
+  await fs.copyFile(path.join(root, item), destination);
 }
 await build({
   entryPoints: [path.join(root, 'src', 'desktop', 'main.mjs')],

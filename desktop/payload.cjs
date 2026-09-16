@@ -1,0 +1,33 @@
+// 构建与安装包共用明确的文件清单，禁止递归收集目录中的本机连接、凭据和临时文件。
+module.exports = {
+  appFiles: ['dist-desktop/main.cjs', 'dist-desktop/preload.cjs', 'dist-desktop/icon.ico'],
+  pluginFiles: [
+    '.codex-plugin/plugin.json',
+    '.mcp.json',
+    'dist/server.mjs',
+    'dist/apply-proposals.mjs',
+    'dist/config.html',
+    'dist/config-ui.js',
+    'dist/config.css',
+    'dist/desktop-ui.js',
+    'dist/desktop.css',
+    'skills/api-workers/SKILL.md',
+    'skills/api-workers/agents/openai.yaml',
+    'scripts/install.ps1',
+    'scripts/source-install.ps1',
+    'scripts/configure.ps1',
+    'scripts/ensure-runtime.ps1',
+    'desktop/release.json',
+    'Configure.cmd',
+    'Install.cmd',
+    'README.md',
+    'THIRD-PARTY-NOTICES.txt',
+  ],
+  runtimeFiles: ['node.exe', 'LICENSE'],
+  licenseFiles: [
+    'Electron-LICENSE.txt',
+    'Chromium-LICENSES.html',
+    'Node-LICENSE.txt',
+    'Dependency-LICENSES.txt',
+  ],
+};

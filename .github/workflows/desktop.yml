@@ -40,6 +40,9 @@ jobs:
       - name: Verify Electron startup and isolated configuration
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         run: npm run desktop:smoke
+      - name: Verify packaged files exclude local configuration
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: npm run desktop:verify
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         with:
