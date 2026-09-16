@@ -16,9 +16,15 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Read pinned Go version
+        id: toolchain
+        shell: pwsh
+        run: |
+          $release = Get-Content packaging/release.json -Raw | ConvertFrom-Json
+          "version=$($release.goVersion)" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.toolchain.outputs.version }}
           cache: true
       - name: Check release versions
         shell: pwsh

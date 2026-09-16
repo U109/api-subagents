@@ -15,8 +15,13 @@ func Inside(root, target string) bool {
 	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
-// SamePath 统一 Windows 路径大小写，比较经过规范化的完整项目目录。
+// SamePath 优先比较实际文件身份，兼容 Windows 短路径和目录联接；不存在时再按平台规则比较文本。
 func SamePath(a, b string) bool {
+	if left, err := os.Stat(a); err == nil {
+		if right, err := os.Stat(b); err == nil {
+			return os.SameFile(left, right)
+		}
+	}
 	a = filepath.Clean(a)
 	b = filepath.Clean(b)
 	if runtime.GOOS == "windows" {
