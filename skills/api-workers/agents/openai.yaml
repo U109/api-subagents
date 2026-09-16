@@ -1,0 +1,6 @@
+interface:
+  display_name: "API Subagents 节省额度"
+  short_description: "把明确的重复工作交给外部模型，主模型只做必要验收，减少重复阅读和生成"
+  default_prompt: "使用 $api-workers，把当前任务中明确的重复工作交给我允许的外部模型，减少主模型重复阅读和生成，并完成必要验收。"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,4 @@
+# 源码统一使用 LF；Windows 启动与安装脚本检出为 CRLF。
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

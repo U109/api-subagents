@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "api-subagents": {
+      "command": "node",
+      "args": ["dist/server.mjs"],
+      "cwd": ".",
+      "startup_timeout_sec": 20,
+      "tool_timeout_sec": 35,
+      "env_vars": ["API_SUBAGENTS_HOME"]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+# 本地依赖与构建产物；从源码获取后运行 npm ci && npm run build。
+node_modules/
+dist/
+coverage/
+.nyc_output/
+
+# 本机运行配置、任务记录和凭据，不应上传到 GitHub。
+runtime.json
+models.json
+credentials.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+CodexApiSubagents/
+tasks/
+.codex/
+
+# 临时文件、日志、备份与编辑器状态。
+*.log
+*.tmp
+*.bak
+*.backup-*
+*.zip
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
