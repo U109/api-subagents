@@ -583,12 +583,7 @@ if (window.desktopApp) {
       status('请先保存配置并等待当前操作完成，再重启更新。', false);
     }
   });
-  window.addEventListener('beforeunload', (event) => {
-    if (hasDrafts()) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
+  // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认。
 }
 render();
 void action(async () => {

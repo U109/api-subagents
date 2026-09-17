@@ -45,6 +45,7 @@ type App struct {
 	mu             sync.Mutex
 	plugin         shared.Object
 	dirty, closing bool
+	closeState     closeState
 	busy           atomic.Int32
 	smoke          string
 }
@@ -115,12 +116,14 @@ func (a *App) GetState() shared.Object {
 	}
 	plugin["bundledVersion"] = a.bundledVersion
 	a.mu.Unlock()
-	return shared.Object{"version": buildinfo.Version, "plugin": plugin, "pluginUpdate": a.pluginUpdater.Snapshot(), "update": a.updater.Snapshot(), "relay": a.relay.Snapshot()}
+	return shared.Object{"version": buildinfo.Version, "plugin": plugin, "pluginUpdate": a.pluginUpdater.Snapshot(), "update": a.updater.Snapshot(), "relay": a.relay.Snapshot(), "close": a.closeSnapshot()}
 }
 
 // API 将固定配置路由传给 Go 服务，后台请求可取消，页面不接受任意文件操作。
 func (a *App) API(route, body string) (shared.Object, error) {
-	a.busy.Add(1)
+	if err := a.beginRequest(); err != nil {
+		return nil, err
+	}
 	defer a.busy.Add(-1)
 	value, err := a.service.Handle(a.ctx, route, []byte(body))
 	if err == nil && body != "" && (route == "/api/config" || route == "/api/config/copy" || route == "/api/config/remove") {
@@ -134,17 +137,23 @@ func (a *App) API(route, body string) (shared.Object, error) {
 // EnableRelay 只允许已保存的连接接管主模型，草稿或配置请求尚未完成时明确阻止。
 func (a *App) EnableRelay(model string) (shared.Object, error) {
 	a.mu.Lock()
-	dirty := a.dirty
-	a.mu.Unlock()
-	if dirty || a.busy.Load() > 0 {
+	if a.dirty || a.busy.Load() > 0 || a.closeInProgressLocked() {
+		a.mu.Unlock()
 		return a.GetState(), errors.New("请先保存当前配置并等待操作完成。")
 	}
+	a.busy.Add(1)
+	a.mu.Unlock()
+	defer a.busy.Add(-1)
 	err := a.relay.Enable(model)
 	return a.GetState(), err
 }
 
 // DisableRelay 恢复 Codex 原始模型设置并关闭本地网关，不修改登录信息和权限策略。
 func (a *App) DisableRelay() (shared.Object, error) {
+	if err := a.beginRequest(); err != nil {
+		return a.GetState(), err
+	}
+	defer a.busy.Add(-1)
 	err := a.relay.Disable()
 	return a.GetState(), err
 }
@@ -167,11 +176,13 @@ func (a *App) DownloadUpdate() (shared.Object, error) {
 // InstallUpdate 核对未保存状态、插件安装和下载校验，成功启动安装器后才退出当前 App。
 func (a *App) InstallUpdate() (shared.Object, error) {
 	a.mu.Lock()
-	blocked := a.dirty || a.plugin["phase"] == "installing"
-	a.mu.Unlock()
-	if blocked || a.busy.Load() > 0 {
+	if a.dirty || a.plugin["phase"] == "installing" || a.busy.Load() > 0 || a.closeInProgressLocked() {
+		a.mu.Unlock()
 		return a.GetState(), errors.New("请先保存配置并等待当前操作完成。")
 	}
+	a.busy.Add(1)
+	a.mu.Unlock()
+	defer a.busy.Add(-1)
 	installer, err := a.updater.Installer()
 	if err != nil {
 		return a.GetState(), err
@@ -190,6 +201,7 @@ func (a *App) InstallUpdate() (shared.Object, error) {
 	_ = cmd.Process.Release()
 	a.mu.Lock()
 	a.closing = true
+	a.closeState = closeState{Phase: "ready"}
 	a.mu.Unlock()
 	a.updater.Installing()
 	state := a.GetState()
@@ -203,45 +215,22 @@ func (a *App) OpenReleases() shared.Object {
 	return a.GetState()
 }
 
-// beforeClose 保留安装中的窗口，草稿存在时由原生对话框明确选择是否放弃。
-func (a *App) beforeClose(ctx context.Context) bool {
-	a.mu.Lock()
-	installing := a.plugin["phase"] == "installing"
-	dirty, closing := a.dirty, a.closing
-	a.mu.Unlock()
-	if closing {
-		return false
-	}
-	if installing {
-		_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{Type: wailsruntime.InfoDialog, Title: "API Subagents", Message: "正在安装插件，请完成后再关闭。"})
-		return true
-	}
-	if dirty {
-		answer, err := wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{Type: wailsruntime.QuestionDialog, Title: "未保存的配置", Message: "有尚未保存的模型配置。", Buttons: []string{"继续编辑", "放弃修改并关闭"}, DefaultButton: "继续编辑", CancelButton: "继续编辑"})
-		if err != nil || answer != "放弃修改并关闭" {
-			return true
-		}
-	}
-	if a.relay.Snapshot().Enabled {
-		answer, err := wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{Type: wailsruntime.QuestionDialog, Title: "挟持模式正在运行", Message: "关闭 App 会停止本地模型连接并恢复 Codex 原配置。", Buttons: []string{"保持运行", "关闭并恢复"}, DefaultButton: "保持运行", CancelButton: "保持运行"})
-		if err != nil || answer != "关闭并恢复" {
-			return true
-		}
-		if err = a.relay.Disable(); err != nil {
-			_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{Type: wailsruntime.ErrorDialog, Title: "无法恢复配置", Message: err.Error()})
-			return true
-		}
-	}
-	return false
-}
-
-// FrontendReady 仅供隔离启动测试记录真实 WebView2 与配置绑定是否就绪，正常运行无副作用。
+// FrontendReady 仅在隔离目录中验证 WebView2、绑定和开启挟持后的真实窗口退出，正常运行无副作用。
+// 测试只启停本地网关、不发送模型请求；目录不符合隔离约定时拒绝启用并记录失败。
 func (a *App) FrontendReady(report shared.Object) {
 	if a.smoke == "" {
 		return
 	}
 	report["version"] = buildinfo.Version
 	report["engine"] = "Wails/WebView2"
+	root := filepath.Dir(a.smoke)
+	if a.relay.Codex.Home != filepath.Join(root, "codex") || configstore.DataDir() != filepath.Join(root, "config") {
+		report["ok"], report["error"] = false, "启动测试必须使用独立 Codex 与配置目录。"
+	} else if err := a.relay.Enable("demo"); err != nil {
+		report["ok"], report["error"] = false, "启动测试无法开启本地网关。"
+	} else {
+		report["relayEnabledBeforeClose"] = a.relay.Snapshot().Enabled
+	}
 	_ = shared.AtomicWrite(a.smoke, shared.Marshal(report), 0600)
 	go func() { time.Sleep(100 * time.Millisecond); wailsruntime.Quit(a.ctx) }()
 }

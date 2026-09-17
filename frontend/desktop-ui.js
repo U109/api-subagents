@@ -53,7 +53,7 @@
       if (next.pluginUpdate?.phase === 'incompatible') window.notices.show('plugin-update', next.pluginUpdate.message, 'warning');
     }
     if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件 v' + next.plugin.installedVersion + ' 已安装，请在 Codex 新建对话。');
-    if (previous.relay?.enabled !== next.relay?.enabled) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新。');
+    if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新。');
   }
 
   /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗。 */
@@ -75,7 +75,22 @@
     node('update-progress').hidden = !['downloading', 'downloaded'].includes(phase);
     node('update-progress').value = next.update.progress;
     renderRelay(next.relay);
+    renderClose(previous?.close, next.close);
     notifyChanges(previous, next);
+  }
+
+  /** 正常退出只显示恢复进度；仅有草稿时打开与页面一致的确认框，失败后恢复界面操作。 */
+  function renderClose(previous = {}, next = {}) {
+    const dialog = node('exit-dialog');
+    const stopping = ['closing', 'ready'].includes(next.phase);
+    node('workbench').inert = stopping;
+    node('confirm-exit').disabled = stopping;
+    if (next.phase === 'confirm') window.uiShell.openDialog('exit-dialog');
+    else if (dialog.open) dialog.close();
+    if (previous.phase === next.phase && previous.message === next.message) return;
+    if (next.phase === 'error') window.notices.show('exit', next.message, 'error');
+    else if (['closing', 'blocked'].includes(next.phase)) window.notices.show('exit', next.message, 'info');
+    else window.notices.clear('exit');
   }
 
   /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接。 */
@@ -116,7 +131,7 @@
 
   /** 串行执行桌面操作；过程状态仍接收后台事件，失败不改变用户的表单草稿。 */
   async function desktopAction(action) {
-    if (actionPending || !state) return;
+    if (actionPending || !state || ['closing', 'ready'].includes(state.close?.phase)) return;
     actionPending = true;
     renderDesktop(state);
     desktopError('');
@@ -150,6 +165,15 @@
     if (state && !['available', 'downloaded', 'downloading', 'checking', 'installing'].includes(state.update.phase)) void updateAction();
   };
   node('open-releases').onclick = () => desktopAction(() => bridge.openReleases());
+  node('confirm-exit').onclick = () => {
+    node('confirm-exit').disabled = true;
+    bridge.confirmClose().catch(() => { node('confirm-exit').disabled = false; desktopError('无法退出，请重试。'); });
+  };
+  node('cancel-exit').onclick = () => { void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试。')); };
+  node('exit-dialog').addEventListener('cancel', event => {
+    event.preventDefault();
+    void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试。'));
+  });
   window.addEventListener('config:rendered', () => { if (state) renderRelay(state.relay); });
   window.addEventListener('config:draft', () => { if (state) renderRelay(state.relay); });
   bridge.onState(renderDesktop);

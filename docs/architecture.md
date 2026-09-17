@@ -27,6 +27,8 @@
 
 Codex 的 `model_catalog_json` 在启动时加载，因此列表修改后需重启 Codex；详见 [官方配置参考](https://developers.openai.com/codex/config-reference/#model_catalog_json)。
 
+桌面退出由 `internal/desktop/lifecycle.go` 管理：首次关闭先拦截窗口销毁，在后台恢复 Codex、取消网关请求并释放端口，成功后再放行退出。仅未保存草稿需要页面确认，安装与配置操作受同一状态锁保护；恢复失败保留窗口和备份。隔离桌面启动测试会先开启网关，再验证真实窗口关闭后的配置恢复。
+
 ## 构建
 
 Windows x64，Go ≥ 1.26，桌面运行需要 WebView2。脚本可以下载校验后的 Go 工具链；安装包构建另外需要 NSIS 3。

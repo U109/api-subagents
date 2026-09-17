@@ -24,6 +24,10 @@ if (window.go?.desktop?.App && window.runtime) {
     api: (route, body) => app.API(route, body === undefined ? '' : JSON.stringify(body)),
     /** 同步未保存状态，让原生窗口关闭和更新操作也能保护草稿。 */
     setDirty: (value) => app.SetDirty(value),
+    /** 确认放弃草稿；Go 再次检查操作状态并恢复 Codex 后才退出。 */
+    confirmClose: () => app.ConfirmClose(),
+    /** 继续编辑时取消退出确认，保留当前草稿和挟持模式。 */
+    cancelClose: () => app.CancelClose(),
     /** 用已保存的连接开启或切换 Codex 主模型，启用前自动保存原配置备份。 */
     enableRelay: (name) => app.EnableRelay(name),
     /** 关闭本地网关并恢复原有 Codex 模型设置。 */

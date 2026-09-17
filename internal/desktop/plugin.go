@@ -36,7 +36,7 @@ func (a *App) UpdatePlugin() (shared.Object, error) { return a.installPlugin(tru
 // installPlugin 串行处理两种来源；在线包先校验哈希、版本和文件白名单，再进入固定的插件安装流程。
 func (a *App) installPlugin(remote bool) (shared.Object, error) {
 	a.mu.Lock()
-	if a.plugin["phase"] == "installing" || a.closing || a.updater.Snapshot().Phase == "installing" {
+	if a.plugin["phase"] == "installing" || a.closeInProgressLocked() || a.updater.Snapshot().Phase == "installing" {
 		a.mu.Unlock()
 		return a.GetState(), errors.New("请等待当前安装完成。")
 	}

@@ -13,6 +13,9 @@ try {
     # 合成连接仅渲染表单，不执行模型请求；可验证思考等级确实出现在真实 WebView2 中。
     $fixture = '{"version":1,"models":{"demo":{"protocol":"compatible","model":"mock-model","baseUrl":"http://127.0.0.1:9/v1","reasoningEffort":"low","relayModels":["mock-fast","mock-deep"]}}}'
     [IO.File]::WriteAllText((Join-Path $env:API_SUBAGENTS_HOME 'models.json'), $fixture, (New-Object Text.UTF8Encoding($false)))
+    # 真实窗口退出前启用本地网关，退出后应还原原默认模型并移除临时令牌与备份。
+    $codexConfig = Join-Path $env:CODEX_HOME 'config.toml'
+    [IO.File]::WriteAllText($codexConfig, "model = 'original-smoke-model'`n", (New-Object Text.UTF8Encoding($false)))
     $report = Join-Path $testRoot 'report.json'
     $process = Start-Process -FilePath $Executable -ArgumentList @('--smoke-report',('"' + $report + '"')) -WindowStyle Hidden -PassThru
     if (-not $process.WaitForExit(40000)) {
@@ -21,8 +24,11 @@ try {
     }
     if (-not (Test-Path -LiteralPath $report)) { throw 'The desktop did not produce its startup report.' }
     $result = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 7 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
-    Write-Host ('Verified WebView2, Go bindings, four tabs, reasoning selector and hijack model list: ' + $result.version)
+    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 7 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3 -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
+    $restored = Get-Content -LiteralPath $codexConfig -Raw -Encoding UTF8
+    if (-not $restored.Contains("model = 'original-smoke-model'") -or $restored.Contains('X-Api-Subagents-Token') -or (Test-Path -LiteralPath (Join-Path $env:API_SUBAGENTS_HOME 'codex-relay-backup.json'))) { throw 'Desktop close did not restore Codex configuration.' }
+    if ([IO.File]::ReadAllText((Join-Path $env:API_SUBAGENTS_HOME 'models.json')) -ne $fixture) { throw 'Desktop close modified the saved model configuration.' }
+    Write-Host ('Verified WebView2, Go bindings, model selection and automatic relay shutdown: ' + $result.version)
 } finally {
     $env:API_SUBAGENTS_HOME = $priorData
     $env:CODEX_HOME = $priorCodex
