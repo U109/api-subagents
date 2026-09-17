@@ -4,8 +4,6 @@
 #enable-relay { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
 #update-progress, #plugin-progress { display: block; width: 100%; height: 6px; margin: 18px 0 24px; accent-color: var(--accent); }
 .dialog-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 10px; }
-.dialog-error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
-.dialog-error:empty { display: none; }
 dialog .dialog-hint { font-size: 11px; }
 .version-list { margin: 22px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fafafa; }
 .version-list > div { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; font-size: 12px; line-height: 1.8; }

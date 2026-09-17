@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -218,5 +217,4 @@ func TestRelayStopsAndRecovers(t *testing.T) {
 	if r.Snapshot().Enabled {
 		t.Fatal("relay still enabled")
 	}
-	_ = context.Background()
 }

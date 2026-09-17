@@ -87,10 +87,9 @@ main { position: relative; min-width: 0; min-height: 0; display: flex; flex-dire
 
 /* 页标题独立于配置内容；右上角工具栏沿用参考图的小浮层布局。 */
 .top-actions { position: absolute; top: 24px; right: 24px; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-height: 45px; border: 1px solid #f0f0f0; border-radius: 15px; background: white; box-shadow: 0 14px 30px #0000000e; }
-.toolbar-button, .toolbar-icon { display: flex; align-items: center; justify-content: center; gap: 8px; height: 30px; padding: 0 8px; color: var(--secondary); border-radius: 7px; font-size: 11px; }
-.toolbar-button:hover, .toolbar-icon:hover { background: var(--surface); }
-.toolbar-button svg, .toolbar-icon svg { width: 16px; height: 16px; }
-.tool-separator { height: 15px; width: 1px; background: var(--line); }
+.toolbar-button { display: flex; align-items: center; justify-content: center; gap: 8px; height: 30px; padding: 0 8px; color: var(--secondary); border-radius: 7px; font-size: 11px; }
+.toolbar-button:hover { background: var(--surface); }
+.toolbar-button svg { width: 16px; height: 16px; }
 .page-header { margin-bottom: 27px; }
 h1 { margin: 0; font-size: 29px; line-height: 1.35; font-weight: 700; letter-spacing: -.6px; }
 .page-meta { display: flex; align-items: center; gap: 11px; margin-top: 9px; padding-left: 11px; border-left: 2px solid var(--success); font-size: 11px; line-height: 15px; color: var(--muted); }
@@ -136,7 +135,6 @@ h1 { margin: 0; font-size: 29px; line-height: 1.35; font-weight: 700; letter-spa
 .form-intro > svg { margin-top: 5px; width: 19px; height: 19px; color: var(--accent); }
 h2 { margin: 0; font-size: 20px; font-weight: 650; line-height: 1.45; }
 .form-intro p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .field { min-width: 0; }
 .field.full { grid-column: 1 / -1; }
 label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 600; color: var(--secondary); }
@@ -145,19 +143,11 @@ input, select { height: 43px; }
 input:hover, select:hover, textarea:hover { border-color: var(--border-active); }
 input::placeholder { color: var(--muted); font-size: 12px; }
 textarea { line-height: 1.9; resize: vertical; min-height: 150px; }
-.field-hint { font-size: 10px; line-height: 1.65; color: var(--muted); margin: 7px 0 0; }
-.select-wrap { position: relative; min-width: 0; }
 select { appearance: none; padding-right: 36px; }
-.select-wrap > svg { width: 14px; height: 14px; position: absolute; top: 15px; right: 13px; color: var(--accent); pointer-events: none; }
 .input-wrap { display: flex; align-items: center; position: relative; }
-.input-wrap > svg { position: absolute; width: 15px; height: 15px; left: 14px; color: var(--accent); }
-.input-wrap > svg + input { padding-left: 39px; padding-right: 69px; }
-#endpoint { font: 12px var(--mono); }
-.input-tag { position: absolute; right: 12px; font: 8px var(--mono); color: var(--muted); padding: 3px 5px; border-radius: 3px; background: var(--surface); pointer-events: none; }
 .field-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; gap: 12px; }
 .field-label label { margin-bottom: 0; }
 .key-saved { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
-.key-saved svg { height: 10px; width: 10px; }
 .key-input input { padding-right: 48px; letter-spacing: 2px; }
 .key-input .icon-button { position: absolute; right: 7px; }
 .icon-button { display: grid; place-items: center; width: 32px; height: 30px; border-radius: 5px; color: var(--muted); }
@@ -168,12 +158,6 @@ select { appearance: none; padding-right: 36px; }
 .text-button:hover { color: var(--ink); text-decoration: underline; }
 .text-button svg { width: 12px; height: 12px; }
 .hint-row .text-button { margin-top: 7px; }
-.purpose-tip { display: flex; gap: 10px; color: var(--accent); margin-top: 26px; padding-top: 23px; border-top: 1px solid var(--line); }
-.purpose-tip svg { height: 17px; width: 17px; }
-.purpose-tip strong { color: var(--secondary); font-size: 12px; font-weight: 500; }
-.purpose-tip p { color: var(--muted); font-size: 11px; line-height: 1.8; margin: 7px 0 0; }
-.label-note { font-size: 10px; font-weight: 400; color: var(--muted); margin-left: 6px; }
-.design-caption { margin: 15px 2px 0; font-size: 9px; color: var(--muted); }
 
 /* 保存采用暖灰白字；底部操作栏固定，长表单也能直接保存或测试连接。 */
 .action-bar { display: flex; flex-shrink: 0; justify-content: space-between; gap: 16px; align-items: center; padding: 16px var(--page-gutter); border-top: 1px solid var(--line); background: white; }
@@ -252,13 +236,12 @@ dialog strong { color: var(--secondary); font-size: 13px; }
   .form-intro { padding: 0 0 18px; gap: 10px; }
   .form-intro p { font-size: 10px; }
   h2 { font-size: 18px; }
-  .field-grid { grid-template-columns: 1fr; }
   .save-guidance { display: none; }
   .action-bar { padding: 13px 20px; }
   .footer-actions { width: 100%; }
   .footer-actions button { flex: 1; }
 }
-@media (max-width: 380px) { .tabs button svg { display: none; } .hint-row { align-items: flex-start; } .hint-row .field-hint { max-width: 138px; } }
+@media (max-width: 380px) { .tabs button svg { display: none; } .hint-row { align-items: flex-start; } }
 /* 较矮的桌面窗口压缩页头间距，让配置操作尽量留在同一屏内。 */
 @media (min-width: 1021px) and (max-height: 800px) {
   .workspace { padding-top: 32px; }
