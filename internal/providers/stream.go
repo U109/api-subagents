@@ -283,6 +283,9 @@ func (a *accumulator) accept(event, text string) error {
 					a.calls[index] = call
 				}
 				call["id"] = shared.Str(call["id"]) + shared.Str(part["id"])
+				if extra := part["extra_content"]; extra != nil {
+					call["extra_content"] = extra
+				}
 				f := shared.Obj(call["function"])
 				for _, field := range []string{"name", "arguments"} {
 					f[field] = shared.Str(f[field]) + shared.Str(shared.Obj(part["function"])[field])

@@ -111,6 +111,13 @@ func notices() error {
 			return fmt.Errorf("运行依赖缺少许可证：%s", m.Path)
 		}
 	}
+	// 源码摘取不出现在 go list 中，必须单独收录，避免构建覆盖后遗漏 CPA 移植代码的许可。
+	cpaLicense, err := os.ReadFile("internal/cpacompat/LICENSE")
+	if err != nil {
+		return err
+	}
+	text.WriteString("\n===== CLIProxyAPI v7.3.6 adapted source / internal/cpacompat =====\nSource: https://github.com/router-for-me/CLIProxyAPI/tree/8c664b2fede5c83b919be1df9b01057ec4e4c950\n\n")
+	text.Write(cpaLicense)
 	return os.WriteFile("THIRD-PARTY-NOTICES.txt", []byte(strings.TrimRight(text.String(), "\r\n")+"\n"), 0644)
 }
 

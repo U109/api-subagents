@@ -14,6 +14,7 @@ import (
 // ModelEntry 只携带展示和本地路由信息，两个模型目录共用它，不能包含地址或凭据。
 type ModelEntry struct {
 	Slug, Name, Description, ReasoningEffort string
+	ContextWindow                            int
 }
 
 // relayConnectionAlias 将自由文本名称编码为单个路由段；旧版连接名称保持原别名不变。
@@ -29,9 +30,10 @@ func RelayModelAlias(connection, model string) string {
 }
 
 // ModelEntries 为 Codex 和本地 /models 提供同一有序目录，使用自定义显示名称且保留稳定路由。
-// 默认模型自动加入，额外模型按保存顺序展示；改名不影响已有对话或实际调用的模型 ID。
+// 默认模型与额外模型都使用固定模型别名；只有“跟随 App”追踪默认值，改默认不误切已选具体模型。
 func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
-	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: config.Models[defaultName].ReasoningEffort}}
+	selected := config.Models[defaultName]
+	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: selected.ReasoningEffort, ContextWindow: selected.ContextWindow(selected.Model)}}
 	names := make([]string, 0, len(config.Models))
 	for name := range config.Models {
 		names = append(names, name)
@@ -39,14 +41,14 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	sort.Strings(names)
 	for _, name := range names {
 		profile := config.Models[name]
-		entries = append(entries, ModelEntry{Slug: relayConnectionAlias(name), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
+		entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, profile.Model), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(profile.Model)})
 		seen := map[string]bool{profile.Model: true}
 		for _, model := range profile.RelayModels {
 			if seen[model] {
 				continue
 			}
 			seen[model] = true
-			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
+			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model)})
 		}
 	}
 	return entries

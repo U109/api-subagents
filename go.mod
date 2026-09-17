@@ -6,6 +6,8 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/router-for-me/CLIProxyAPI/v7 v7.3.4
+	github.com/tidwall/gjson v1.18.0
+	github.com/tidwall/sjson v1.2.5
 	github.com/wailsapp/wails/v2 v2.14.0
 	golang.org/x/sys v0.47.0
 )
@@ -52,10 +54,8 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
-	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect

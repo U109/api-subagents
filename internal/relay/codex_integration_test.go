@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	codexconfig "github.com/U109/api-subagents/internal/codex"
 	"github.com/U109/api-subagents/internal/shared"
 )
 
@@ -162,7 +163,7 @@ func TestCodexModelList(t *testing.T) {
 				t.Fatal("connection default missing from catalog", model)
 			}
 		}
-		if !models["api-subagents"] || !models["api-subagents/demo"] {
+		if !models["api-subagents"] || !models[codexconfig.RelayModelAlias("demo", "mock-model")] {
 			t.Fatalf("custom models missing; stderr: %s", stderr.String())
 		}
 		break

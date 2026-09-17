@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
 )
@@ -44,7 +45,7 @@ func normalizeUsage(response shared.Object) {
 
 // normalizeEvents 适配部分兼容服务省略的用量字段与 output_item.done，确保 Codex 能接收最终消息。
 // 已发出的完成项不会重复；回答正文只作为 JSON 内容处理，不参与协议状态判断。
-func normalizeEvents(chunk []byte, completed map[string]bool, patchAlias string) []byte {
+func normalizeEvents(chunk []byte, completed map[string]bool, patchAlias string, aliases cpacompat.ToolAliases) []byte {
 	var output bytes.Buffer
 	decoder := providers.NewEventDecoder(func(event, data string) error {
 		var value shared.Object
@@ -52,6 +53,7 @@ func normalizeEvents(chunk []byte, completed map[string]bool, patchAlias string)
 			return errors.New("响应事件无效")
 		}
 		restorePatchTool(value, patchAlias)
+		aliases.Restore(value)
 		kind := shared.Str(value["type"])
 		if kind == "" {
 			kind = event

@@ -12,6 +12,30 @@ import (
 	"github.com/U109/api-subagents/internal/shared"
 )
 
+// TestConcreteModelSelectionSurvivesDefaultChange 验证一个 worker 改默认值后，Codex 已选择的具体模型及容量仍固定。
+func TestConcreteModelSelectionSurvivesDefaultChange(t *testing.T) {
+	c := configstore.EmptyConfig()
+	c.Models["worker"] = configstore.Profile{Model: "first", RelayModels: []string{"second"}, APIKey: "synthetic", ModelContextWindows: map[string]int{"first": 128000, "second": 256000}}
+	before := ModelEntries(c, "worker")
+	selected := before[1].Slug
+	p := c.Models["worker"]
+	p.Model = "second"
+	p.RelayModels = []string{"first"}
+	c.Models["worker"] = p
+	_, resolved, err := ResolveCatalogModel(c, "worker", selected)
+	if err != nil || resolved.Model != "first" || resolved.ContextWindow(resolved.Model) != 128000 {
+		t.Fatal("concrete selection followed default", err)
+	}
+	_, follow, err := ResolveCatalogModel(c, "worker", relayModel)
+	if err != nil || follow.Model != "second" {
+		t.Fatal("follow App did not track default")
+	}
+	after := ModelEntries(c, "worker")
+	if after[2].Slug != selected {
+		t.Fatal("moving model changed its alias")
+	}
+}
+
 // TestFreeTextConnectionRouting 验证自由名称进入目录后可准确恢复，斜线与转义文本不能串到另一连接。
 func TestFreeTextConnectionRouting(t *testing.T) {
 	c := configstore.EmptyConfig()
@@ -44,8 +68,8 @@ func TestFreeTextConnectionRouting(t *testing.T) {
 			t.Fatal("connection alias decoded incorrectly", err)
 		}
 	}
-	if !seen[relayModel+"/demo"] {
-		t.Fatal("legacy connection alias changed")
+	if !seen[RelayModelAlias("demo", "default")] {
+		t.Fatal("default model missing a stable model alias")
 	}
 	for _, alias := range []string{relayModel + "/bad%escape", relayModel + "/demo%", relayModel + "/a%2Fb/not-configured"} {
 		if _, _, err := ResolveCatalogModel(c, "demo", alias); err == nil {

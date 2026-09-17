@@ -96,3 +96,9 @@ dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7;
   .reasoning-block .field-label { margin-bottom: 8px; }
   .default-note { margin-top: 10px; }
 }
+
+/* 编辑字段较多时只滚动字段区，保留标题和保存操作，适配桌面矮窗口与手机。 */
+#rename-model-form { display: flex; flex-direction: column; max-height: calc(100dvh - 104px); }
+#rename-model-form > h2, #rename-model-description, #rename-model-form > .dialog-actions { flex-shrink: 0; }
+.model-editor-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
+#rename-model-form > .dialog-actions { margin-top: 20px; }

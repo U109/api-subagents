@@ -20,6 +20,7 @@ import (
 
 	codexconfig "github.com/U109/api-subagents/internal/codex"
 	configstore "github.com/U109/api-subagents/internal/config"
+	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
 
@@ -48,6 +49,7 @@ type Relay struct {
 	server      *http.Server
 	cancel      context.CancelFunc
 	slots       chan struct{}
+	chatHistory chatHistory
 }
 
 // New 创建默认关闭的网关，模型密钥只在请求时从本机配置解析。
@@ -161,6 +163,7 @@ func (r *Relay) Disable() error {
 	if server != nil {
 		server.Close()
 	}
+	r.chatHistory.clear()
 	r.notify()
 	return nil
 }
@@ -346,6 +349,10 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	if profile.Protocol == "anthropic" {
 		patchAlias = aliasPatchTool(input)
 	}
+	var toolAliases cpacompat.ToolAliases
+	if profile.Protocol == "compatible" {
+		toolAliases = cpacompat.PrepareChatTools(input)
+	}
 	original := shared.Marshal(input)
 	requestBody := original
 	if to != translator.FormatOpenAIResponse {
@@ -391,6 +398,13 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 		replyError(w, 400, err.Error())
 		return
 	}
+	if profile.Protocol == "gemini" {
+		cpacompat.CleanGeminiSchemas(converted)
+	}
+	historyScope := chatScope(profile, req.Header.Get("session_id"))
+	if profile.Protocol == "compatible" {
+		r.chatHistory.restore(historyScope, converted)
+	}
 	requestBody = shared.Marshal(converted)
 	profile.Stream = upstreamStream
 	endpoint, headers, _ := providers.RequestSpec(profile, nil, "", nil)
@@ -425,7 +439,7 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	completedItems := map[string]bool{}
 	// 只发送完整的 Responses 事件；错误事件由本机固定文字构造，不暴露上游响应片段。
 	emit := func(data []byte) {
-		data = normalizeEvents(data, completedItems, patchAlias)
+		data = normalizeEvents(data, completedItems, patchAlias, toolAliases)
 		if !sentHeaders {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("X-Accel-Buffering", "no")
@@ -442,12 +456,32 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	}
 	terminal := false
 	finishReason := false
+	chatStream := providers.NewChatStream(profile)
 	decoder := providers.NewEventDecoder(func(event, text string) error {
-		if strings.TrimSpace(text) == "[DONE]" {
-			if profile.Protocol == "compatible" && !finishReason {
-				return errors.New("模型流缺少结束原因。")
+		// 完成后的尾帧不再改写终态；Responses 必须有正式完成事件，[DONE] 不能代替它。
+		if terminal && finished {
+			return nil
+		}
+		if profile.Protocol == "compatible" {
+			var streamErr error
+			text, streamErr = chatStream.Accept(text)
+			if streamErr != nil {
+				return streamErr
 			}
-			terminal = true
+			if message := chatStream.Message(); message != nil {
+				// 在向 Codex 发完成事件之前写入，避免下一轮工具结果先于缓存到达。
+				r.chatHistory.remember(historyScope, converted, message)
+			}
+		}
+		if strings.TrimSpace(text) == "[DONE]" {
+			if profile.Protocol == "compatible" {
+				if !finishReason {
+					return errors.New("模型流缺少结束原因。")
+				}
+				terminal = true
+			} else if !terminal {
+				return errors.New("模型流缺少正式完成事件。")
+			}
 		} else {
 			var value shared.Object
 			if json.Unmarshal([]byte(text), &value) != nil || value == nil {
@@ -546,6 +580,14 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	}
 	if !streaming {
 		body := jsonBody.Bytes()
+		var chatMessage shared.Object
+		if profile.Protocol == "compatible" {
+			body, chatMessage, err = providers.NormalizeChatJSON(body, profile)
+			if err != nil {
+				replyError(w, 502, err.Error())
+				return
+			}
+		}
 		if to != translator.FormatOpenAIResponse {
 			if profile.Protocol == "anthropic" {
 				body, err = claudeTranscript(body)
@@ -566,8 +608,12 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 			return
 		}
 		normalizeUsage(response)
+		if response["status"] == "completed" && chatMessage != nil {
+			r.chatHistory.remember(historyScope, converted, chatMessage)
+		}
 		restorePatchTool(response, patchAlias)
 		if !wantStream {
+			toolAliases.Restore(response)
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(shared.Marshal(response))
 			return

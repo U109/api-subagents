@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	configstore "github.com/U109/api-subagents/internal/config"
+	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/shared"
 )
 
@@ -14,6 +15,9 @@ func ApplyReasoning(body shared.Object, p configstore.Profile, effort string) er
 	if !configstore.ValidReasoningEffort(effort) {
 		return errors.New("不支持此思考等级，请在模型配置中重新选择。")
 	}
+	if p.Protocol == "compatible" {
+		return applyChatReasoning(body, p, effort)
+	}
 	if effort == "" {
 		return nil
 	}
@@ -22,8 +26,6 @@ func ApplyReasoning(body shared.Object, p configstore.Profile, effort string) er
 		reasoning := shared.Obj(body["reasoning"])
 		reasoning["effort"] = effort
 		body["reasoning"] = reasoning
-	case "compatible":
-		body["reasoning_effort"] = effort
 	case "anthropic":
 		delete(body, "thinking")
 		output := shared.Obj(body["output_config"])
@@ -37,13 +39,7 @@ func ApplyReasoning(body shared.Object, p configstore.Profile, effort string) er
 		}
 		model := strings.ReplaceAll(strings.ToLower(p.Model), ".", "-")
 		if strings.Contains(model, "opus-4-6") || strings.Contains(model, "sonnet-4-6") {
-			level := effort
-			if level == "minimal" {
-				level = "low"
-			}
-			if level == "xhigh" {
-				level = "high"
-			}
+			level, _ := cpacompat.MapToClaudeEffort(effort, strings.Contains(model, "opus-4-6"))
 			body["thinking"] = shared.Object{"type": "adaptive"}
 			output["effort"] = level
 			body["output_config"] = output
@@ -60,12 +56,8 @@ func ApplyReasoning(body shared.Object, p configstore.Profile, effort string) er
 		thinking := shared.Obj(generation["thinkingConfig"])
 		delete(thinking, "thinkingLevel")
 		delete(thinking, "thinkingBudget")
-		if strings.HasPrefix(strings.TrimPrefix(strings.ToLower(p.Model), "models/"), "gemini-3") && effort != "none" {
-			level := effort
-			if level == "xhigh" {
-				level = "high"
-			}
-			thinking["thinkingLevel"] = level
+		if strings.HasPrefix(strings.TrimPrefix(strings.ToLower(p.Model), "models/"), "gemini-3") {
+			thinking["thinkingLevel"] = geminiEffort(strings.ToLower(p.Model), effort)
 		} else {
 			budget := min(reasoningBudget(effort), 24576)
 			if limit := shared.Int(generation["maxOutputTokens"]); limit > 0 {

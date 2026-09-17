@@ -15,6 +15,7 @@ import (
 	"time"
 
 	configstore "github.com/U109/api-subagents/internal/config"
+	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/platform"
 	"github.com/U109/api-subagents/internal/shared"
 )
@@ -188,6 +189,11 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 	streaming := strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/event-stream")
 	acc := newAccumulator(profile.Protocol)
 	decoder := sseDecoder{accept: acc.accept}
+	if profile.Protocol == "compatible" {
+		chat := NewChatStream(profile)
+		acc = chat.acc
+		decoder.accept = func(_ string, text string) error { _, err := chat.Accept(text); return err }
+	}
 	var raw bytes.Buffer
 	buf := make([]byte, 16384)
 	received := 0
@@ -242,6 +248,13 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 	} else if json.Unmarshal(raw.Bytes(), &result) != nil || result == nil {
 		return nil, errors.New("API 没有返回有效 JSON 或 SSE 流。")
 	}
+	if !streaming && profile.Protocol == "compatible" {
+		data, _, err := NormalizeChatJSON(raw.Bytes(), profile)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(data, &result)
+	}
 	progress(shared.Object{"phase": "response_received", "receivedBytes": received, "events": events})
 	return result, nil
 }
@@ -249,6 +262,9 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 // Turn 只在完整、未截断的响应通过校验后提交历史，工具参数交给受限文件层处理。
 func (p *Provider) Turn(ctx context.Context, profile configstore.Profile, history *[]any, system string, tools []shared.Tool, progress func(shared.Object)) (shared.Reply, error) {
 	endpoint, headers, body := RequestSpec(profile, *history, system, tools)
+	if profile.Protocol == "gemini" {
+		cpacompat.CleanGeminiSchemas(body)
+	}
 	if err := ApplyReasoning(body, profile, profile.ReasoningEffort); err != nil {
 		return shared.Reply{}, err
 	}

@@ -105,7 +105,7 @@ func RootKeySpans(data []byte, keys map[string]bool) ([][2]int, error) {
 	return spans, nil
 }
 
-// PatchCodexConfig 仅接管模型、提供商与模型目录，使用可恢复标记保留其余配置及注释。
+// PatchCodexConfig 接管模型、提供商与目录；暂存全局上下文覆盖项，让不同模型的容量生效，关闭时恢复。
 func PatchCodexConfig(original []byte, catalog string, port int, token string) ([]byte, error) {
 	var err error
 	original, err = withoutInactiveProvider(original)
@@ -122,7 +122,7 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 	if shared.Obj(parsed["model_providers"])[providerID] != nil {
 		return nil, errors.New("Codex 已有同名自定义提供商，未覆盖。")
 	}
-	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true})
+	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true})
 	if err != nil {
 		return nil, err
 	}
@@ -231,17 +231,19 @@ func restoreSelectedModel(current, written []byte) ([]byte, error) {
 func (c CodexConfig) WriteCatalog(config configstore.Config, defaultName string) error {
 	models := []any{}
 	for index, entry := range ModelEntries(config, defaultName) {
-		models = append(models, catalogModel(entry.Slug, entry.Name, entry.Description, entry.ReasoningEffort, index))
+		models = append(models, catalogModel(entry.Slug, entry.Name, entry.Description, entry.ReasoningEffort, index, entry.ContextWindow))
 	}
 	return shared.AtomicWrite(c.catalogPath(), shared.Marshal(shared.Object{"models": models}), 0600)
 }
 
-// catalogModel 声明保守的通用工具能力，不启用远端专属搜索、WebSocket 或付费辅助模型。
-func catalogModel(slug, name, description, effort string, priority int) shared.Object {
+// catalogModel 按模型声明上下文容量并在 90% 时压缩；普通进度使用用户语言，不要求输出思考标签。
+// 未确认的容量由配置层保守回退，不启用远端专属搜索、WebSocket 或付费辅助模型。
+func catalogModel(slug, name, description, effort string, priority, contextWindow int) shared.Object {
 	var defaultEffort any
 	if effort != "" {
 		defaultEffort = effort
 	}
+	instructions := "You are a coding assistant running in Codex. Follow the user's request and the provided system and developer instructions. Use available tools according to their permissions. Keep changes focused, inspect project instructions, and verify your work. Keep user-facing progress updates brief and in the user's language. Do not wrap user-facing messages in <thinking> or <think> tags."
 	return shared.Object{
 		"slug":                                 slug,
 		"display_name":                         name,
@@ -254,8 +256,8 @@ func catalogModel(slug, name, description, effort string, priority int) shared.O
 		"priority":                             priority,
 		"availability_nux":                     nil,
 		"upgrade":                              nil,
-		"model_messages":                       shared.Object{"instructions_template": "You are a coding assistant running in Codex. Follow the user's request and the provided system and developer instructions. Use available tools according to their permissions. Keep changes focused, inspect project instructions, and verify your work.", "instructions_variables": nil, "approvals": nil, "collaboration_modes": nil, "auto_review": nil, "permissions": nil, "multi_agent": nil},
-		"base_instructions":                    "You are a coding assistant running in Codex. Follow system, developer and user instructions and respect tool permissions.",
+		"model_messages":                       shared.Object{"instructions_template": instructions, "instructions_variables": nil, "approvals": nil, "collaboration_modes": nil, "auto_review": nil, "permissions": nil, "multi_agent": nil},
+		"base_instructions":                    instructions,
 		"include_skills_usage_instructions":    true,
 		"include_plugin_usage_instructions":    true,
 		"include_apps_usage_instructions":      true,
@@ -265,8 +267,8 @@ func catalogModel(slug, name, description, effort string, priority int) shared.O
 		"supports_reasoning_summary_parameter": false,
 		"apply_patch_tool_type":                "freeform",
 		"truncation_policy":                    shared.Object{"mode": "bytes", "limit": 10000},
-		"context_window":                       32768,
-		"auto_compact_token_limit":             26000,
+		"context_window":                       contextWindow,
+		"auto_compact_token_limit":             contextWindow * 9 / 10,
 		"effective_context_window_percent":     95,
 		"supports_parallel_tool_calls":         true,
 		"experimental_supported_tools":         []string{},
