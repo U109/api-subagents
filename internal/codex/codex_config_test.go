@@ -88,12 +88,22 @@ func TestCodexBackupAndCatalog(t *testing.T) {
 				t.Fatal(err)
 			}
 			restored, err := os.ReadFile(c.configPath())
-			if exists {
-				if err != nil || !bytes.Equal(restored, original) {
-					t.Fatal("backup not restored")
-				}
-			} else if !os.IsNotExist(err) {
-				t.Fatal("new config not removed")
+			if !exists {
+				original = nil
+			}
+			want, _ := withInactiveProvider(original)
+			if err != nil || !bytes.Equal(restored, want) || bytes.Contains(restored, []byte("local-token")) {
+				t.Fatal("defaults not restored or inactive provider missing")
+			}
+			if err := c.Enable(config, "demo", 12346, "new-token"); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Restore(); err != nil {
+				t.Fatal(err)
+			}
+			repeated, _ := os.ReadFile(c.configPath())
+			if !bytes.Equal(repeated, want) {
+				t.Fatal("repeated toggle changed restored config")
 			}
 		})
 	}

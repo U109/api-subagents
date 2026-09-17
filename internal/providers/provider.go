@@ -249,6 +249,9 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 // Turn 只在完整、未截断的响应通过校验后提交历史，工具参数交给受限文件层处理。
 func (p *Provider) Turn(ctx context.Context, profile configstore.Profile, history *[]any, system string, tools []shared.Tool, progress func(shared.Object)) (shared.Reply, error) {
 	endpoint, headers, body := RequestSpec(profile, *history, system, tools)
+	if err := ApplyReasoning(body, profile, profile.ReasoningEffort); err != nil {
+		return shared.Reply{}, err
+	}
 	data, err := p.FetchReply(ctx, profile, endpoint, headers, body, progress)
 	if err != nil {
 		return shared.Reply{}, err

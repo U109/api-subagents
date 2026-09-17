@@ -109,8 +109,6 @@
 .relay-panel > p { font-size: 12px; line-height: 1.6; color: #52635a; margin: 10px 0; }
 .relay-actions { display: flex; align-items: center; gap: 8px; }
 .relay-actions .secondary { padding: 7px 10px; font-size: 12px; flex: 1; }
-.relay-help { margin-top: 10px; font-size: 11px; color: #78817d; line-height: 1.6; }
-.relay-help summary { cursor: pointer; }
-.relay-help p { margin-bottom: 0; }
+.relay-panel > .relay-note { margin: 12px 0 0; font-size: 11px; color: #78817d; }
 .relay-badge { display: inline-block; margin-left: 6px; padding: 2px 4px; font-size: 9px; font-weight: 500; color: #15794e; background: #e5f5eb; border-radius: 4px; vertical-align: 1px; }
 .relay-enabled .model-dot { background: #209763; box-shadow: 0 0 0 3px #e8f5ed; }

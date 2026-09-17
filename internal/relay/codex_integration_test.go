@@ -34,7 +34,26 @@ func TestCodexPrimaryModel(t *testing.T) {
 		t.Run(protocol, func(t *testing.T) {
 			stream := protocol != "anthropic"
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				io.Copy(io.Discard, req.Body)
+				var body shared.Object
+				json.NewDecoder(req.Body).Decode(&body)
+				switch protocol {
+				case "compatible":
+					if body["reasoning_effort"] != "high" {
+						t.Error("Codex effort not forwarded", body["reasoning_effort"])
+					}
+				case "responses":
+					if shared.Obj(body["reasoning"])["effort"] != "high" {
+						t.Error("Codex effort not forwarded", body["reasoning"])
+					}
+				case "anthropic":
+					if shared.Obj(body["thinking"])["type"] != "enabled" {
+						t.Error("Claude thinking missing")
+					}
+				case "gemini":
+					if shared.Obj(shared.Obj(body["generationConfig"])["thinkingConfig"])["thinkingBudget"] == nil {
+						t.Error("Gemini thinking missing")
+					}
+				}
 				w.Header().Set("Content-Type", "application/json")
 				if stream {
 					w.Header().Set("Content-Type", "text/event-stream")
@@ -47,7 +66,7 @@ func TestCodexPrimaryModel(t *testing.T) {
 			defer cancel()
 			root := t.TempDir()
 			answer := filepath.Join(root, "answer.txt")
-			cmd := exec.CommandContext(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
+			cmd := exec.CommandContext(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", `model_reasoning_effort="high"`, "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
 			cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
 			cmd.Dir = root
 			output, err := cmd.CombinedOutput()
@@ -66,6 +85,16 @@ func TestCodexPrimaryModel(t *testing.T) {
 func TestCodexModelList(t *testing.T) {
 	bin := codexBinary(t)
 	r := testRelay(t, "compatible", "http://127.0.0.1:9", true)
+	config, _ := r.Store.Read()
+	profile := config.Models["demo"]
+	profile.ReasoningEffort = "low"
+	config.Models["demo"] = profile
+	if err := r.Store.Save(config); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RefreshCatalog(); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "app-server", "--listen", "stdio://")
@@ -91,6 +120,7 @@ func TestCodexModelList(t *testing.T) {
 	encoder.Encode(shared.Object{"method": "initialized", "params": shared.Object{}})
 	encoder.Encode(shared.Object{"id": 2, "method": "model/list", "params": shared.Object{}})
 	for {
+		value = nil
 		if err := decoder.Decode(&value); err != nil {
 			t.Fatalf("model/list: %v %s", err, stderr.String())
 		}
@@ -102,10 +132,17 @@ func TestCodexModelList(t *testing.T) {
 		}
 		models := map[string]bool{}
 		for _, item := range shared.Arr(shared.Obj(value["result"])["data"]) {
-			models[shared.Str(shared.Obj(item)["model"])] = true
+			model := shared.Obj(item)
+			models[shared.Str(model["model"])] = true
+			if len(shared.Arr(model["supportedReasoningEfforts"])) < 5 {
+				t.Fatal("reasoning picker unavailable", model)
+			}
+			if model["defaultReasoningEffort"] != "low" {
+				t.Fatal("connection default missing from catalog", model)
+			}
 		}
 		if !models["api-subagents"] || !models["api-subagents/demo"] {
-			t.Fatalf("custom models missing: %s", shared.Marshal(value))
+			t.Fatalf("custom models missing; stderr: %s", stderr.String())
 		}
 		break
 	}

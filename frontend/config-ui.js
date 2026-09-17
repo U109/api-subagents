@@ -33,6 +33,7 @@ const catalogs = new Map(),
   manual = new Set(),
   dirty = new Set();
 const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
+const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;
@@ -326,7 +327,9 @@ function render() {
       ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1。')}
       ${field('apiKey', 'API Key', p.apiKey, p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key', true, 'password')}
     </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div class="section-title"><h3>模型选择</h3><span>从接口获取，无需记住模型 ID</span></div><div id="picker"></div></section>
+    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div class="section-title"><h3>模型选择</h3><span>选择模型与默认思考等级</span></div><div id="picker"></div>
+      <div class="field reasoning-field"><label for="reasoningEffort">思考等级</label><select id="reasoningEffort">${Object.entries(reasoningLevels).map(([value, label]) => `<option value="${value}" ${value === (p.reasoningEffort || '') ? 'selected' : ''}>${label}</option>`).join('')}</select><span class="hint">档位支持取决于模型；越高通常越慢、用量越多。Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div>
+    </section>
     <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0"><div class="section-title"><h3>任务分工</h3><span>帮助 Codex 选择合适的模型</span></div>
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查。">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务。</span></div>
     </section>
@@ -362,6 +365,10 @@ function render() {
     };
   });
   renderPicker();
+  byId('reasoningEffort').onchange = (event) => {
+    p.reasoningEffort = event.target.value;
+    markChanged();
+  };
   byId('name').onchange = (event) => rename(p, event.target);
   const numeric = [
     'maxTokens',
@@ -461,7 +468,7 @@ async function save() {
     saved = new Set(Object.keys(config.models));
     dirty.clear();
     render();
-    status('已保存。后续模型请求会使用这份配置；新增或重命名连接后，请重启 Codex 刷新模型列表。');
+    status('已保存。后续请求使用新配置；模型列表与默认思考等级在重启 Codex 后刷新。');
   });
 }
 /** 将目标连接的当前草稿复制并单独保存；服务端保留密钥，其他连接的草稿不受影响。 */
@@ -596,5 +603,5 @@ void action(async () => {
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: byId('reasoningEffort')?.options.length || 0, reasoningValue: byId('reasoningEffort')?.value ?? null, expanders: document.querySelectorAll('details').length});
 });

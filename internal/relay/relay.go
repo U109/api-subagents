@@ -89,7 +89,7 @@ func (r *Relay) Enable(model string) error {
 	r.mu.Lock()
 	if r.state.Enabled {
 		r.mu.Unlock()
-		if err = r.Codex.WriteCatalog(config); err != nil {
+		if err = r.Codex.WriteCatalog(config, model); err != nil {
 			return err
 		}
 		r.mu.Lock()
@@ -151,7 +151,7 @@ func (r *Relay) Disable() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
-	r.state = State{Message: "已关闭，已恢复 Codex 原有模型设置；请重启 Codex"}
+	r.state = State{Message: "已恢复原模型。旧对话可打开；继续使用外部模型需重新开启。"}
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -176,7 +176,7 @@ func (r *Relay) RefreshCatalog() error {
 	if _, exists := config.Models[state.Model]; !exists {
 		return r.Disable()
 	}
-	return r.Codex.WriteCatalog(config)
+	return r.Codex.WriteCatalog(config, state.Model)
 }
 
 // ServeHTTP 限定回环 Host 和固定路径，拒绝浏览器跨站访问及未持有本地随机令牌的请求。
@@ -324,6 +324,25 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	upstreamStream := wantStream && profile.Stream
 	to := format(profile.Protocol)
 	input["model"] = profile.Model
+	// Codex 的显式选择优先；未选择时采用连接默认，空值不强制开启推理。
+	reasoning := shared.Obj(input["reasoning"])
+	effort := shared.Str(reasoning["effort"])
+	if effort == "" {
+		effort = profile.ReasoningEffort
+	}
+	if !configstore.ValidReasoningEffort(effort) {
+		replyError(w, 400, "不支持此思考等级，请重新选择。")
+		return
+	}
+	if effort != "" {
+		reasoning["effort"] = effort
+		input["reasoning"] = reasoning
+	} else {
+		delete(reasoning, "effort")
+		if len(reasoning) == 0 {
+			delete(input, "reasoning")
+		}
+	}
 	patchAlias := ""
 	if profile.Protocol == "anthropic" {
 		patchAlias = aliasPatchTool(input)
@@ -359,8 +378,19 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 			generation["maxOutputTokens"] = profile.MaxTokens
 		}
 		converted["generationConfig"] = generation
+	} else if profile.Protocol == "anthropic" {
+		// CPA 的默认上限不是用户选择；预算式思考与回答共享此上限。
+		limit := shared.Int(input["max_output_tokens"])
+		if limit <= 0 || limit > profile.MaxTokens {
+			limit = profile.MaxTokens
+		}
+		converted["max_tokens"] = limit
 	} else if converted["max_tokens"] == nil && converted["max_completion_tokens"] == nil {
 		converted["max_tokens"] = profile.MaxTokens
+	}
+	if err := providers.ApplyReasoning(converted, profile, effort); err != nil {
+		replyError(w, 400, err.Error())
+		return
 	}
 	requestBody = shared.Marshal(converted)
 	profile.Stream = upstreamStream

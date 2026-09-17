@@ -51,8 +51,11 @@ func TestConfigValidation(t *testing.T) {
 func TestSavedCredentials(t *testing.T) {
 	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")
 	c, _ := store.Read()
+	p := c.Models["demo"]
+	p.ReasoningEffort = "high"
+	c.Models["demo"] = p
 	draft := configstore.Editable(c)
-	p := draft.Models["demo"]
+	p = draft.Models["demo"]
 	delete(draft.Models, "demo")
 	draft.Models["renamed"] = p
 	merged, err := configstore.MergeKeys(shared.Marshal(draft), c, true)
@@ -88,6 +91,9 @@ func TestConfigurationActions(t *testing.T) {
 	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")
 	service := NewConfigService(store)
 	c, _ := store.Read()
+	p := c.Models["demo"]
+	p.ReasoningEffort = "high"
+	c.Models["demo"] = p
 	draft := configstore.Editable(c)
 	draft.Models["unfinished"] = configstore.Profile{}
 	draft.Models["demo-copy"] = configstore.Profile{}
@@ -99,7 +105,7 @@ func TestConfigurationActions(t *testing.T) {
 		t.Fatal(value["name"])
 	}
 	saved, _ := store.Read()
-	if len(saved.Models) != 2 || saved.Models["demo-copy-2"].APIKey != "synthetic-private-key" {
+	if len(saved.Models) != 2 || saved.Models["demo-copy-2"].APIKey != "synthetic-private-key" || saved.Models["demo-copy-2"].ReasoningEffort != "high" {
 		t.Fatal("copy saved wrong content")
 	}
 	if _, err = service.Handle(context.Background(), "/api/config/remove", shared.Marshal(shared.Object{"name": "demo"})); err != nil {

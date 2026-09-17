@@ -226,17 +226,6 @@ summary:focus-visible {
   margin-top: auto;
   padding: 24px 16px 0;
 }
-.help {
-  font-size: 12px;
-  line-height: 1.8;
-}
-summary {
-  cursor: pointer;
-}
-.help p {
-  color: var(--muted);
-  margin: 12px 0;
-}
 .local-note {
   display: flex;
   align-items: center;
@@ -574,12 +563,13 @@ footer p {
   margin: 0 0 6px;
 }
 footer code {
-  display: block;
+  display: inline;
   font-family: Consolas, monospace;
   font-size: 10px;
   word-break: break-all;
-  margin-top: 8px;
 }
+.storage-path { overflow-wrap: anywhere; }
+.reasoning-field { margin-top: 24px; max-width: 520px; }
 .empty {
   padding: 62px 32px;
   background: var(--panel);

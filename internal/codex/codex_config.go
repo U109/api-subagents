@@ -108,6 +108,11 @@ func RootKeySpans(data []byte, keys map[string]bool) ([][2]int, error) {
 
 // PatchCodexConfig 仅接管模型、提供商与模型目录，使用可恢复标记保留其余配置及注释。
 func PatchCodexConfig(original []byte, catalog string, port int, token string) ([]byte, error) {
+	var err error
+	original, err = withoutInactiveProvider(original)
+	if err != nil {
+		return nil, err
+	}
 	if bytes.Contains(original, []byte("# BEGIN API SUBAGENTS")) || bytes.Contains(original, []byte(preservedPrefix)) {
 		return nil, errors.New("发现上次挟持模式的配置，请先恢复后再开启。")
 	}
@@ -224,28 +229,32 @@ func restoreSelectedModel(current, written []byte) ([]byte, error) {
 }
 
 // WriteCatalog 为当前连接和各已保存连接生成可切换模型条目，不包含地址、Key 或凭据。
-func (c CodexConfig) WriteCatalog(config configstore.Config) error {
+func (c CodexConfig) WriteCatalog(config configstore.Config, defaultName string) error {
 	names := []string{}
 	for name := range config.Models {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	models := []any{catalogModel(relayModel, "跟随 App 选择", "使用 API Subagents 当前选中的连接", 0)}
+	models := []any{catalogModel(relayModel, "跟随 App 选择", "使用 API Subagents 当前选中的连接", config.Models[defaultName].ReasoningEffort, 0)}
 	for index, name := range names {
 		profile := config.Models[name]
-		models = append(models, catalogModel("api-subagents/"+name, name+" · "+profile.Model, profile.Description, index+1))
+		models = append(models, catalogModel("api-subagents/"+name, name+" · "+profile.Model, profile.Description, profile.ReasoningEffort, index+1))
 	}
 	return shared.AtomicWrite(c.catalogPath(), shared.Marshal(shared.Object{"models": models}), 0600)
 }
 
 // catalogModel 声明保守的通用工具能力，不启用远端专属搜索、WebSocket 或付费辅助模型。
-func catalogModel(slug, name, description string, priority int) shared.Object {
+func catalogModel(slug, name, description, effort string, priority int) shared.Object {
+	var defaultEffort any
+	if effort != "" {
+		defaultEffort = effort
+	}
 	return shared.Object{
 		"slug":                                 slug,
 		"display_name":                         name,
 		"description":                          description,
-		"supported_reasoning_levels":           []any{},
-		"default_reasoning_level":              nil,
+		"supported_reasoning_levels":           catalogReasoningLevels(),
+		"default_reasoning_level":              defaultEffort,
 		"shell_type":                           "unified_exec",
 		"visibility":                           "list",
 		"supported_in_api":                     true,
@@ -259,7 +268,7 @@ func catalogModel(slug, name, description string, priority int) shared.Object {
 		"include_apps_usage_instructions":      true,
 		"support_verbosity":                    false,
 		"default_verbosity":                    nil,
-		"supports_reasoning_summaries":         false,
+		"supports_reasoning_summaries":         true,
 		"supports_reasoning_summary_parameter": false,
 		"apply_patch_tool_type":                "freeform",
 		"truncation_policy":                    shared.Object{"mode": "bytes", "limit": 10000},
@@ -290,7 +299,7 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	if err != nil {
 		return err
 	}
-	if err = c.WriteCatalog(config); err != nil {
+	if err = c.WriteCatalog(config, model); err != nil {
 		return err
 	}
 	backup := codexBackup{Original: original, Written: written, Existed: existed, Model: model, Port: port}
@@ -309,11 +318,11 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	return nil
 }
 
-// Restore 只处理由本功能创建的备份，外部编辑冲突时保留备份供用户恢复。
+// Restore 恢复原默认设置，并为旧对话保留无凭据的停用提供商；外部编辑冲突时保留备份。
 func (c CodexConfig) Restore() error {
 	data, err := os.ReadFile(c.backupPath())
 	if os.IsNotExist(err) {
-		return nil
+		return c.repairInactiveProvider()
 	}
 	if err != nil {
 		return errors.New("无法读取 Codex 配置备份。")
@@ -327,17 +336,28 @@ func (c CodexConfig) Restore() error {
 		return errors.New("无法读取当前 Codex 配置，备份已保留。")
 	}
 	if bytes.Equal(current, backup.Original) {
+		repaired, repairErr := withInactiveProvider(current)
+		if repairErr != nil {
+			return repairErr
+		}
+		if err = shared.AtomicWrite(c.configPath(), repaired, 0600); err != nil {
+			return err
+		}
 		return os.Remove(c.backupPath())
 	}
 	restored, err := RestoreCodexConfig(current, backup)
 	if err != nil {
 		return err
 	}
-	if !backup.Existed && len(restored) == 0 {
-		err = os.Remove(c.configPath())
-	} else {
-		err = shared.AtomicWrite(c.configPath(), restored, 0600)
+	restored, err = withInactiveProvider(restored)
+	if err != nil {
+		return err
 	}
+	latest, readErr := os.ReadFile(c.configPath())
+	if readErr != nil || !bytes.Equal(latest, current) {
+		return errors.New("Codex 配置刚刚发生变化，请重试关闭挟持模式。")
+	}
+	err = shared.AtomicWrite(c.configPath(), restored, 0600)
 	if err != nil {
 		return err
 	}

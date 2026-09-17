@@ -1,6 +1,6 @@
 {
   "name": "api-subagents",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "把明确的重复任务交给外部模型，减少 Codex 主模型的阅读和生成",
   "author": {
     "name": "zzz"

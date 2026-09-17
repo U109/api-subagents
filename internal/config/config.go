@@ -21,19 +21,20 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
-	Protocol     string  `json:"protocol"`
-	Model        string  `json:"model"`
-	BaseURL      string  `json:"baseUrl"`
-	APIKey       string  `json:"apiKey"`
-	APIKeyEnv    string  `json:"apiKeyEnv"`
-	Description  string  `json:"description"`
-	MaxTokens    int     `json:"maxTokens"`
-	Stream       bool    `json:"stream"`
-	FirstTimeout int     `json:"firstResponseTimeoutSeconds"`
-	IdleTimeout  int     `json:"streamIdleTimeoutSeconds"`
-	TaskTimeout  int     `json:"taskTimeoutMinutes"`
-	HasKey       bool    `json:"hasKey,omitempty"`
-	SavedName    *string `json:"savedName,omitempty"`
+	Protocol        string  `json:"protocol"`
+	Model           string  `json:"model"`
+	BaseURL         string  `json:"baseUrl"`
+	APIKey          string  `json:"apiKey"`
+	APIKeyEnv       string  `json:"apiKeyEnv"`
+	Description     string  `json:"description"`
+	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
+	MaxTokens       int     `json:"maxTokens"`
+	Stream          bool    `json:"stream"`
+	FirstTimeout    int     `json:"firstResponseTimeoutSeconds"`
+	IdleTimeout     int     `json:"streamIdleTimeoutSeconds"`
+	TaskTimeout     int     `json:"taskTimeoutMinutes"`
+	HasKey          bool    `json:"hasKey,omitempty"`
+	SavedName       *string `json:"savedName,omitempty"`
 }
 
 type Config struct {
@@ -103,6 +104,9 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 			return c, fmt.Errorf("%s: 不支持的接口类型。", name)
 		}
 		p.Model = strings.TrimSpace(p.Model)
+		if !ValidReasoningEffort(p.ReasoningEffort) {
+			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high 或 xhigh。")
+		}
 		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
 		}
@@ -124,6 +128,16 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		c.Models[name] = p
 	}
 	return c, nil
+}
+
+// ValidReasoningEffort 限定可保存的推理档位；空值保持旧配置行为，不向服务强加推理参数。
+func ValidReasoningEffort(effort string) bool {
+	switch effort {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+		return true
+	default:
+		return false
+	}
 }
 
 // Read 读取最新配置，错误只返回固定说明，不泄露文件片段或 Key。

@@ -62,6 +62,48 @@ func modelReply(protocol string, call *shared.Call, text string) shared.Object {
 	}
 }
 
+// TestWorkerReasoning 确认独立插件的真实 HTTP 请求也使用保存档位，而不只在挟持网关中生效。
+func TestWorkerReasoning(t *testing.T) {
+	for _, protocol := range []string{"compatible", "responses", "anthropic", "gemini"} {
+		t.Run(protocol, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				var body shared.Object
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				switch protocol {
+				case "compatible":
+					if body["reasoning_effort"] != "low" {
+						t.Error("worker effort missing")
+					}
+				case "responses":
+					if shared.Obj(body["reasoning"])["effort"] != "low" {
+						t.Error("worker effort missing")
+					}
+				case "anthropic":
+					if shared.Int(shared.Obj(body["thinking"])["budget_tokens"]) != 1024 {
+						t.Error("worker thinking missing")
+					}
+				case "gemini":
+					if shared.Int(shared.Obj(shared.Obj(body["generationConfig"])["thinkingConfig"])["thinkingBudget"]) != 1024 {
+						t.Error("worker thinking missing")
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(modelReply(protocol, nil, "OK"))
+			}))
+			defer server.Close()
+			_, p := testutil.Config(t, protocol, server.URL)
+			p.ReasoningEffort, p.Stream = "low", false
+			history := providers.InitialHistory(p, "Reply OK")
+			reply, err := providers.NewProvider().Turn(context.Background(), p, &history, "", nil, nil)
+			if err != nil || reply.Text != "OK" {
+				t.Fatal(reply, err)
+			}
+		})
+	}
+}
+
 // streamReply 把同一模拟回复拆成厂商 SSE 事件，用于验证分片参数与结束边界。
 func streamReply(protocol string, reply shared.Object) string {
 	var out strings.Builder

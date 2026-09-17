@@ -23,12 +23,8 @@
             <button id="enable-relay" class="secondary" disabled>用此连接开启</button>
             <button id="disable-relay" class="text-button" hidden>关闭</button>
           </div>
-          <details class="relay-help"><summary>如何使用</summary><p>先保存连接，再开启。首次开启后重启 Codex，即可在模型列表切换连接。运行期间保持本 App 打开；关闭模式会恢复原有配置。外部模型 API 单独计费。</p></details>
+          <p class="relay-note">开启后重启 Codex，使用期间保持 App 运行。</p>
         </section>
-        <details class="help">
-          <summary>使用说明</summary>
-          <p>添加连接并保存后，可将批量注释、机械修改等重复工作交给外部模型，由 Codex 做必要验收。</p>
-        </details>
         <div class="local-note"><span class="local-dot"></span>配置保存在本机</div>
       </div>
     </aside>
@@ -74,10 +70,7 @@
         <div id="status" class="status" role="status" aria-live="polite"></div>
         <footer>
           <p>测试连接会发送一条简短请求，可能产生少量 API 费用。</p>
-          <details>
-            <summary>配置存储位置</summary>
-            <code id="path">正在读取…</code>
-          </details>
+          <p class="storage-path">配置位置 <code id="path">正在读取…</code></p>
         </footer>
       </div>
     </main>
