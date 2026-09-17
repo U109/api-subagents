@@ -23,18 +23,21 @@ import (
 )
 
 type Release struct {
-	Owner     string `json:"owner"`
-	Repo      string `json:"repo"`
-	Private   bool   `json:"private"`
-	Version   string `json:"version"`
-	GoVersion string `json:"goVersion"`
+	Owner               string `json:"owner"`
+	Repo                string `json:"repo"`
+	Private             bool   `json:"private"`
+	Version             string `json:"version"`
+	GoVersion           string `json:"goVersion"`
+	PluginMinAppVersion string `json:"pluginMinAppVersion,omitempty"`
 }
 
 type UpdateManifest struct {
-	Version string `json:"version"`
-	File    string `json:"file"`
-	SHA256  string `json:"sha256"`
-	Size    int64  `json:"size"`
+	Version       string `json:"version"`
+	File          string `json:"file"`
+	SHA256        string `json:"sha256"`
+	Size          int64  `json:"size"`
+	FormatVersion int    `json:"formatVersion,omitempty"`
+	MinAppVersion string `json:"minAppVersion,omitempty"`
 }
 
 type UpdateState struct {
@@ -55,6 +58,7 @@ type Updater struct {
 	state             UpdateState
 	manifest          UpdateManifest
 	downloadURL, file string
+	plugin            bool
 }
 
 var versionPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
@@ -64,6 +68,29 @@ var checksumPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // NewUpdater 更新源编译时确定，普通退出不下载或安装，不把作者令牌植入客户端。
 func NewUpdater(release Release, cache string, packaged bool) *Updater {
 	return &Updater{Release: release, Cache: cache, Packaged: packaged, state: UpdateState{Phase: "idle", Version: release.Version, Message: "检查是否有新版本"}, Client: &http.Client{Transport: platform.DefaultTransport(), CheckRedirect: releaseRedirect}}
+}
+
+// NewPluginUpdater 复用固定发布源与下载校验，但以已安装插件版本独立判断更新，不要求升级桌面 App。
+func NewPluginUpdater(release Release, cache, installedVersion string) *Updater {
+	u := NewUpdater(release, cache, true)
+	u.plugin = true
+	u.ResetPluginVersion(installedVersion)
+	return u
+}
+
+// ResetPluginVersion 在启动检测或安装完成后重置插件更新状态；调用方须保证没有插件更新正在执行。
+func (u *Updater) ResetPluginVersion(version string) {
+	if !u.plugin {
+		return
+	}
+	if !versionPattern.MatchString(version) {
+		version = "0.0.0"
+	}
+	u.mu.Lock()
+	u.state = UpdateState{Phase: "idle", Version: version, Message: "检查是否有插件新版本"}
+	u.manifest, u.downloadURL, u.file = UpdateManifest{}, "", ""
+	u.mu.Unlock()
+	u.notify()
 }
 
 // releaseRedirect 只允许 GitHub 及官方发布资源域名的 HTTPS 跳转。
@@ -106,14 +133,18 @@ func NewerVersion(next, current string) bool {
 	if n == nil || c == nil {
 		return false
 	}
+	var parsedNext, parsedCurrent [3]uint64
 	for index := 1; index <= 3; index++ {
 		a, errA := strconv.ParseUint(n[index], 10, 32)
 		b, errB := strconv.ParseUint(c[index], 10, 32)
 		if errA != nil || errB != nil {
 			return false
 		}
-		if a != b {
-			return a > b
+		parsedNext[index-1], parsedCurrent[index-1] = a, b
+	}
+	for index, a := range parsedNext {
+		if a != parsedCurrent[index] {
+			return a > parsedCurrent[index]
 		}
 	}
 	return false
@@ -181,22 +212,44 @@ func (u *Updater) Check(ctx context.Context) error {
 		u.change("error", "发布版本信息无效。")
 		return errors.New("发布版本信息无效。")
 	}
-	if !NewerVersion(release.Tag, u.Release.Version) {
+	if !u.plugin && !NewerVersion(release.Tag, u.Release.Version) {
 		u.change("latest", "已经是最新版本")
 		return nil
 	}
 	version := strings.TrimPrefix(release.Tag, "v")
 	var manifest UpdateManifest
 	root := u.ReleaseURL() + "/download/" + release.Tag + "/"
-	err = u.getJSON(ctx, root+"update.json", &manifest)
+	manifestName := "update.json"
+	if u.plugin {
+		manifestName = "plugin-update.json"
+	}
+	err = u.getJSON(ctx, root+manifestName, &manifest)
 	if err != nil {
 		u.change("error", "新版本缺少完整更新文件，请稍后重试。")
 		return err
 	}
 	expected := "API-Subagents-Setup-" + version + "-x64.exe"
-	if manifest.Version != version || manifest.File != expected || !checksumPattern.MatchString(manifest.SHA256) || manifest.Size < 1024 || manifest.Size > 300*1024*1024 {
+	limit := int64(300 * 1024 * 1024)
+	if u.plugin {
+		version = manifest.Version
+		expected = "api-subagents-plugin-" + version + "-windows-amd64.zip"
+		limit = 100 * 1024 * 1024
+		if !versionPattern.MatchString(version) || strings.HasPrefix(version, "v") || !NewerVersion(version, "0.0.0") || manifest.FormatVersion != 1 || !NewerVersion(manifest.MinAppVersion, "0.0.0") {
+			u.change("error", "插件更新清单无效。")
+			return errors.New("插件更新清单无效。")
+		}
+		if NewerVersion(manifest.MinAppVersion, u.Release.Version) {
+			u.change("incompatible", "此插件需要 App "+manifest.MinAppVersion+" 或更高版本，请先更新 App。")
+			return nil
+		}
+	}
+	if manifest.Version != version || manifest.File != expected || !checksumPattern.MatchString(manifest.SHA256) || manifest.Size < 1024 || manifest.Size > limit {
 		u.change("error", "更新清单校验失败。")
 		return errors.New("更新清单校验失败。")
+	}
+	if u.plugin && !NewerVersion(version, u.Snapshot().Version) {
+		u.change("latest", "插件已是最新版本")
+		return nil
 	}
 	u.mu.Lock()
 	u.manifest = manifest
@@ -230,7 +283,11 @@ func (u *Updater) Download(ctx context.Context) error {
 		u.change("error", "更新下载或校验失败，请重新检查后重试。")
 		return err
 	}
-	u.change("downloaded", "更新已下载，重启后安装")
+	message := "更新已下载，重启后安装"
+	if u.plugin {
+		message = "插件已下载，正在准备安装"
+	}
+	u.change("downloaded", message)
 	return nil
 }
 
@@ -311,6 +368,9 @@ func (u *Updater) downloadFile(ctx context.Context, manifest UpdateManifest, end
 func (u *Updater) Installer() (string, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	if u.plugin {
+		return "", errors.New("插件更新包不能作为桌面安装器执行。")
+	}
 	if u.state.Phase != "downloaded" {
 		return "", errors.New("更新尚未下载完成。")
 	}
@@ -327,6 +387,26 @@ func (u *Updater) Installer() (string, error) {
 		return "", errors.New("更新缓存校验失败。")
 	}
 	return u.file, nil
+}
+
+// PluginArchive 在同一次读取中检查大小与哈希并返回不可变安装输入，避免校验后再次打开已被替换的缓存。
+func (u *Updater) PluginArchive() ([]byte, string, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if !u.plugin || u.state.Phase != "downloaded" {
+		return nil, "", errors.New("插件更新尚未下载完成。")
+	}
+	file, err := os.Open(u.file)
+	if err != nil {
+		return nil, "", errors.New("插件缓存不可用，请重新检查更新。")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, u.manifest.Size+1))
+	if err != nil || int64(len(data)) != u.manifest.Size || shared.Hash(data) != u.manifest.SHA256 {
+		u.state.Phase, u.state.Message = "error", "插件缓存校验失败，请重新检查更新。"
+		return nil, "", errors.New("插件缓存校验失败。")
+	}
+	return data, u.manifest.Version, nil
 }
 
 // Installing 在操作系统成功启动安装器后切换状态，普通退出不会触发此方法。

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1010" viewBox="0 0 1600 1010">
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L6 4L1 7" fill="none" stroke="#918b83" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <style>text{font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC',sans-serif;fill:#302e2b}.title{font-size:36px;font-weight:700}.section{font-size:27px;font-weight:700}.node{font-size:23px;font-weight:700}.body{font-size:17px;fill:#706b64}.note{font-size:16px;fill:#706b64}.flow{font-size:14px;fill:#827b72;text-anchor:middle}.step{font-size:15px;fill:#71695f;font-weight:700;text-anchor:middle}.accent{fill:#287c65}.line{stroke:#a29a90;stroke-width:2;fill:none;marker-start:url(#arrow);marker-end:url(#arrow)}</style>
+  </defs>
+  <rect width="1600" height="1010" rx="20" fill="#fff"/>
+  <text class="title" x="64" y="86">API Subagents 如何连接外部模型</text>
+  <text class="body" x="64" y="127">同一份本机连接配置，两种调用方式。区别在于：由谁承担 Codex 的主任务。</text>
+  <path d="M64 162H1536" stroke="#e7e4df"/>
+
+  <rect x="64" y="194" width="54" height="32" rx="9" fill="#f1efeb"/><text class="step" x="91" y="216">01</text>
+  <text class="section" x="136" y="220">插件委派</text>
+  <text class="body" x="310" y="218">Codex 负责主任务，把明确、重复的子任务交给外部模型</text>
+  <rect x="64" y="248" width="1472" height="286" rx="18" fill="#fff" stroke="#dfdcd6"/>
+  <rect x="96" y="284" width="365" height="150" rx="13" fill="#f8f7f5" stroke="#e5e1db"/>
+  <text class="node" x="123" y="329">Codex 主模型</text>
+  <text class="body" x="123" y="367">规划主任务 · 通过 Skill / MCP 委派</text>
+  <text class="body" x="123" y="399">检查结果，再应用修改建议</text>
+  <path class="line" d="M485 359H592"/>
+  <text class="flow" x="538" y="332">任务与文件范围</text>
+  <text class="flow" x="538" y="390">精简结果 / 建议</text>
+  <rect x="616" y="284" width="365" height="150" rx="13" fill="#fff" stroke="#bcb5aa" stroke-width="1.5"/>
+  <text class="node" x="643" y="329">独立 MCP Worker</text>
+  <text class="body" x="643" y="367">受限读取文件 · 调用所选模型</text>
+  <text class="body" x="643" y="399">返回结果与建议，由 Codex 验收</text>
+  <path class="line" d="M1005 359H1112"/>
+  <text class="flow" x="1058" y="332">模型请求</text>
+  <text class="flow" x="1058" y="390">流式响应</text>
+  <rect x="1136" y="284" width="365" height="150" rx="13" fill="#f5faf7" stroke="#dbe9e1"/>
+  <text class="node" x="1163" y="329">外部模型 API</text>
+  <text class="body" x="1163" y="367">使用连接中配置的模型与 Key</text>
+  <text class="body" x="1163" y="399">完成指定子任务</text>
+  <path d="M96 461H1504" stroke="#eeece7"/>
+  <circle cx="105" cy="494" r="5" fill="#b0915c"/>
+  <text class="note" x="123" y="500">计费：Codex 主模型额度 + 外部 API 费用</text>
+  <text class="note accent" x="1118" y="500">插件安装后，App 可以关闭</text>
+
+  <rect x="64" y="576" width="54" height="32" rx="9" fill="#eaf4ef"/><text class="step accent" x="91" y="598">02</text>
+  <text class="section" x="136" y="602">挟持模式</text>
+  <text class="body" x="310" y="600">外部模型承担主对话；开启时备份并调整 Codex 设置，关闭后恢复</text>
+  <rect x="64" y="630" width="1472" height="286" rx="18" fill="#fff" stroke="#dfdcd6"/>
+  <rect x="96" y="666" width="365" height="150" rx="13" fill="#f8f7f5" stroke="#e5e1db"/>
+  <text class="node" x="123" y="711">Codex 客户端</text>
+  <text class="body" x="123" y="749">保留对话、文件与工具操作界面</text>
+  <text class="body" x="123" y="781">从挟持列表选择模型，随时切换</text>
+  <path class="line" d="M485 741H592"/>
+  <text class="flow" x="538" y="714">Responses</text>
+  <text class="flow" x="538" y="772">流式结果</text>
+  <rect x="616" y="666" width="365" height="150" rx="13" fill="#fff" stroke="#bcb5aa" stroke-width="1.5"/>
+  <text class="node" x="643" y="711">App 本机网关</text>
+  <text class="body" x="643" y="749">仅监听本机 · 随机令牌验证</text>
+  <text class="body" x="643" y="781">原生转发，或通过 CPA 转换协议</text>
+  <path class="line" d="M1005 741H1112"/>
+  <text class="flow" x="1058" y="714">兼容接口</text>
+  <text class="flow" x="1058" y="772">流式响应</text>
+  <rect x="1136" y="666" width="365" height="150" rx="13" fill="#f5faf7" stroke="#dbe9e1"/>
+  <text class="node" x="1163" y="711">外部模型 API</text>
+  <text class="body" x="1163" y="749">直接承担 Codex 主对话的推理</text>
+  <text class="body" x="1163" y="781">返回文本与工具调用</text>
+  <path d="M96 843H1504" stroke="#eeece7"/>
+  <circle cx="105" cy="876" r="5" fill="#3c9179"/>
+  <text class="note" x="123" y="882">计费：所选外部 API 服务独立计费</text>
+  <text class="note accent" x="1118" y="882">使用期间，需要保持 App 运行</text>
+  <text class="note" x="64" y="969">连接配置保存在本机；请求内容发送到你选择的模型服务。插件委派仍需要 Codex 主模型参与。</text>
+</svg>

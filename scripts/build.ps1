@@ -6,12 +6,13 @@ try {
     $goExe = & (Join-Path $PSScriptRoot 'ensure-go.ps1')
     $env:PATH = (Split-Path -Parent $goExe) + ';' + $env:PATH
     $release = Get-Content -LiteralPath 'packaging/release.json' -Raw -Encoding UTF8 | ConvertFrom-Json
+    $plugin = Get-Content -LiteralPath '.codex-plugin/plugin.json' -Raw -Encoding UTF8 | ConvertFrom-Json
     New-Item -ItemType Directory -Force -Path 'build/bin','bundle','release' | Out-Null
     # Go 的 embed 在依赖分析时也要求文件存在；第一次构建先放一个空 ZIP，再用白名单覆盖。
     if (-not (Test-Path -LiteralPath 'bundle/payload.zip')) { [IO.File]::WriteAllBytes((Join-Path $root 'bundle/payload.zip'), [byte[]](80,75,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)) }
     & $goExe mod download
     if ($LASTEXITCODE) { throw 'Go dependency download failed.' }
-    & $goExe build -trimpath -ldflags "-s -w -X github.com/U109/api-subagents/internal/buildinfo.Version=$($release.version)" -o 'build/bin/api-subagents-worker.exe' ./cmd/worker
+    & $goExe build -trimpath -ldflags "-s -w -X github.com/U109/api-subagents/internal/buildinfo.Version=$($plugin.version)" -o 'build/bin/api-subagents-worker.exe' ./cmd/worker
     if ($LASTEXITCODE) { throw 'Worker build failed.' }
     & $goExe run ./cmd/package notices
     if ($LASTEXITCODE) { throw 'License collection failed.' }
@@ -19,6 +20,8 @@ try {
     if ($LASTEXITCODE) { throw 'Plugin package failed.' }
     & $goExe run ./cmd/package verify
     if ($LASTEXITCODE) { throw 'Package verification failed.' }
+    & $goExe run ./cmd/package plugin-metadata
+    if ($LASTEXITCODE) { throw 'Plugin update metadata generation failed.' }
     if ($Target -eq 'plugin') { return }
     New-Item -ItemType Directory -Force -Path 'build/windows' | Out-Null
     Copy-Item -LiteralPath 'packaging/icon.ico' -Destination 'build/windows/icon.ico' -Force

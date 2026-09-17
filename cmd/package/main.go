@@ -185,6 +185,38 @@ func metadata() error {
 	return shared.AtomicWrite("release/latest.yml", []byte(yml), 0644)
 }
 
+// pluginMetadata 单独发布已经按白名单生成的插件包，版本来自插件自身清单，不要求与 App 同步升级。
+func pluginMetadata() error {
+	var release updates.Release
+	data, err := os.ReadFile("packaging/release.json")
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(data, &release); err != nil {
+		return err
+	}
+	version, err := pluginruntime.PayloadVersion(os.DirFS("."))
+	if err != nil {
+		return err
+	}
+	payload, err := os.ReadFile("bundle/payload.zip")
+	if err != nil {
+		return err
+	}
+	if _, err = pluginruntime.OpenUpdateArchive(payload, version); err != nil {
+		return err
+	}
+	if !updates.NewerVersion(release.PluginMinAppVersion, "0.0.0") || updates.NewerVersion(release.PluginMinAppVersion, release.Version) {
+		return errors.New("插件最低 App 版本配置无效。")
+	}
+	name := "api-subagents-plugin-" + version + "-windows-amd64.zip"
+	if err = shared.AtomicWrite(filepath.Join("release", name), payload, 0644); err != nil {
+		return err
+	}
+	manifest := updates.UpdateManifest{Version: version, File: name, SHA256: shared.Hash(payload), Size: int64(len(payload)), FormatVersion: 1, MinAppVersion: release.PluginMinAppVersion}
+	return shared.AtomicWrite("release/plugin-update.json", append(shared.Marshal(manifest), '\n'), 0644)
+}
+
 // verify 核对实际嵌入包的文件集合和模型配置模板，拒绝多余文件进入发布。
 func verify() error {
 	reader, err := zip.OpenReader("bundle/payload.zip")
@@ -213,7 +245,7 @@ func verify() error {
 func main() {
 	var err error
 	if len(os.Args) != 2 {
-		err = errors.New("用法：package notices|stage|metadata|verify")
+		err = errors.New("用法：package notices|stage|metadata|plugin-metadata|verify")
 	} else {
 		switch os.Args[1] {
 		case "notices":
@@ -222,6 +254,8 @@ func main() {
 			err = stage()
 		case "metadata":
 			err = metadata()
+		case "plugin-metadata":
+			err = pluginMetadata()
 		case "verify":
 			err = verify()
 		default:

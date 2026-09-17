@@ -25,7 +25,7 @@ func TestSetupFrontendModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer setup.Server.Close()
-	for _, name := range []string{"shell-ui.js", "select-ui.js"} {
+	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "relay-models-ui.js"} {
 		response, err := http.Get(setup.Origin + "/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -83,6 +83,7 @@ func TestSavedCredentials(t *testing.T) {
 	c, _ := store.Read()
 	p := c.Models["demo"]
 	p.ReasoningEffort = "high"
+	p.RelayModels = []string{"alternate"}
 	c.Models["demo"] = p
 	draft := configstore.Editable(c)
 	p = draft.Models["demo"]
@@ -123,6 +124,7 @@ func TestConfigurationActions(t *testing.T) {
 	c, _ := store.Read()
 	p := c.Models["demo"]
 	p.ReasoningEffort = "high"
+	p.RelayModels = []string{"alternate"}
 	c.Models["demo"] = p
 	draft := configstore.Editable(c)
 	draft.Models["unfinished"] = configstore.Profile{}
@@ -137,6 +139,9 @@ func TestConfigurationActions(t *testing.T) {
 	saved, _ := store.Read()
 	if len(saved.Models) != 2 || saved.Models["demo-copy-2"].APIKey != "synthetic-private-key" || saved.Models["demo-copy-2"].ReasoningEffort != "high" {
 		t.Fatal("copy saved wrong content")
+	}
+	if len(saved.Models["demo-copy-2"].RelayModels) != 1 || saved.Models["demo-copy-2"].RelayModels[0] != "alternate" {
+		t.Fatal("copy lost hijack model list")
 	}
 	if _, err = service.Handle(context.Background(), "/api/config/remove", shared.Marshal(shared.Object{"name": "demo"})); err != nil {
 		t.Fatal(err)

@@ -33,7 +33,8 @@ jobs:
           $plugin = Get-Content .codex-plugin/plugin.json -Raw | ConvertFrom-Json
           $wails = Get-Content wails.json -Raw | ConvertFrom-Json
           $versionSource = Get-Content internal/buildinfo/version.go -Raw
-          if ($plugin.version -ne $release.version -or $wails.info.productVersion -ne $release.version -or -not $versionSource.Contains('"' + $release.version + '"')) { throw 'Release versions must match.' }
+          if ($wails.info.productVersion -ne $release.version -or -not $versionSource.Contains('"' + $release.version + '"')) { throw 'App release versions must match.' }
+          if ($plugin.version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or $release.pluginMinAppVersion -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Plugin versions must be stable.' }
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $release.version)) { throw 'Tag must match the release version.' }
       - name: Build standalone plugin and verify payload
         run: ./scripts/build.ps1 -Target plugin
@@ -64,6 +65,8 @@ jobs:
             release/API-Subagents-Setup-*.exe
             release/update.json
             release/latest.yml
+            release/api-subagents-plugin-*.zip
+            release/plugin-update.json
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -93,5 +96,5 @@ jobs:
             export GH_TOKEN="$RELEASE_TOKEN"
           fi
           # 完整产物上传后才公开版本，避免更新器读到尚未上传的安装包。
-          gh release create "$GITHUB_REF_NAME" --repo "$target" --draft --title "API Subagents $GITHUB_REF_NAME" --notes-file packaging/release-notes.md release/*.exe release/update.json release/latest.yml
+          gh release create "$GITHUB_REF_NAME" --repo "$target" --draft --title "API Subagents $GITHUB_REF_NAME" --notes-file packaging/release-notes.md release/*.exe release/update.json release/latest.yml release/api-subagents-plugin-*.zip release/plugin-update.json
           gh release edit "$GITHUB_REF_NAME" --repo "$target" --draft=false --latest

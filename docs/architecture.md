@@ -11,7 +11,7 @@
 | internal/tasks | 任务队列、续接、精简结果与 MCP 工具 |
 | internal/workspace | 受限读取、搜索、建议与父模型确认后的应用 |
 | internal/relay | Codex Responses 网关、CPA 转换、流式兼容 |
-| internal/codex | Codex TOML 备份、恢复与模型目录 |
+| internal/codex | Codex TOML 备份、恢复、共享模型目录与本地别名解析 |
 | internal/plugin、internal/updates | 独立插件安装、GitHub 更新与校验 |
 | internal/platform、internal/shared | Windows 代理/进程差异与公共数据工具 |
 | internal/buildinfo、internal/testutil | 版本与隔离测试辅助 |
@@ -21,7 +21,11 @@
 
 测试紧邻对应 Go 包。任务包的集成测试覆盖完整读文件、提出修改和应用流程。go.mod / go.sum 固定依赖，CPA 通过固定版本 SDK 引入，保留相应许可证。
 
-前端按职责拆分：`shell-ui.js` 管理侧栏与弹窗，`select-ui.js` 管理下拉菜单和键盘操作，`config-ui.js` 维护连接草稿，`desktop-ui.js` 同步安装、更新与挟持状态；`bridge.js` 保留固定 Go 绑定。静态资源同时列入嵌入和浏览器访问白名单。
+前端按职责拆分：`shell-ui.js` 管理侧栏与弹窗，`select-ui.js` 管理下拉菜单和键盘操作，`notification-ui.js` 管理顶部提示，`config-ui.js` 维护连接草稿，`relay-models-ui.js` 编辑挟持模型列表，`desktop-ui.js` 同步安装、更新与挟持状态；`bridge.js` 保留固定 Go 绑定。静态资源同时列入嵌入和浏览器访问白名单。
+
+连接配置的可选 `relayModels` 存储额外模型 ID，默认模型仍供 Worker 和旧连接别名使用。`internal/codex/models.go` 同时生成启动目录与网关 `/v1/models`，避免两个列表不一致；额外模型采用「连接名 + 模型 ID 的完整 SHA-256」稳定别名，顺序和凭据变化不改变别名。网关只解析已配置别名，对每次请求的连接副本替换模型，不修改原配置；同名模型不会跨连接复用 Key。
+
+Codex 的 `model_catalog_json` 在启动时加载，因此列表修改后需重启 Codex；详见 [官方配置参考](https://developers.openai.com/codex/config-reference/#model_catalog_json)。
 
 ## 构建
 
@@ -48,9 +52,11 @@ go vet ./...
 
 ## 发布文件
 
-版本信息在 packaging/release.json、插件清单、internal/buildinfo/version.go 与 wails.json 中保持一致。标签工作流编译、测试、检查版本及包清单，再发布完整 Release。
+App 版本在 packaging/release.json、internal/buildinfo/version.go 与 wails.json 中保持一致；插件版本来自 .codex-plugin/plugin.json，可独立变化，Worker 编译时使用插件版本。标签工作流编译、测试、检查版本及包清单，再发布完整 Release。
 
 Release 包含安装器、Go 更新器使用的 update.json 和兼容 0.2.2 Electron 客户端的 latest.yml。新更新器核对大小与 SHA-256，启动前再次核对，不在普通退出时安装。旧客户端可回退为整包下载。
+
+独立插件更新额外发布 `api-subagents-plugin-<版本>-windows-amd64.zip` 与 `plugin-update.json`，包含版本、大小、SHA-256、格式版本和最低 App 版本。ZIP 与 App 内嵌插件来自同一白名单；安装前在内存中检查完整文件集合、CRC、展开大小、版本及固定 Worker 入口，再复用原安装流程。桌面和插件更新共享受限下载器，分别维护版本状态与缓存。`packaging/release.json` 的 `pluginMinAppVersion` 声明插件需要的最低桌面版本。
 
 桌面内嵌 ZIP 只来自明确文件清单。安装时将 worker 存入内容寻址的独立缓存，桌面替换不会覆盖正在运行的 MCP 文件。用户配置、任务和 Codex 备份均不属于发布输入。
 

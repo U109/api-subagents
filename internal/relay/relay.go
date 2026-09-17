@@ -28,12 +28,13 @@ import (
 )
 
 type State struct {
-	Enabled     bool   `json:"enabled"`
-	Model       string `json:"model"`
-	ActiveModel string `json:"activeModel"`
-	Address     string `json:"address"`
-	Message     string `json:"message"`
-	Requests    uint64 `json:"requests"`
+	Enabled       bool   `json:"enabled"`
+	Model         string `json:"model"`
+	ActiveModel   string `json:"activeModel"`
+	ActiveModelID string `json:"activeModelId,omitempty"`
+	Address       string `json:"address"`
+	Message       string `json:"message"`
+	Requests      uint64 `json:"requests"`
 }
 type Relay struct {
 	Store       *configstore.ConfigStore
@@ -95,6 +96,7 @@ func (r *Relay) Enable(model string) error {
 		r.mu.Lock()
 		r.state.Model = model
 		r.state.ActiveModel = ""
+		r.state.ActiveModelID = ""
 		r.state.Message = "已切换默认连接；Codex 选择“跟随 App 选择”即可使用"
 		r.mu.Unlock()
 		r.notify()
@@ -199,9 +201,9 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			replyError(w, 500, err.Error())
 			return
 		}
-		items := []any{shared.Object{"id": "api-subagents", "object": "model", "owned_by": "local"}}
-		for name := range config.Models {
-			items = append(items, shared.Object{"id": "api-subagents/" + name, "object": "model", "owned_by": "local"})
+		items := []any{}
+		for _, entry := range codexconfig.ModelEntries(config, state.Model) {
+			items = append(items, shared.Object{"id": entry.Slug, "object": "model", "owned_by": "local"})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(shared.Object{"object": "list", "data": items})
@@ -233,20 +235,16 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	model := shared.Str(input["model"])
-	connection := state.Model
-	if model != "api-subagents" && model != "" {
-		if !strings.HasPrefix(model, "api-subagents/") {
-			replyError(w, 400, "请选择 API Subagents 模型列表中的连接。")
-			return
-		}
-		connection = strings.TrimPrefix(model, "api-subagents/")
+	if _, ok := input["model"].(string); input["model"] != nil && !ok {
+		replyError(w, 400, "模型标识必须是字符串。")
+		return
 	}
 	config, err := r.Store.Read()
 	if err != nil {
 		replyError(w, 500, err.Error())
 		return
 	}
-	profile, err := configstore.ResolveProfile(config, connection)
+	connection, profile, err := codexconfig.ResolveCatalogModel(config, state.Model, model)
 	if err != nil {
 		replyError(w, 400, err.Error())
 		return
@@ -257,6 +255,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Lock()
 	r.state.ActiveModel = connection
+	r.state.ActiveModelID = profile.Model
 	r.state.Requests++
 	r.mu.Unlock()
 	r.notify()

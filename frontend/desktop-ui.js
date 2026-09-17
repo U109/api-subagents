@@ -7,18 +7,65 @@
   /** 读取固定界面节点，桌面状态只写入 textContent，不解释为 HTML。 */
   const node = id => document.getElementById(id);
 
+  /** 按稳定版本的三个数字比较新旧，只用于按钮呈现，真正安装仍由 Go 再次检查。 */
+  function newerVersion(next, current) {
+    const a = String(next || '').split('.').map(Number), b = String(current || '0.0.0').split('.').map(Number);
+    if (a.length !== 3 || b.length !== 3 || [...a, ...b].some(value => !Number.isFinite(value))) return false;
+    for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; }
+    return false;
+  }
+
+  /** 独立显示插件已安装、随 App 提供和在线可更新版本，不再把 App 版本当作插件版本。 */
+  function renderPlugin(next) {
+    const plugin = next.plugin, update = next.pluginUpdate || {phase: 'idle'};
+    const installed = plugin.installedVersion, bundled = plugin.bundledVersion;
+    const available = ['available', 'downloaded'].includes(update.phase);
+    const downloading = update.phase === 'downloading';
+    const installing = plugin.phase === 'installing';
+    const wouldDowngrade = newerVersion(installed, bundled);
+    node('plugin-version').textContent = installed ? 'v' + installed : '未安装';
+    node('plugin-bundled-version').textContent = bundled ? 'v' + bundled : '不可用';
+    node('plugin-available-row').hidden = !update.availableVersion;
+    node('plugin-available-version').textContent = update.availableVersion ? 'v' + update.availableVersion : '—';
+    node('plugin-label').textContent = installing ? '安装中' : installed ? '已安装' : '待安装';
+    node('plugin-dot').hidden = !installed;
+    node('plugin-state').textContent = downloading ? '正在下载插件更新… ' + Math.round(update.progress) + '%' : installing || update.phase === 'idle' ? plugin.message : update.message;
+    node('plugin-progress').hidden = !downloading;
+    node('plugin-progress').value = update.progress || 0;
+    node('check-plugin-update').disabled = actionPending || installing || update.phase === 'checking';
+    node('check-plugin-update').textContent = update.phase === 'checking' ? '正在检查…' : '检查插件更新';
+    const install = node('install-plugin');
+    install.textContent = downloading ? '正在下载…' : installing ? '正在安装…' : available ? '更新至 v' + update.availableVersion : !installed ? '安装到 Codex' : newerVersion(bundled, installed) ? '更新至 v' + bundled : wouldDowngrade ? '已安装更高版本' : '重新安装插件';
+    install.disabled = actionPending || installing || (!available && (!bundled || wouldDowngrade));
+  }
+
+  /** 只在后台阶段改变时提示结果，进度事件不会重复弹出；安装失败由操作入口统一显示。 */
+  function notifyChanges(previous, next) {
+    if (!previous) return;
+    if (previous.update.phase !== next.update.phase) {
+      if (next.update.phase === 'available') window.notices.show('app-update', '有新版本可用：v' + next.update.availableVersion, 'warning');
+      if (next.update.phase === 'latest') window.notices.show('app-update', 'App 已是最新版本。');
+      if (next.update.phase === 'downloaded') window.notices.show('app-update', '更新已下载，可以重启并更新。');
+    }
+    if (previous.pluginUpdate?.phase !== next.pluginUpdate?.phase) {
+      if (next.pluginUpdate?.phase === 'available') window.notices.show('plugin-update', '有插件新版本可用：v' + next.pluginUpdate.availableVersion, 'warning');
+      if (next.pluginUpdate?.phase === 'latest') window.notices.show('plugin-update', '插件已是最新版本。');
+      if (next.pluginUpdate?.phase === 'incompatible') window.notices.show('plugin-update', next.pluginUpdate.message, 'warning');
+    }
+    if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件 v' + next.plugin.installedVersion + ' 已安装，请在 Codex 新建对话。');
+    if (previous.relay?.enabled !== next.relay?.enabled) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新。');
+  }
+
   /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗。 */
   function renderDesktop(next) {
+    const previous = state;
     state = next;
-    node('desktop-version').textContent = next.version;
-    node('plugin-state').textContent = next.plugin.message;
-    node('plugin-label').textContent = next.plugin.phase === 'installed' ? '已安装' : next.plugin.phase === 'installing' ? '安装中' : '待安装';
-    node('plugin-dot').hidden = next.plugin.phase !== 'installed';
-    const install = node('install-plugin');
-    install.textContent = next.plugin.phase === 'installing' ? '正在安装…' : next.plugin.phase === 'installed' ? next.plugin.installedVersion === next.version ? '重新安装插件' : '更新插件' : '安装到 Codex';
-    install.disabled = actionPending || next.plugin.phase === 'installing';
+    node('desktop-version').textContent = 'v' + next.version;
+    renderPlugin(next);
     const phase = next.update.phase;
     node('update-state').textContent = next.update.message;
+    node('update-available-row').hidden = !next.update.availableVersion;
+    node('update-available-version').textContent = next.update.availableVersion ? 'v' + next.update.availableVersion : '—';
     node('check-update').textContent = phase === 'available' ? '下载 ' + next.update.availableVersion : phase === 'downloaded' ? '重启并更新' : phase === 'checking' ? '正在检查…' : phase === 'downloading' ? '正在下载…' : '检查更新';
     node('check-update').disabled = actionPending || ['checking', 'downloading', 'installing'].includes(phase) || next.plugin.phase === 'installing';
     node('update-label').textContent = phase === 'available' ? '有新版本' : phase === 'downloaded' ? '更新已就绪' : phase === 'downloading' ? '正在下载' : phase === 'checking' ? '正在检查' : '检查更新';
@@ -28,6 +75,7 @@
     node('update-progress').hidden = !['downloading', 'downloaded'].includes(phase);
     node('update-progress').value = next.update.progress;
     renderRelay(next.relay);
+    notifyChanges(previous, next);
   }
 
   /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接。 */
@@ -41,8 +89,8 @@
     const selected = window.modelEditor?.selectedName();
     const ready = window.modelEditor?.ready();
     const active = relay.enabled ? relay.activeModel || relay.model : null;
-    node('relay-target').textContent = active || '自带模型';
-    node('relay-target').title = relay.enabled ? '默认连接：' + relay.model + '；最近使用：' + active : 'Codex 自带模型';
+    node('relay-target').textContent = active ? relay.activeModelId || active : '自带模型';
+    node('relay-target').title = relay.enabled ? '默认连接：' + relay.model + '；最近使用：' + active + (relay.activeModelId ? ' · ' + relay.activeModelId : '') : 'Codex 自带模型';
     node('relay-switch').setAttribute('aria-checked', String(Boolean(relay.enabled)));
     node('relay-switch').disabled = actionPending || (!relay.enabled && !ready);
     node('relay-switch').title = !relay.enabled && !ready ? '请先保存连接配置' : relay.enabled ? '关闭并恢复 Codex 原有配置' : '用当前连接开启';
@@ -61,10 +109,9 @@
     });
   }
 
-  /** 同时更新页面和弹窗错误，确保下载失败或配置恢复失败不会藏在已关闭的面板里。 */
+  /** 将失败原因保留为顶部可关闭提示，管理弹窗关闭后仍能看到完整错误。 */
   function desktopError(message) {
-    node('desktop-error').textContent = message;
-    document.querySelectorAll('[data-desktop-error]').forEach(element => { element.textContent = message; });
+    window.notices.show('desktop', message, 'error');
   }
 
   /** 串行执行桌面操作；过程状态仍接收后台事件，失败不改变用户的表单草稿。 */
@@ -93,7 +140,8 @@
     });
   }
 
-  node('install-plugin').onclick = () => desktopAction(() => bridge.installPlugin());
+  node('check-plugin-update').onclick = () => desktopAction(() => bridge.checkPluginUpdate());
+  node('install-plugin').onclick = () => desktopAction(() => ['available', 'downloaded'].includes(state.pluginUpdate?.phase) ? bridge.updatePlugin() : bridge.installPlugin());
   node('enable-relay').onclick = () => desktopAction(() => bridge.enableRelay(window.modelEditor.selectedName()));
   node('relay-switch').onclick = () => desktopAction(() => state.relay.enabled ? bridge.disableRelay() : bridge.enableRelay(window.modelEditor.selectedName()));
   node('check-update').onclick = updateAction;

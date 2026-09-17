@@ -6,6 +6,10 @@ if (window.go?.desktop?.App && window.runtime) {
     getState: () => app.GetState(),
     /** 安装随 App 分发的独立插件程序，不接收任意命令或路径。 */
     installPlugin: () => app.InstallPlugin(),
+    /** 查询独立插件版本；不会下载、安装或改变 App 版本。 */
+    checkPluginUpdate: () => app.CheckPluginUpdate(),
+    /** 下载、校验并安装已发现的插件更新，不重启桌面程序。 */
+    updatePlugin: () => app.UpdatePlugin(),
     /** 只查询编译时指定的公开发布源。 */
     checkUpdate: () => app.CheckUpdate(),
     /** 下载并校验已发现版本的安装包。 */

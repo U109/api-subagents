@@ -38,6 +38,8 @@ type App struct {
 	cancel         context.CancelFunc
 	service        *settings.ConfigService
 	updater        *updates.Updater
+	pluginUpdater  *updates.Updater
+	bundledVersion string
 	relay          *relay.Relay
 	installOptions pluginruntime.InstallOptions
 	mu             sync.Mutex
@@ -55,6 +57,15 @@ func newApp(packaged bool) *App {
 	app := &App{service: settings.NewConfigService(configstore.NewConfigStore("")), installOptions: pluginruntime.DefaultInstallOptions(), plugin: shared.Object{"phase": "idle", "installedVersion": "", "message": "将插件安装到 Codex，即可使用配置的模型"}}
 	app.updater = updates.NewUpdater(release, filepath.Join(configstore.DataDir(), "updates"), packaged)
 	app.updater.OnChange = app.broadcast
+	installed := pluginruntime.InstalledVersion(app.installOptions)
+	if installed != "" {
+		app.plugin = shared.Object{"phase": "installed", "installedVersion": installed, "message": "已安装，配置模型后在 Codex 新建对话即可使用"}
+	}
+	if source, err := bundle.Open(); err == nil {
+		app.bundledVersion, _ = pluginruntime.PayloadVersion(source)
+	}
+	app.pluginUpdater = updates.NewPluginUpdater(release, filepath.Join(configstore.DataDir(), "plugin-updates"), installed)
+	app.pluginUpdater.OnChange = app.broadcast
 	app.relay = relay.New(app.service.Store, codexconfig.CodexConfig{Home: app.installOptions.CodexHome, DataRoot: configstore.DataDir()})
 	app.relay.OnChange = app.broadcast
 	for i, arg := range os.Args {
@@ -65,19 +76,10 @@ func newApp(packaged bool) *App {
 	return app
 }
 
-// startup 获取窗口生命周期上下文，后台检测已安装版本，不阻塞首屏渲染。
+// startup 获取窗口生命周期上下文并恢复之前的挟持配置；插件版本已在构造时读取，避免与手动更新竞争。
 func (a *App) startup(ctx context.Context) {
 	a.ctx, a.cancel = context.WithCancel(ctx)
 	_ = a.relay.Recover()
-	go func() {
-		version := pluginruntime.InstalledVersion(a.installOptions)
-		if version != "" {
-			a.mu.Lock()
-			a.plugin = shared.Object{"phase": "installed", "installedVersion": version, "message": "已安装，配置模型后在 Codex 新建对话即可使用"}
-			a.mu.Unlock()
-			a.broadcast()
-		}
-	}()
 	if a.smoke != "" {
 		go func() {
 			select {
@@ -111,8 +113,9 @@ func (a *App) GetState() shared.Object {
 	for k, v := range a.plugin {
 		plugin[k] = v
 	}
+	plugin["bundledVersion"] = a.bundledVersion
 	a.mu.Unlock()
-	return shared.Object{"version": buildinfo.Version, "plugin": plugin, "update": a.updater.Snapshot(), "relay": a.relay.Snapshot()}
+	return shared.Object{"version": buildinfo.Version, "plugin": plugin, "pluginUpdate": a.pluginUpdater.Snapshot(), "update": a.updater.Snapshot(), "relay": a.relay.Snapshot()}
 }
 
 // API 将固定配置路由传给 Go 服务，后台请求可取消，页面不接受任意文件操作。
@@ -148,43 +151,6 @@ func (a *App) DisableRelay() (shared.Object, error) {
 
 // SetDirty 同步未保存草稿状态，供窗口关闭和更新安装共同检查。
 func (a *App) SetDirty(dirty bool) { a.mu.Lock(); a.dirty = dirty; a.mu.Unlock() }
-
-// InstallPlugin 串行安装内嵌插件，完成前禁止窗口关闭或重启更新。
-func (a *App) InstallPlugin() (shared.Object, error) {
-	a.mu.Lock()
-	if a.plugin["phase"] == "installing" {
-		a.mu.Unlock()
-		return a.GetState(), nil
-	}
-	a.plugin["phase"] = "installing"
-	a.plugin["message"] = "正在安装独立 Go 插件…"
-	a.mu.Unlock()
-	a.broadcast()
-	source, err := bundle.Open()
-	if err == nil {
-		ctx, cancel := context.WithTimeout(a.ctx, 2*time.Minute)
-		defer cancel()
-		var result pluginruntime.InstallResult
-		result, err = pluginruntime.InstallPlugin(ctx, source, a.installOptions)
-		a.mu.Lock()
-		if err == nil {
-			if result.Installed {
-				a.plugin = shared.Object{"phase": "installed", "installedVersion": buildinfo.Version, "message": "安装成功！保存配置后在 Codex 新建对话即可使用。"}
-			} else {
-				a.plugin = shared.Object{"phase": "manual", "installedVersion": "", "message": "插件已准备好。请先安装并启动 Codex，再点击安装。"}
-			}
-		}
-		a.mu.Unlock()
-	}
-	if err != nil {
-		a.mu.Lock()
-		a.plugin["phase"] = "error"
-		a.plugin["message"] = err.Error()
-		a.mu.Unlock()
-	}
-	a.broadcast()
-	return a.GetState(), err
-}
 
 // CheckUpdate 仅在用户点击后访问固定 GitHub 发布源。
 func (a *App) CheckUpdate() (shared.Object, error) {

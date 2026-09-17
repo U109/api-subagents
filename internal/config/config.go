@@ -21,20 +21,21 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
-	Protocol        string  `json:"protocol"`
-	Model           string  `json:"model"`
-	BaseURL         string  `json:"baseUrl"`
-	APIKey          string  `json:"apiKey"`
-	APIKeyEnv       string  `json:"apiKeyEnv"`
-	Description     string  `json:"description"`
-	ReasoningEffort string  `json:"reasoningEffort,omitempty"`
-	MaxTokens       int     `json:"maxTokens"`
-	Stream          bool    `json:"stream"`
-	FirstTimeout    int     `json:"firstResponseTimeoutSeconds"`
-	IdleTimeout     int     `json:"streamIdleTimeoutSeconds"`
-	TaskTimeout     int     `json:"taskTimeoutMinutes"`
-	HasKey          bool    `json:"hasKey,omitempty"`
-	SavedName       *string `json:"savedName,omitempty"`
+	Protocol        string   `json:"protocol"`
+	Model           string   `json:"model"`
+	BaseURL         string   `json:"baseUrl"`
+	APIKey          string   `json:"apiKey"`
+	APIKeyEnv       string   `json:"apiKeyEnv"`
+	Description     string   `json:"description"`
+	ReasoningEffort string   `json:"reasoningEffort,omitempty"`
+	RelayModels     []string `json:"relayModels,omitempty"`
+	MaxTokens       int      `json:"maxTokens"`
+	Stream          bool     `json:"stream"`
+	FirstTimeout    int      `json:"firstResponseTimeoutSeconds"`
+	IdleTimeout     int      `json:"streamIdleTimeoutSeconds"`
+	TaskTimeout     int      `json:"taskTimeoutMinutes"`
+	HasKey          bool     `json:"hasKey,omitempty"`
+	SavedName       *string  `json:"savedName,omitempty"`
 }
 
 type Config struct {
@@ -110,6 +111,11 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
 		}
+		var err error
+		p.RelayModels, err = normalizeRelayModels(p.RelayModels)
+		if err != nil {
+			return c, fmt.Errorf("%s: %w", name, err)
+		}
 		if p.BaseURL == "" {
 			p.BaseURL = base
 		}
@@ -171,6 +177,7 @@ func Editable(c Config) Config {
 	result := c
 	result.Models = map[string]Profile{}
 	for name, p := range c.Models {
+		p.RelayModels = append([]string(nil), p.RelayModels...)
 		p.HasKey = p.APIKey != "" || (p.APIKeyEnv != "" && os.Getenv(p.APIKeyEnv) != "")
 		p.APIKey = ""
 		source := name

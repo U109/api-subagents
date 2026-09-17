@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	configstore "github.com/U109/api-subagents/internal/config"
@@ -228,17 +227,11 @@ func restoreSelectedModel(current, written []byte) ([]byte, error) {
 	return extra, nil
 }
 
-// WriteCatalog 为当前连接和各已保存连接生成可切换模型条目，不包含地址、Key 或凭据。
+// WriteCatalog 将共享的挟持模型列表写入 Codex 启动目录，不包含地址、Key 或凭据。
 func (c CodexConfig) WriteCatalog(config configstore.Config, defaultName string) error {
-	names := []string{}
-	for name := range config.Models {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	models := []any{catalogModel(relayModel, "跟随 App 选择", "使用 API Subagents 当前选中的连接", config.Models[defaultName].ReasoningEffort, 0)}
-	for index, name := range names {
-		profile := config.Models[name]
-		models = append(models, catalogModel("api-subagents/"+name, name+" · "+profile.Model, profile.Description, profile.ReasoningEffort, index+1))
+	models := []any{}
+	for index, entry := range ModelEntries(config, defaultName) {
+		models = append(models, catalogModel(entry.Slug, entry.Name, entry.Description, entry.ReasoningEffort, index))
 	}
 	return shared.AtomicWrite(c.catalogPath(), shared.Marshal(shared.Object{"models": models}), 0600)
 }

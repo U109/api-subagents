@@ -42,16 +42,15 @@ let pendingRemoval = null;
 let menuAnchor = null,
   menuName = null;
 
-/** 在页面底部显示操作结果；good 决定成功或错误的视觉状态。 */
+/** 将配置操作结果显示为顶部轻提示；错误保留到主动关闭，空消息只清除此通道。 */
 function status(message, good = true) {
-  byId('status').textContent = message;
-  byId('status').className = 'status ' + (good ? 'good' : 'bad');
+  window.notices.show('config', message, good ? (message.startsWith('正在') ? 'info' : 'success') : 'error');
 }
 /** 桌面版调用 Go 绑定，浏览器版使用会话令牌；两者共享配置校验与错误提示。 */
 async function api(route, body) {
   if (window.desktopApp) {
     const data = await window.desktopApp.api(route, body);
-    if (data.warning) byId('desktop-error').textContent = data.warning;
+    if (data.warning) window.notices.show('config-warning', data.warning, 'warning');
     return data;
   }
   const res = await fetch(route, {
@@ -268,6 +267,10 @@ function modelOptions(query = '') {
   byId('model-select').disabled = !catalog?.models.length && !p.model;
   window.selectUI.refresh();
 }
+/** 将当前连接的模型列表交给独立编辑器；新增和移除只标记草稿，不触发服务请求。 */
+function renderRelayModels() {
+  window.relayModelsUI.render(byId('relay-models'), {profile: config.models[selected], catalog: catalogs.get(selected), onChange: markChanged});
+}
 /** 绘制模型列表/手动输入两种模式，绑定只读拉取操作并维护连接级缓存。 */
 function renderPicker() {
   const p = config.models[selected],
@@ -293,6 +296,7 @@ function renderPicker() {
       markChanged();
       sidebar();
       connectionHeading();
+      renderRelayModels();
     };
   else {
     modelOptions();
@@ -301,6 +305,7 @@ function renderPicker() {
       markChanged();
       sidebar();
       connectionHeading();
+      renderRelayModels();
     };
     if (byId('model-filter')) byId('model-filter').oninput = (event) => modelOptions(event.target.value);
   }
@@ -332,6 +337,7 @@ function renderPicker() {
       }
     });
   window.selectUI.enhance(byId('picker'));
+  renderRelayModels();
 }
 
 /** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试。 */
@@ -367,8 +373,8 @@ function render() {
       ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1。')}
       <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key。</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
     </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0">${sectionTitle('model', '选择默认模型与思考深度，每个连接单独保存。')}<div id="picker" class="model-field"></div>
-      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">更快响应<span class="small-rule"></span>更深入思考</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p><span class="hint">具体档位需模型支持；Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div><div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存后，重启 Codex 可刷新模型列表与默认思考等级。</span></div>
+    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0">${sectionTitle('model', '选择默认模型、挟持模型列表与思考深度。')}<div class="model-layout"><div class="model-main"><div id="picker" class="model-field"></div>
+      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">更快响应<span class="small-rule"></span>更深入思考</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p><span class="hint">具体档位需模型支持；Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div></div><section id="relay-models" class="relay-models-block" aria-labelledby="relay-models-label"></section></div><div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存后，重启 Codex 可刷新模型列表与默认思考等级。</span></div>
     </section>
     <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">${sectionTitle('purpose', '告诉 Codex 这个模型擅长什么，用于插件任务委派。')}
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查。">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务。</span></div>
@@ -667,7 +673,7 @@ void action(async () => {
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: document.querySelectorAll('#relay-model-list .relay-model-item').length});
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {

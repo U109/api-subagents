@@ -27,6 +27,26 @@ func codexBinary(t *testing.T) string {
 	return path
 }
 
+// codexTestEnv 隔离 Codex 身份、桌面通道和目录；阻止后台插件联网，只有回环模拟服务可访问。
+func codexTestEnv(home string) []string {
+	env := []string{}
+	for _, value := range os.Environ() {
+		name, _, _ := strings.Cut(value, "=")
+		upper := strings.ToUpper(name)
+		if !strings.HasPrefix(upper, "CODEX_") && !strings.HasPrefix(upper, "GIT_CONFIG_") && upper != "OPENAI_API_KEY" && upper != "HTTP_PROXY" && upper != "HTTPS_PROXY" && upper != "ALL_PROXY" && upper != "NO_PROXY" {
+			env = append(env, value)
+		}
+	}
+	return append(env, "CODEX_HOME="+home, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=protocol.allow", "GIT_CONFIG_VALUE_0=never", "HTTP_PROXY=http://127.0.0.1:9", "HTTPS_PROXY=http://127.0.0.1:9", "ALL_PROXY=http://127.0.0.1:9", "NO_PROXY=127.0.0.1,localhost")
+}
+
+// codexTestCommand 关闭与测试无关的插件安装和 App 服务，只启动指定 CLI 与本机模拟模型。
+func codexTestCommand(ctx context.Context, bin string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, bin, append([]string{"-c", "features.plugins=false", "-c", "features.apps=false"}, args...)...)
+	cmd.WaitDelay = 2 * time.Second
+	return cmd
+}
+
 // TestCodexPrimaryModel 验证没有登录凭据的真实 Codex 能通过四种协议获得回答，不访问付费 API。
 func TestCodexPrimaryModel(t *testing.T) {
 	bin := codexBinary(t)
@@ -66,8 +86,9 @@ func TestCodexPrimaryModel(t *testing.T) {
 			defer cancel()
 			root := t.TempDir()
 			answer := filepath.Join(root, "answer.txt")
-			cmd := exec.CommandContext(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", `model_reasoning_effort="high"`, "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
-			cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
+			cmd := codexTestCommand(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", `model_reasoning_effort="high"`, "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
+			cmd.Env = codexTestEnv(r.Codex.Home)
+			cmd.WaitDelay = 2 * time.Second
 			cmd.Dir = root
 			output, err := cmd.CombinedOutput()
 			if err != nil {
@@ -97,9 +118,9 @@ func TestCodexModelList(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "app-server", "--listen", "stdio://")
+	cmd := codexTestCommand(ctx, bin, "app-server", "--listen", "stdio://")
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
+	cmd.Env = codexTestEnv(r.Codex.Home)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
 	var stderr bytes.Buffer
@@ -185,8 +206,8 @@ func TestCodexPatchPermissions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	root := t.TempDir()
-	cmd := exec.CommandContext(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", "features.plugins=false", "-C", root, "Try the supplied mock patch; report the permission outcome.")
-	cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
+	cmd := codexTestCommand(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", "features.plugins=false", "-C", root, "Try the supplied mock patch; report the permission outcome.")
+	cmd.Env = codexTestEnv(r.Codex.Home)
 	cmd.Dir = root
 	output, err := cmd.CombinedOutput()
 	if err != nil {

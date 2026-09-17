@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,8 +34,9 @@ func TestCodexInactiveThread(t *testing.T) {
 	root := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "exec", "--skip-git-repo-check", "--json", "-s", "read-only", "-m", "api-subagents/demo", "-C", root, "Reply OK without using tools.")
-	cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
+	cmd := codexTestCommand(ctx, bin, "exec", "--skip-git-repo-check", "--json", "-s", "read-only", "-m", "api-subagents/demo", "-C", root, "Reply OK without using tools.")
+	cmd.Env = codexTestEnv(r.Codex.Home)
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = root
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -70,8 +69,9 @@ func TestCodexInactiveThread(t *testing.T) {
 	if err := r.Enable("demo"); err != nil {
 		t.Fatal(err)
 	}
-	cmd = exec.CommandContext(ctx, bin, "exec", "resume", "--skip-git-repo-check", "--json", id, "Reply OK again without tools.")
-	cmd.Env = append(os.Environ(), "CODEX_HOME="+r.Codex.Home)
+	cmd = codexTestCommand(ctx, bin, "exec", "resume", "--skip-git-repo-check", "--json", id, "Reply OK again without tools.")
+	cmd.Env = codexTestEnv(r.Codex.Home)
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = root
 	output, err = cmd.CombinedOutput()
 	if err != nil || requests.Load() != 2 {
@@ -80,17 +80,18 @@ func TestCodexInactiveThread(t *testing.T) {
 }
 
 type codexRPC struct {
-	encoder *json.Encoder
-	decoder *json.Decoder
-	id      int
+	encoder       *json.Encoder
+	decoder       *json.Decoder
+	id            int
+	notifications []shared.Object
 }
 
 // startCodexRPC 启动隔离的真实 app-server；子测试结束立即关闭，避免持有会话数据库或沿用旧配置。
 func startCodexRPC(t *testing.T, bin, home, root string) *codexRPC {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	cmd := exec.CommandContext(ctx, bin, "app-server", "--listen", "stdio://")
-	cmd.Env = append(os.Environ(), "CODEX_HOME="+home)
+	cmd := codexTestCommand(ctx, bin, "app-server", "--listen", "stdio://")
+	cmd.Env = codexTestEnv(home)
 	cmd.Dir = root
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -106,7 +107,20 @@ func startCodexRPC(t *testing.T, bin, home, root string) *codexRPC {
 		cancel()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { stdin.Close(); cancel(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		// 先让 app-server 正常释放会话数据库，立即强杀会让 Windows 的子进程仍持有临时目录。
+		stdin.Close()
+		done := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cancel()
+			<-done
+		}
+		stdout.Close()
+		cancel()
+	})
 	client := &codexRPC{encoder: json.NewEncoder(stdin), decoder: json.NewDecoder(stdout)}
 	client.call(t, "initialize", shared.Object{"clientInfo": shared.Object{"name": "api-subagents-tests", "version": "0.3.1"}})
 	if err := client.encoder.Encode(shared.Object{"method": "initialized", "params": shared.Object{}}); err != nil {
@@ -115,7 +129,7 @@ func startCodexRPC(t *testing.T, bin, home, root string) *codexRPC {
 	return client
 }
 
-// call 读取对应请求的响应并忽略通知；每次重新解码对象，避免前一条通知遗留 ID 或 result。
+// call 读取对应请求的响应并保存期间通知；每次重新解码对象，避免前一条通知遗留 ID 或 result。
 func (c *codexRPC) call(t *testing.T, method string, params shared.Object) shared.Object {
 	t.Helper()
 	c.id++
@@ -128,6 +142,9 @@ func (c *codexRPC) call(t *testing.T, method string, params shared.Object) share
 			t.Fatal(method, err)
 		}
 		if shared.Int(value["id"]) != c.id {
+			if value["method"] != nil {
+				c.notifications = append(c.notifications, value)
+			}
 			continue
 		}
 		if value["error"] != nil {
