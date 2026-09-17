@@ -24,7 +24,8 @@ const esc = (value) =>
     /[&<>"']/g,
     (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c],
   );
-let config = {version: 1, maxConcurrent: 3, models: {}};
+// 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用。
+let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
 let selected = null,
   saved = new Set(),
   busy = false,
@@ -139,7 +140,7 @@ function markChanged() {
 
 /** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘。 */
 function connectionHeading() {
-  const p = config.models[selected];
+  const p = selected === null ? null : config.models[selected];
   byId('connection-toolbar').hidden = !p && !window.desktopApp;
   byId('connection-heading').hidden = !p;
   byId('config-actions').hidden = !p;
@@ -173,7 +174,7 @@ function sectionTitle(tab, description) {
   return `<div class="form-intro"><svg aria-hidden="true"><use href="#i-${tabIcons[tab]}"/></svg><div><h2>${tabs[tab]}</h2><p>${description}</p></div></div>`;
 }
 
-/** 切换前校验名称，非法草稿保留在输入框中并获得焦点，避免悄悄丢失用户输入。 */
+/** 切换前提交改名；空名称或重名时保留输入并聚焦，避免覆盖其他连接。 */
 function commitName() {
   const input = byId('name');
   if (!input || rename(config.models[selected], input)) return true;
@@ -198,19 +199,13 @@ function field(id, label, value, placeholder = '', full = false, type = 'text', 
     <input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="${type === 'password' ? 'new-password' : 'off'}">
     ${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 }
-/** 校验并重命名任意连接草稿，保留 savedName 追溯原密钥；就地更新以免吞掉失焦后的点击。 */
+/** 按自由文本重命名连接，仅阻止空名称与重名；保留原密钥来源，就地更新以免吞掉点击。 */
 function rename(profile, input) {
   const name = input.value.trim();
-  if (
-    !/^[a-z][a-z0-9_-]{0,47}$/.test(name) ||
-    ['constructor', 'prototype', '__proto__'].includes(name) ||
-    (name !== selected && Object.hasOwn(config.models, name)) ||
-    (name !== profile.savedName && saved.has(name))
-  ) {
-    status(
-      '调用名称需以小写字母开头，仅含小写字母、数字、下划线或横线，最多 48 个字符，且不能与其他连接重复。',
-      false,
-    );
+  const duplicate = (name !== selected && Object.hasOwn(config.models, name)) ||
+    (name !== profile.savedName && saved.has(name));
+  if (!name || duplicate) {
+    status(name ? '连接名称已被使用，请换一个名称。' : '请填写连接名称。', false);
     input.setAttribute('aria-invalid', 'true');
     return false;
   }
@@ -218,9 +213,9 @@ function rename(profile, input) {
   input.value = name;
   if (name === selected) return true;
   // 替换键但保留侧栏顺序，原保存名称只在保存成功后更新。
-  config.models = Object.fromEntries(
+  config.models = Object.assign(Object.create(null), Object.fromEntries(
     Object.entries(config.models).map(([id, value]) => [id === selected ? name : id, value]),
-  );
+  ));
   if (catalogs.has(selected)) catalogs.set(name, catalogs.get(selected));
   catalogs.delete(selected);
   dirty.delete(selected);
@@ -272,7 +267,7 @@ function render() {
   sidebar();
   connectionHeading();
   const editor = byId('editor'),
-    p = config.models[selected];
+    p = selected === null ? null : config.models[selected];
   if (!p) {
     editor.innerHTML =
       '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>支持 OpenAI、Claude、Gemini 和 CPA 等兼容服务。<br>填入接口和 Key，直接从列表选择模型。</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>拉取模型</span><i>→</i><span>交给 Codex</span></div></div>';
@@ -287,7 +282,7 @@ function render() {
       )
       .join('')}</div>
     <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0">${sectionTitle('connection', '设置接口与凭据，支持 OpenAI、Claude、Gemini 与 CPA。')}<div class="grid">
-      ${field('name', '连接名称', selected, '例如 reviewer', false, 'text', '用于 Codex 调用，可在这里重命名。')}
+      ${field('name', '连接名称', selected, '例如 日常助手 / Gemini', false, 'text', '按你的习惯命名，支持中文、空格和符号。')}
       <div class="field"><label for="protocol">接口类型</label><select id="protocol">${Object.entries(
         types,
       )
@@ -440,7 +435,7 @@ function setBusy(value) {
   });
   window.dispatchEvent(new Event('config:changed'));
 }
-/** 统一校验名称、锁定控件和捕获错误；定点删除或复制可跳过其他连接的名称校验。 */
+/** 提交当前改名、锁定控件并捕获错误；定点删除或复制不提交其他连接的名称草稿。 */
 async function action(fn, {checkName = true} = {}) {
   if (busy) return;
   // 保存和拉取前提交名称，不依赖浏览器是否已经发出失焦 change 事件。
@@ -459,7 +454,7 @@ async function action(fn, {checkName = true} = {}) {
 async function save() {
   await action(async () => {
     const result = await api('/api/config', {config});
-    config = result.config;
+    config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
     saved = new Set(Object.keys(config.models));
     dirty.clear();
     render();
@@ -568,7 +563,7 @@ if (window.desktopApp) {
     window.dispatchEvent(new Event('config:draft'));
   };
   window.modelEditor = {
-    /** 返回当前选中的调用名称，供桌面模式按钮选择已保存连接。 */
+    /** 返回当前选中的连接名称，供桌面模式按钮选择已保存连接。 */
     selectedName: () => selected,
     /** 存在任何草稿或请求时先要求保存，避免开启后实际使用旧参数。 */
     ready: () => Boolean(selected && config.models[selected]?.savedName && !hasDrafts() && !busy),
@@ -588,7 +583,7 @@ if (window.desktopApp) {
 render();
 void action(async () => {
   const result = await api('/api/config');
-  config = result.config;
+  config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
   saved = new Set(Object.keys(config.models));
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;

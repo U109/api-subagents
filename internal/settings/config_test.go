@@ -81,7 +81,7 @@ func TestConfigValidation(t *testing.T) {
 	}
 }
 
-// TestSavedCredentials 确认改名保留 Key，而跨地址、重复来源和名称碰撞均不能绕过凭据隔离。
+// TestSavedCredentials 确认改名和切换地址保留 Key，重复改名来源仍被拒绝且不会回显凭据。
 func TestSavedCredentials(t *testing.T) {
 	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")
 	c, _ := store.Read()
@@ -102,8 +102,8 @@ func TestSavedCredentials(t *testing.T) {
 	}
 	p.BaseURL = "https://another.invalid/v1"
 	draft.Models["renamed"] = p
-	if _, err = configstore.MergeKeys(shared.Marshal(draft), c, true); err == nil {
-		t.Fatal("endpoint key forwarding allowed")
+	if merged, err = configstore.MergeKeys(shared.Marshal(draft), c, true); err != nil || merged.Models["renamed"].APIKey != "synthetic-private-key" || merged.Models["renamed"].BaseURL != p.BaseURL {
+		t.Fatal("endpoint change lost saved key", err)
 	}
 	p.BaseURL = c.Models["demo"].BaseURL
 	draft.Models["renamed"] = p

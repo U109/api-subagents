@@ -2,6 +2,7 @@ package codex
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,48 @@ import (
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/shared"
 )
+
+// TestFreeTextConnectionRouting 验证自由名称进入目录后可准确恢复，斜线与转义文本不能串到另一连接。
+func TestFreeTextConnectionRouting(t *testing.T) {
+	c := configstore.EmptyConfig()
+	names := []string{"demo", "日常助手 / Gemini #1", "a/b", "a%2Fb", "a%252Fb", "__proto__", "constructor", "123", strings.Repeat("长名称", 40)}
+	for _, name := range names {
+		c.Models[name] = configstore.Profile{Model: "default", RelayModels: []string{"vendor/extra"}, APIKey: "synthetic-" + name}
+	}
+	entries := ModelEntries(c, "demo")
+	if len(entries) != 1+2*len(names) {
+		t.Fatal("free-text connection missing from catalog")
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if seen[entry.Slug] {
+			t.Fatal("free-text connection alias collision")
+		}
+		seen[entry.Slug] = true
+		name, profile, err := ResolveCatalogModel(c, "demo", entry.Slug)
+		if err != nil || profile.APIKey != "synthetic-"+name {
+			t.Fatal("catalog routed to wrong connection", err)
+		}
+		if entry.Slug != relayModel && entry.Name != name+" · "+profile.Model {
+			t.Fatal("catalog label and upstream model disagree")
+		}
+	}
+	for _, name := range names {
+		alias := relayModel + "/" + url.PathEscape(name)
+		resolved, profile, err := ResolveCatalogModel(c, "demo", alias)
+		if err != nil || resolved != name || profile.Model != "default" || profile.APIKey != "synthetic-"+name {
+			t.Fatal("connection alias decoded incorrectly", err)
+		}
+	}
+	if !seen[relayModel+"/demo"] {
+		t.Fatal("legacy connection alias changed")
+	}
+	for _, alias := range []string{relayModel + "/bad%escape", relayModel + "/demo%", relayModel + "/a%2Fb/not-configured"} {
+		if _, _, err := ResolveCatalogModel(c, "demo", alias); err == nil {
+			t.Fatal("malformed alias accepted")
+		}
+	}
+}
 
 // TestModelDisplayNames 通过公开目录和解析入口确认改名只改变显示，历史别名与上游模型仍稳定。
 func TestModelDisplayNames(t *testing.T) {

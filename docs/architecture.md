@@ -23,7 +23,7 @@
 
 前端按职责拆分：`shell-ui.js` 管理侧栏与弹窗，`select-ui.js` 管理下拉菜单和键盘操作，`notification-ui.js` 管理顶部提示，`config-ui.js` 维护连接草稿，`model-picker-ui.js` 统一管理模型搜索、勾选与默认值，配套样式位于 `model-picker.css`；`desktop-ui.js` 同步安装、更新与挟持状态，`bridge.js` 保留固定 Go 绑定。静态资源同时列入嵌入和浏览器访问白名单。
 
-连接配置的 `model` 与可选 `relayModels` 存储实际发送上游的模型 ID，前端编辑直接替换对应值，默认模型仍供 Worker 和旧连接别名使用。可选 `modelNames` 按 ID 保存显示名称，只用于目录展示。`internal/codex/models.go` 同时生成启动目录与网关 `/v1/models`，避免两个列表不一致；额外模型采用「连接名 + 模型 ID 的完整 SHA-256」稳定别名，顺序、显示名称和凭据变化不改变别名。修改 ID 会生成新别名，需要刷新并重新选择；网关只解析已配置别名，对每次请求的连接副本替换模型，不修改原配置，同名模型不会跨连接复用 Key。
+连接配置的 `model` 与可选 `relayModels` 存储实际发送上游的模型 ID，前端编辑直接替换对应值，默认模型仍供 Worker 和旧连接别名使用。可选 `modelNames` 按 ID 保存显示名称，只用于目录展示。`internal/codex/models.go` 同时生成启动目录与网关 `/v1/models`，避免两个列表不一致；连接名按单个路径段编码，额外模型再拼接模型 ID 的完整 SHA-256，中文、空格和斜线不会混淆路由。旧连接别名保持不变，顺序、显示名称和凭据变化不改变别名。修改 ID 会生成新别名，需要刷新并重新选择；网关只解析已配置别名，对每次请求的连接副本替换模型，不修改原配置，同名模型不会跨连接复用 Key。
 
 Codex 的 `model_catalog_json` 在启动时加载，因此列表修改后需重启 Codex；详见 [官方配置参考](https://developers.openai.com/codex/config-reference/#model_catalog_json)。
 

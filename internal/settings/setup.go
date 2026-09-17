@@ -109,7 +109,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 			if index > 1 {
 				suffix = fmt.Sprintf("-copy-%d", index)
 			}
-			name := shared.Clip(input.Name, 48-len(suffix)) + suffix
+			name := input.Name + suffix
 			_, saved := c.Models[name]
 			_, pending := draft.Models[name]
 			if !saved && !pending {

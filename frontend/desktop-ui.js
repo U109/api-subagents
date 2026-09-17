@@ -1,13 +1,13 @@
-// 桌面状态只通过固定 Go 绑定读取，弹窗和状态入口共享一份后台快照。
+// 桌面状态只通过固定 Go 绑定读取，弹窗和状态入口共享一份后台快照
 (() => {
   const bridge = window.desktopApp;
   if (!bridge) return;
   document.querySelectorAll('.desktop-only').forEach(element => { element.hidden = false; });
   let state, actionPending = false;
-  /** 读取固定界面节点，桌面状态只写入 textContent，不解释为 HTML。 */
+  /** 读取固定界面节点，桌面状态只写入 textContent，不解释为 HTML */
   const node = id => document.getElementById(id);
 
-  /** 按稳定版本的三个数字比较新旧，只用于按钮呈现，真正安装仍由 Go 再次检查。 */
+  /** 按稳定版本的三个数字比较新旧，只用于按钮呈现，真正安装仍由 Go 再次检查 */
   function newerVersion(next, current) {
     const a = String(next || '').split('.').map(Number), b = String(current || '0.0.0').split('.').map(Number);
     if (a.length !== 3 || b.length !== 3 || [...a, ...b].some(value => !Number.isFinite(value))) return false;
@@ -15,7 +15,7 @@
     return false;
   }
 
-  /** 独立显示插件已安装、随 App 提供和在线可更新版本，不再把 App 版本当作插件版本。 */
+  /** 独立显示插件已安装、随 App 提供和在线可更新版本，不再把 App 版本当作插件版本 */
   function renderPlugin(next) {
     const plugin = next.plugin, update = next.pluginUpdate || {phase: 'idle'};
     const installed = plugin.installedVersion, bundled = plugin.bundledVersion;
@@ -39,24 +39,24 @@
     install.disabled = actionPending || installing || (!available && (!bundled || wouldDowngrade));
   }
 
-  /** 只在后台阶段改变时提示结果，进度事件不会重复弹出；安装失败由操作入口统一显示。 */
+  /** 只在后台阶段改变时提示结果，进度事件不会重复弹出；安装失败由操作入口统一显示 */
   function notifyChanges(previous, next) {
     if (!previous) return;
     if (previous.update.phase !== next.update.phase) {
       if (next.update.phase === 'available') window.notices.show('app-update', '有新版本可用：v' + next.update.availableVersion, 'warning');
-      if (next.update.phase === 'latest') window.notices.show('app-update', 'App 已是最新版本。');
-      if (next.update.phase === 'downloaded') window.notices.show('app-update', '更新已下载，可以重启并更新。');
+      if (next.update.phase === 'latest') window.notices.show('app-update', 'App 已是最新版本');
+      if (next.update.phase === 'downloaded') window.notices.show('app-update', '更新已下载，可以重启并更新');
     }
     if (previous.pluginUpdate?.phase !== next.pluginUpdate?.phase) {
       if (next.pluginUpdate?.phase === 'available') window.notices.show('plugin-update', '有插件新版本可用：v' + next.pluginUpdate.availableVersion, 'warning');
-      if (next.pluginUpdate?.phase === 'latest') window.notices.show('plugin-update', '插件已是最新版本。');
+      if (next.pluginUpdate?.phase === 'latest') window.notices.show('plugin-update', '插件已是最新版本');
       if (next.pluginUpdate?.phase === 'incompatible') window.notices.show('plugin-update', next.pluginUpdate.message, 'warning');
     }
-    if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件 v' + next.plugin.installedVersion + ' 已安装，请在 Codex 新建对话。');
-    if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新。');
+    if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件 v' + next.plugin.installedVersion + ' 已安装，请在 Codex 新建对话');
+    if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新');
   }
 
-  /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗。 */
+  /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗 */
   function renderDesktop(next) {
     const previous = state;
     state = next;
@@ -79,7 +79,7 @@
     notifyChanges(previous, next);
   }
 
-  /** 正常退出只显示恢复进度；仅有草稿时打开与页面一致的确认框，失败后恢复界面操作。 */
+  /** 正常退出只显示恢复进度；仅有草稿时打开与页面一致的确认框，失败后恢复界面操作 */
   function renderClose(previous = {}, next = {}) {
     const dialog = node('exit-dialog');
     const stopping = ['closing', 'ready'].includes(next.phase);
@@ -93,7 +93,7 @@
     else window.notices.clear('exit');
   }
 
-  /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接。 */
+  /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接 */
   function renderRelay(relay) {
     if (!relay) return;
     node('relay-panel').hidden = false;
@@ -124,29 +124,29 @@
     });
   }
 
-  /** 将失败原因保留为顶部可关闭提示，管理弹窗关闭后仍能看到完整错误。 */
+  /** 将失败原因保留为顶部可关闭提示，管理弹窗关闭后仍能看到完整错误 */
   function desktopError(message) {
     window.notices.show('desktop', message, 'error');
   }
 
-  /** 串行执行桌面操作；过程状态仍接收后台事件，失败不改变用户的表单草稿。 */
+  /** 串行执行桌面操作；过程状态仍接收后台事件，失败不改变用户的表单草稿 */
   async function desktopAction(action) {
     if (actionPending || !state || ['closing', 'ready'].includes(state.close?.phase)) return;
     actionPending = true;
     renderDesktop(state);
     desktopError('');
     try { renderDesktop(await action()); }
-    catch (error) { desktopError(typeof error === 'string' ? error : error.message || '操作未完成，请稍后重试。'); }
+    catch (error) { desktopError(typeof error === 'string' ? error : error.message || '操作未完成，请稍后重试'); }
     finally { actionPending = false; renderDesktop(state); }
   }
 
-  /** 依照已验证的更新阶段选择动作；安装前沿用配置草稿和正在请求的保护事件。 */
+  /** 依照已验证的更新阶段选择动作；安装前沿用配置草稿和正在请求的保护事件 */
   function updateAction() {
     return desktopAction(async () => {
       if (state.update.phase === 'available') return bridge.downloadUpdate();
       if (state.update.phase === 'downloaded') {
         if (!window.dispatchEvent(new Event('desktop:before-update', {cancelable: true}))) {
-          desktopError('请先保存配置并等待当前操作完成，再重启更新。');
+          desktopError('请先保存配置并等待当前操作完成，再重启更新');
           return state;
         }
         return bridge.installUpdate();
@@ -167,15 +167,15 @@
   node('open-releases').onclick = () => desktopAction(() => bridge.openReleases());
   node('confirm-exit').onclick = () => {
     node('confirm-exit').disabled = true;
-    bridge.confirmClose().catch(() => { node('confirm-exit').disabled = false; desktopError('无法退出，请重试。'); });
+    bridge.confirmClose().catch(() => { node('confirm-exit').disabled = false; desktopError('无法退出，请重试'); });
   };
-  node('cancel-exit').onclick = () => { void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试。')); };
+  node('cancel-exit').onclick = () => { void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试')); };
   node('exit-dialog').addEventListener('cancel', event => {
     event.preventDefault();
-    void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试。'));
+    void bridge.cancelClose().catch(() => desktopError('无法取消退出，请重试'));
   });
   window.addEventListener('config:rendered', () => { if (state) renderRelay(state.relay); });
   window.addEventListener('config:draft', () => { if (state) renderRelay(state.relay); });
   bridge.onState(renderDesktop);
-  bridge.getState().then(renderDesktop).catch(() => desktopError('桌面服务未就绪，请重新打开应用。'));
+  bridge.getState().then(renderDesktop).catch(() => desktopError('桌面服务未就绪，请重新打开应用'));
 })();

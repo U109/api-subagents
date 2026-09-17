@@ -1,25 +1,25 @@
 /* 模型选择共用一张目录：勾选、默认值和筛选就地完成，白底延续配置工作台。 */
 #panel-model { padding: 22px 26px; }
-.model-current { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 15px; font-size: 11px; }
+.model-current { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 15px; font-size: 13px; }
 .model-current > span:first-child { flex-shrink: 0; color: var(--secondary); }
-.model-current code { font: 12px var(--mono); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.model-current-hint { margin-left: auto; flex-shrink: 0; color: var(--muted); font-size: 10px; }
+.model-current code { font: 14px var(--mono); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.model-current-hint { margin-left: auto; flex-shrink: 0; color: var(--muted); font-size: 12px; }
 .model-catalog-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .model-search-wrap { position: relative; flex: 1; min-width: 160px; }
 .model-search-wrap > svg { position: absolute; top: 11px; left: 12px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
-.model-search-wrap input { height: 38px; padding: 8px 34px 8px 36px; font-size: 12px; }
+.model-search-wrap input { height: 38px; padding: 8px 34px 8px 36px; font-size: 14px; }
 .model-search-wrap input::-webkit-search-cancel-button { display: none; }
-.model-search-wrap .icon-button { position: absolute; right: 4px; top: 4px; width: 28px; font-size: 18px; }
+.model-search-wrap .icon-button { position: absolute; right: 4px; top: 4px; width: 28px; font-size: 20px; }
 .model-filters { display: flex; flex-shrink: 0; gap: 3px; padding: 3px; border-radius: 7px; background: var(--surface); border: 1px solid var(--line); }
-.model-filters button { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 5px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.model-filters button { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 5px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .model-filters button[aria-pressed='true'] { background: white; color: var(--ink); border-color: var(--line); box-shadow: 0 1px 2px #00000005; }
-.model-filters button span { font: 10px var(--mono); }
+.model-filters button span { font: 12px var(--mono); }
 .model-catalog-actions { display: flex; flex-shrink: 0; gap: 8px; }
-.model-catalog-actions .secondary { height: 38px; padding: 8px 12px; background: white; font-size: 11px; }
+.model-catalog-actions .secondary { height: 38px; padding: 8px 12px; background: white; font-size: 13px; }
 .model-catalog-actions .secondary:hover { background: var(--surface); }
-.model-catalog-actions .secondary > span { font-size: 17px; line-height: 1; }
+.model-catalog-actions .secondary > span { font-size: 19px; line-height: 1; }
 .model-catalog { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; }
-.model-catalog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--line); background: #fafafa; color: var(--muted); font-size: 10px; }
+.model-catalog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--line); background: #fafafa; color: var(--muted); font-size: 12px; }
 .model-catalog-head > span:first-child { color: var(--secondary); }
 .model-catalog-list { max-height: clamp(132px, calc(100dvh - 710px), 330px); min-height: 92px; overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #d8d6d4 transparent; }
 .model-catalog-row { display: flex; align-items: center; min-height: 45px; padding-right: 10px; gap: 10px; }
@@ -30,35 +30,35 @@
 .model-catalog-choice input { appearance: auto; width: 15px; height: 15px; padding: 0; margin: 0; accent-color: var(--action); flex-shrink: 0; cursor: pointer; }
 .model-catalog-choice input:disabled { opacity: .75; cursor: default; }
 .model-catalog-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.model-catalog-name { font: 12px var(--body); overflow-wrap: anywhere; }
-.model-catalog-id { font: 10px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.model-catalog-name { font: 14px var(--body); overflow-wrap: anywhere; }
+.model-catalog-id { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .model-rename-button { width: 28px; flex-shrink: 0; }
 .model-rename-button svg { width: 14px; height: 14px; }
-dialog .model-edit-help { margin: 7px 0 19px; font-size: 11px; line-height: 1.7; }
-#reset-model-name { margin-right: auto; font-size: 11px; }
-.model-default-button { flex-shrink: 0; min-width: 77px; padding: 6px 10px; border: 1px solid transparent; border-radius: 5px; color: var(--secondary); font-size: 11px; }
+dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7; }
+#reset-model-name { margin-right: auto; font-size: 13px; }
+.model-default-button { flex-shrink: 0; min-width: 77px; padding: 6px 10px; border: 1px solid transparent; border-radius: 5px; color: var(--secondary); font-size: 13px; }
 .model-default-button:hover { border-color: var(--border-active); background: white; }
 .model-default-button.is-default { background: #ebe9e6; color: #62574b; }
 .model-catalog-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 145px; padding: 24px 18px; text-align: center; }
-.model-catalog-empty strong { font-size: 12px; font-weight: 500; }
-.model-catalog-empty span { color: var(--muted); font-size: 11px; line-height: 1.7; }
-.model-catalog-footer { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 1px 0; font-size: 10px; line-height: 1.7; color: var(--muted); }
+.model-catalog-empty strong { font-size: 14px; font-weight: 500; }
+.model-catalog-empty span { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.model-catalog-footer { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 1px 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
 #model-selection-count { flex-shrink: 0; color: var(--secondary); font-variant-numeric: tabular-nums; }
 #model-catalog-hint { text-align: right; }
-.manual-model-error { min-height: 30px; margin-top: 8px; font-size: 11px; line-height: 1.7; color: var(--danger); }
+.manual-model-error { min-height: 30px; margin-top: 8px; font-size: 13px; line-height: 1.7; color: var(--danger); }
 
 /* 思考等级使用紧凑按钮，全部直接可见；窄屏换行而不依赖另一个下拉框。 */
 .reasoning-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .reasoning-block .field-label { margin-bottom: 10px; }
-.quiet-meta { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--muted); }
+.quiet-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .reasoning-options { display: flex; gap: 6px; flex-wrap: wrap; }
 .effort-option { display: flex; align-items: baseline; justify-content: center; gap: 7px; min-height: 33px; flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: white; white-space: nowrap; }
-.effort-option strong { font-size: 11px; font-weight: 500; }
-.effort-option small { font: 9px var(--mono); color: var(--muted); }
+.effort-option strong { font-size: 13px; font-weight: 500; }
+.effort-option small { font: 11px var(--mono); color: var(--muted); }
 .effort-option:hover { border-color: var(--accent); }
 .effort-option[aria-checked='true'] { border-color: var(--accent); background: #f2f1ef; box-shadow: 0 0 0 .5px var(--accent); }
 #reasoning-description { margin: 8px 0 0; min-height: 17px; }
-.default-note { display: flex; align-items: center; gap: 7px; margin-top: 14px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+.default-note { display: flex; align-items: center; gap: 7px; margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .default-note svg { width: 13px; height: 13px; }
 
 @media (max-width: 1180px) {
@@ -74,13 +74,13 @@ dialog .model-edit-help { margin: 7px 0 19px; font-size: 11px; line-height: 1.7;
   .model-catalog-toolbar { gap: 9px 6px; }
   .model-filters button { padding: 0 8px; gap: 5px; }
   .model-catalog-actions { gap: 5px; }
-  .model-catalog-actions .secondary { padding: 6px 8px; gap: 4px; font-size: 10px; }
+  .model-catalog-actions .secondary { padding: 6px 8px; gap: 4px; font-size: 12px; }
   .model-catalog-actions .secondary svg, .model-catalog-actions .secondary > span { display: none; }
   .model-catalog-head { padding: 9px 10px; }
   .model-catalog-row { gap: 5px; padding-right: 5px; }
   .model-catalog-choice { padding-left: 10px; gap: 9px; }
-  .model-catalog-name { font-size: 11px; }
-  .model-default-button { min-width: 65px; padding: 6px 7px; font-size: 10px; }
+  .model-catalog-name { font-size: 13px; }
+  .model-default-button { min-width: 65px; padding: 6px 7px; font-size: 12px; }
   .model-catalog-footer { align-items: flex-start; gap: 8px; }
   .reasoning-block .quiet-meta { display: none; }
   .effort-option { flex: 1 1 22%; gap: 5px; padding: 7px 6px; }

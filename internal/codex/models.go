@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -15,11 +16,16 @@ type ModelEntry struct {
 	Slug, Name, Description, ReasoningEffort string
 }
 
+// relayConnectionAlias 将自由文本名称编码为单个路由段；旧版连接名称保持原别名不变。
+func relayConnectionAlias(connection string) string {
+	return relayModel + "/" + url.PathEscape(connection)
+}
+
 // RelayModelAlias 由连接名与模型 ID 生成稳定别名，模型重排、描述或密钥变化不会使历史对话失效。
-// ID 使用完整摘要，含斜线或 Unicode 的上游名称不会被误解为连接名或路径。
+// 连接名按路径段编码，模型 ID 使用完整摘要，斜线、百分号和 Unicode 不会混淆路由边界。
 func RelayModelAlias(connection, model string) string {
 	digest := sha256.Sum256([]byte(model))
-	return relayModel + "/" + connection + "/" + hex.EncodeToString(digest[:])
+	return relayConnectionAlias(connection) + "/" + hex.EncodeToString(digest[:])
 }
 
 // ModelEntries 为 Codex 和本地 /models 提供同一有序目录，使用自定义显示名称且保留稳定路由。
@@ -33,7 +39,7 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	sort.Strings(names)
 	for _, name := range names {
 		profile := config.Models[name]
-		entries = append(entries, ModelEntry{Slug: relayModel + "/" + name, Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
+		entries = append(entries, ModelEntry{Slug: relayConnectionAlias(name), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
 		seen := map[string]bool{profile.Model: true}
 		for _, model := range profile.RelayModels {
 			if seen[model] {
@@ -47,7 +53,7 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 }
 
 // ResolveCatalogModel 只接受当前配置中的本地别名，继续支持跟随 App 和旧版连接别名。
-// 返回请求独享的连接副本，切换模型不会修改默认模型、地址、Key 或下一次请求的参数。
+// 连接名仅解码一次；返回请求独享的副本，切换模型不会修改默认模型、地址或 Key。
 func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (string, configstore.Profile, error) {
 	connection, suffix := defaultName, ""
 	if alias != "" && alias != relayModel {
@@ -57,6 +63,11 @@ func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (
 		var hasSuffix bool
 		connection, suffix, hasSuffix = strings.Cut(strings.TrimPrefix(alias, relayModel+"/"), "/")
 		if hasSuffix && suffix == "" {
+			return "", configstore.Profile{}, errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
+		}
+		var err error
+		connection, err = url.PathUnescape(connection)
+		if err != nil {
 			return "", configstore.Profile{}, errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
 		}
 	}

@@ -18,8 +18,6 @@ import (
 
 var Defaults = map[string]string{"compatible": "https://api.openai.com/v1", "responses": "https://api.openai.com/v1", "anthropic": "https://api.anthropic.com/v1", "gemini": "https://generativelanguage.googleapis.com/v1beta"}
 
-var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
-
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
@@ -96,8 +94,8 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		return c, errors.New("最多配置 50 个模型。")
 	}
 	for name, item := range raw.Models {
-		if !namePattern.MatchString(name) || name == "constructor" || name == "prototype" || name == "__proto__" {
-			return c, errors.New("调用名称需以小写字母开头，最多 48 字符。")
+		if strings.TrimSpace(name) == "" {
+			return c, errors.New("请填写连接名称。")
 		}
 		p := Profile{MaxTokens: 4096, Stream: true, FirstTimeout: 180, IdleTimeout: 120, TaskTimeout: 15}
 		if bytes.Equal(item, []byte("null")) || json.Unmarshal(item, &p) != nil {
@@ -210,7 +208,8 @@ func ResolveProfile(c Config, name string) (Profile, error) {
 	return p, nil
 }
 
-// MergeKeys 保留改名来源的密钥，但阻止跨地址静默复用已保存凭据。
+// MergeKeys 沿用原连接的已保存密钥，修改地址或协议无需重填；显式输入的新 Key 优先。
+// savedName 只用于追溯同一连接的改名，不能重复引用来源或覆盖另一连接。
 func MergeKeys(data []byte, previous Config, requireModel bool) (Config, error) {
 	c, err := ValidateConfig(data, requireModel)
 	if err != nil {
@@ -225,7 +224,7 @@ func MergeKeys(data []byte, previous Config, requireModel bool) (Config, error) 
 				return c, errors.New("原模型配置已不存在，请刷新后重试。")
 			}
 			if _, taken := previous.Models[name]; source != name && taken {
-				return c, errors.New("调用名称已被另一连接使用。")
+				return c, errors.New("连接名称已被另一连接使用。")
 			}
 			if sources[source] {
 				return c, errors.New("同一连接不能重复改名，请通过复制创建副本。")
@@ -237,10 +236,6 @@ func MergeKeys(data []byte, previous Config, requireModel bool) (Config, error) 
 			continue
 		}
 		keep := p.APIKey == "" && p.HasKey && old.APIKey != ""
-		keepEnv := p.APIKeyEnv != "" && p.APIKeyEnv == old.APIKeyEnv
-		if (p.Protocol != old.Protocol || p.BaseURL != old.BaseURL) && (keep || keepEnv) {
-			return c, errors.New("API 地址或接口类型已改变，请重新填写 Key，并清除原环境变量设置。")
-		}
 		if keep {
 			p.APIKey = old.APIKey
 		}

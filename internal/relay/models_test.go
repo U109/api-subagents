@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,7 +37,7 @@ func TestRelayModelSwitching(t *testing.T) {
 	p.RelayModels = []string{"model/a", "模型二"}
 	c.Models["demo"] = p
 	p.BaseURL, p.APIKey = server.URL+"/second", "synthetic-second-key"
-	c.Models["other"] = p
+	c.Models["另一连接 / Gemini #2"] = p
 	if err = r.Store.Save(c); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestRelayModelSwitching(t *testing.T) {
 		{"api-subagents/demo", "mock-model", "demo", "synthetic-relay-key", "/first/responses"},
 		{codexconfig.RelayModelAlias("demo", "model/a"), "model/a", "demo", "synthetic-relay-key", "/first/responses"},
 		{codexconfig.RelayModelAlias("demo", "模型二"), "模型二", "demo", "synthetic-relay-key", "/first/responses"},
-		{codexconfig.RelayModelAlias("other", "model/a"), "model/a", "other", "synthetic-second-key", "/second/responses"},
+		{codexconfig.RelayModelAlias("另一连接 / Gemini #2", "model/a"), "model/a", "另一连接 / Gemini #2", "synthetic-second-key", "/second/responses"},
 	} {
 		status, body := requestRelay(t, r, shared.Object{"model": tc.alias, "input": "Reply OK", "stream": true})
 		if status != 200 {
@@ -109,7 +110,7 @@ func TestRelayModelSwitching(t *testing.T) {
 	}
 }
 
-// TestCodexHijackModelList 用真实 app-server 的模型列表和同一对话内两次切换验证接入；所有模型均由本地服务模拟。
+// TestCodexHijackModelList 用真实 app-server 验证中文和斜线连接名的目录及同一对话内模型切换，模型均由本地服务模拟。
 func TestCodexHijackModelList(t *testing.T) {
 	bin := codexBinary(t)
 	requests := make(chan string, 8)
@@ -128,7 +129,8 @@ func TestCodexHijackModelList(t *testing.T) {
 	}
 	p := c.Models["demo"]
 	p.RelayModels = []string{"fast-model", "deep-model"}
-	c.Models["demo"] = p
+	connection := "日常助手 / Gemini #1"
+	c.Models[connection] = p
 	if err = r.Store.Save(c); err != nil {
 		t.Fatal(err)
 	}
@@ -143,20 +145,20 @@ func TestCodexHijackModelList(t *testing.T) {
 		models[shared.Str(shared.Obj(item)["model"])] = true
 	}
 	for _, name := range p.RelayModels {
-		if !models[codexconfig.RelayModelAlias("demo", name)] {
+		if !models[codexconfig.RelayModelAlias(connection, name)] {
 			t.Fatal("Codex model list omitted configured model", name, listed)
 		}
 	}
 	if len(requests) != 0 {
 		t.Fatal("listing models triggered generation")
 	}
-	thread := client.call(t, "thread/start", shared.Object{"model": "api-subagents/demo", "modelProvider": "api_subagents", "cwd": root, "approvalPolicy": "never", "sandbox": "read-only", "ephemeral": true})
+	thread := client.call(t, "thread/start", shared.Object{"model": "api-subagents/" + url.PathEscape(connection), "modelProvider": "api_subagents", "cwd": root, "approvalPolicy": "never", "sandbox": "read-only", "ephemeral": true})
 	id := shared.Str(shared.Obj(thread["thread"])["id"])
 	if id == "" {
 		t.Fatal("missing thread ID")
 	}
 	for _, name := range p.RelayModels {
-		result := client.call(t, "turn/start", shared.Object{"threadId": id, "model": codexconfig.RelayModelAlias("demo", name), "input": []any{shared.Object{"type": "text", "text": "Reply OK without using tools.", "text_elements": []any{}}}})
+		result := client.call(t, "turn/start", shared.Object{"threadId": id, "model": codexconfig.RelayModelAlias(connection, name), "input": []any{shared.Object{"type": "text", "text": "Reply OK without using tools.", "text_elements": []any{}}}})
 		client.waitTurn(t, shared.Str(shared.Obj(result["turn"])["id"]))
 		select {
 		case model := <-requests:
