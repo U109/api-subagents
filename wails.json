@@ -7,5 +7,5 @@
   "frontend:build": "",
   "frontend:dev:watcher": "",
   "author": {"name": "U109"},
-  "info": {"productName": "API Subagents", "productVersion": "0.3.7", "comments": "Go + Wails desktop and standalone MCP worker"}
+  "info": {"productName": "API Subagents", "productVersion": "0.3.8", "comments": "Go + Wails desktop and standalone MCP worker"}
 }

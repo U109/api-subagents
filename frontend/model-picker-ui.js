@@ -31,7 +31,7 @@
   function modelEntries(context) {
     const remote = new Map((context.catalog?.models || []).map(item => [item.id, item]));
     const ids = new Set([...selectedModels(context.profile), ...editorState(context.profile).custom, ...remote.keys()]);
-    return [...ids].map(id => ({id, name: nameFor(context.profile, id, remote.get(id)?.name || id)}));
+    return [...ids].map(id => ({id, name: nameFor(context.profile, id, remote.get(id)?.name || id), remote: remote.has(id)}));
   }
 
   /** 更新列表外的数量与默认值，让搜索隐藏默认行时也能确认当前配置。 */
@@ -50,7 +50,7 @@
     root.querySelector('#clear-model-search').hidden = !state.query;
   }
 
-  /** 就地更新一行的勾选和默认状态；连续勾选时不重排列表、不改变滚动位置。 */
+  /** 就地更新勾选、默认及移除入口；未选中的远端候选保留在服务目录中 */
   function updateRow(row, profile, chosen) {
     const isDefault = row.dataset.modelId === profile.model;
     row.classList.toggle('is-selected', chosen.has(row.dataset.modelId));
@@ -59,6 +59,7 @@
     check.disabled = isDefault;
     check.title = isDefault ? '默认模型始终保留在挟持列表中' : '在 Codex 中显示此模型';
     row.querySelector('[data-rename-model]').hidden = !chosen.has(row.dataset.modelId);
+    row.querySelector('[data-remove-model]').hidden = !chosen.has(row.dataset.modelId) && row.dataset.remoteModel === 'true';
     const button = row.querySelector('[data-set-default]');
     button.textContent = isDefault ? '默认模型' : '设为默认';
     button.classList.toggle('is-default', isDefault);
@@ -66,10 +67,11 @@
     button.setAttribute('aria-label', isDefault ? `${row.dataset.modelId}，默认模型` : `将 ${row.dataset.modelId} 设为默认模型`);
   }
 
-  /** 生成一行直接勾选的模型，显示名称与真实 ID 不同时分别展示。 */
+  /** 生成可勾选、编辑、移除和设默认的模型行，显示名称与真实 ID 不同时分别展示 */
   function modelRow(item, profile, chosen) {
     const row = element('div', 'model-catalog-row');
     row.dataset.modelId = item.id;
+    row.dataset.remoteModel = String(item.remote);
     const label = element('label', 'model-catalog-choice');
     const check = element('input');
     check.type = 'checkbox';
@@ -87,6 +89,13 @@
     edit.setAttribute('aria-label', `编辑模型 ${item.id}`);
     edit.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15Z"/></svg>';
     row.append(edit);
+    const remove = element('button', 'icon-button model-remove-button');
+    remove.type = 'button';
+    remove.dataset.removeModel = '';
+    remove.title = '从当前连接移除模型';
+    remove.setAttribute('aria-label', `移除模型 ${item.id}`);
+    remove.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+    row.append(remove);
     const button = element('button', 'model-default-button');
     button.type = 'button';
     button.dataset.setDefault = '';
@@ -166,6 +175,64 @@
     context.profile.relayModels = extra;
     window.notices.clear('model-picker');
     selectionChanged(root, context);
+  }
+
+  /** 从草稿中移除模型及显示名称，默认项由剩余已选项接替；远端目录仍作为只读候选保留 */
+  function removeModel(root, context, id) {
+    if (context.isBusy() || !modelEntries(context).some(item => item.id === id)) return false;
+    const {profile} = context;
+    const remaining = selectedModels(profile).filter(model => model !== id);
+    if (profile.model === id) profile.model = remaining[0] || '';
+    profile.relayModels = remaining.filter(model => model !== profile.model);
+    const names = Object.assign(Object.create(null), profile.modelNames);
+    delete names[id];
+    profile.modelNames = names;
+    editorState(profile).custom.delete(id);
+    const list = root.querySelector('#model-catalog-list');
+    const scroll = list.scrollTop;
+    context.onChange();
+    renderList(root, context);
+    list.scrollTop = scroll;
+    window.notices.show('model-picker', profile.model ? '模型已从当前连接移除，保存配置后生效' : '模型已移除，请先选择或添加默认模型，再保存配置', profile.model ? 'success' : 'warning');
+    return true;
+  }
+
+  /** 显示移除影响，明确默认模型的接替项或空草稿限制；确认前不改动连接配置 */
+  function openModelRemoval(root, context, id) {
+    if (context.isBusy()) return;
+    const entry = modelEntries(context).find(item => item.id === id);
+    if (!entry || (entry.remote && !selectedModels(context.profile).includes(id))) return;
+    const dialog = root.querySelector('#remove-picker-model-dialog');
+    const rows = [...root.querySelectorAll('.model-catalog-row')];
+    const index = rows.findIndex(row => row.dataset.modelId === id);
+    dialog.dataset.modelId = id;
+    dialog.dataset.neighborId = (rows[index + 1] || rows[index - 1])?.dataset.modelId || '';
+    let description = `从当前连接移除“${entry.name}”${entry.name === id ? '' : `（${id}）`}？`;
+    if (context.profile.model === id) {
+      const replacement = selectedModels(context.profile).find(model => model !== id);
+      description += replacement ? `默认模型将切换为“${nameFor(context.profile, replacement)}”，保存配置后生效` : '移除后需先选择或添加新的默认模型，才能保存配置';
+    } else description += '保存配置后生效';
+    if (entry.remote) description += '；服务目录中仍会保留此模型，可重新勾选';
+    root.querySelector('#remove-picker-model-description').textContent = description;
+    dialog.returnValue = '';
+    dialog.showModal();
+    root.querySelector('#cancel-remove-picker-model').focus();
+  }
+
+  /** 绑定移除确认与取消，关闭后将键盘焦点还给原行或相邻行，空列表返回手动添加入口 */
+  function bindRemovalDialog(root, context) {
+    const dialog = root.querySelector('#remove-picker-model-dialog');
+    root.querySelector('#cancel-remove-picker-model').onclick = () => dialog.close();
+    root.querySelector('#remove-picker-model-form').onsubmit = event => {
+      event.preventDefault();
+      if (removeModel(root, context, dialog.dataset.modelId)) dialog.close('removed');
+    };
+    dialog.onclose = () => {
+      const id = dialog.returnValue === 'removed' ? dialog.dataset.neighborId : dialog.dataset.modelId;
+      const rows = [...root.querySelectorAll('.model-catalog-row')];
+      const row = rows.find(item => item.dataset.modelId === id) || rows[0];
+      (row?.querySelector('[data-remove-model]:not([hidden])') || row?.querySelector('input:not(:disabled), [data-set-default]') || root.querySelector('#add-manual-model')).focus({preventScroll: true});
+    };
   }
 
   /** 校验单个手动 ID 并加入草稿，首个模型同时设为默认；错误留在弹窗内便于修正。 */
@@ -301,12 +368,13 @@
     modelID.select();
   }
 
-  /** 方向键在相同行为的相邻模型间移动；空格勾选和 Enter 设置默认沿用原生控件操作。 */
+  /** 方向键在同类的勾选、编辑、移除或默认按钮之间移动，跳过隐藏与禁用控件 */
   function navigateRows(event, list) {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     const row = event.target.closest('.model-catalog-row');
     if (!row) return;
-    const selector = event.target.matches('input') ? 'input:not(:disabled)' : '[data-set-default]';
+    const selector = ['input:not(:disabled)', '[data-rename-model]:not([hidden])', '[data-remove-model]:not([hidden])', '[data-set-default]'].find(value => event.target.matches(value));
+    if (!selector) return;
     const controls = [...list.querySelectorAll(selector)];
     const index = controls.indexOf(event.target);
     if (index < 0) return;
@@ -327,6 +395,7 @@
       </div>
       <div class="model-catalog" role="group" aria-label="模型列表"><div class="model-catalog-head"><span>在 Codex 中显示</span><span id="model-result-count" role="status" aria-live="polite"></span></div><div id="model-catalog-list" class="model-catalog-list"></div></div>
       <div class="model-catalog-footer"><span id="model-selection-count" role="status" aria-live="polite"></span><span id="model-catalog-hint"></span></div>
+      <dialog id="remove-picker-model-dialog" aria-labelledby="remove-picker-model-title" aria-describedby="remove-picker-model-description"><form id="remove-picker-model-form"><h2 id="remove-picker-model-title">移除模型？</h2><p id="remove-picker-model-description"></p><div class="dialog-actions"><button id="cancel-remove-picker-model" class="secondary" type="button" autofocus>取消</button><button class="primary danger" type="submit">确认移除</button></div></form></dialog>
       <dialog id="manual-model-dialog" aria-labelledby="manual-model-title" aria-describedby="manual-model-description"><form id="manual-model-form" novalidate><h2 id="manual-model-title">手动添加模型</h2><p id="manual-model-description"></p><label for="manual-model-id">模型 ID</label><input id="manual-model-id" autocomplete="off" placeholder="输入服务提供的完整模型 ID" aria-describedby="manual-model-error"><div id="manual-model-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="cancel-manual-model" class="secondary" type="button">取消</button><button class="primary" type="submit">添加模型</button></div></form></dialog>
       <dialog id="rename-model-dialog" aria-labelledby="rename-model-title" aria-describedby="rename-model-description"><form id="rename-model-form" novalidate><h2 id="rename-model-title">编辑模型</h2><p id="rename-model-description">服务返回的模型不正确时，在这里修正实际调用的模型 ID</p><label for="edit-model-id">上游模型 ID</label><input id="edit-model-id" autocomplete="off" aria-describedby="model-id-help model-name-error"><p id="model-id-help" class="hint model-edit-help">实际发送给上游的 model 值，请填写正确的完整 ID</p><label for="model-display-name">显示名称（可选）</label><input id="model-display-name" autocomplete="off" aria-describedby="model-display-help model-name-error"><p id="model-display-help" class="hint model-edit-help">仅用于 App 与 Codex 列表展示，留空使用模型默认名称</p><div id="model-name-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="reset-model-name" type="button" class="text-button">恢复默认名称</button><button id="cancel-model-name" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>`;
     const state = editorState(context.profile);
@@ -353,9 +422,12 @@
       if (button) setDefault(root, context, button.closest('.model-catalog-row').dataset.modelId);
       const edit = event.target.closest('[data-rename-model]');
       if (edit) openModelEditor(root, context, edit.closest('.model-catalog-row').dataset.modelId);
+      const remove = event.target.closest('[data-remove-model]');
+      if (remove) openModelRemoval(root, context, remove.closest('.model-catalog-row').dataset.modelId);
     };
     bindManualDialog(root, context);
     bindModelDialog(root, context);
+    bindRemovalDialog(root, context);
     renderList(root, context);
     const catalog = context.catalog;
     root.querySelector('#model-catalog-hint').textContent = catalog ? `勾选加入挟持列表 · 默认模型始终保留${catalog.truncated ? ' · 服务目录仅显示前 1000 项' : ''}` : '可刷新服务目录；已配置的模型始终保留。';

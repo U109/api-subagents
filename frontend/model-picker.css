@@ -32,8 +32,10 @@
 .model-catalog-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .model-catalog-name { font: 14px var(--body); overflow-wrap: anywhere; }
 .model-catalog-id { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
-.model-rename-button { width: 28px; flex-shrink: 0; }
-.model-rename-button svg { width: 14px; height: 14px; }
+.model-rename-button, .model-remove-button { width: 28px; flex-shrink: 0; }
+.model-rename-button svg, .model-remove-button svg { width: 14px; height: 14px; }
+.model-remove-button:hover { color: var(--danger); background: #fff0ee; }
+#remove-picker-model-description { overflow-wrap: anywhere; }
 dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7; }
 #reset-model-name { margin-right: auto; font-size: 13px; }
 .model-default-button { flex-shrink: 0; min-width: 77px; padding: 6px 10px; border: 1px solid transparent; border-radius: 5px; color: var(--secondary); font-size: 13px; }
