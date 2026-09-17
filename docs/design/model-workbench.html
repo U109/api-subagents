@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>API Subagents · 模型工作台设计稿</title>
+  <link rel="stylesheet" href="model-workbench.css">
+  <script src="model-workbench.js" defer></script>
+</head>
+<body>
+  <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-5-5 5 5-5 5"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M8 3v5m8-5v5M6 8h12v3a6 6 0 0 1-12 0V8Zm6 9v4"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 7 3-3a5 5 0 0 1 7 7l-3 3m-3 3-3 3a5 5 0 0 1-7-7l3-3m1 6 8-8"/></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="2"/><rect x="15" y="15" width="6" height="6" rx="2"/><path d="M6 9v6a3 3 0 0 0 3 3h6M15 6h6m-3-3 3 3-3 3"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 0 1 4.8 1c0 1.5-2.4 1.6-2.4 3m0 3h.01"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M15 8V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h2"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h4m4 0h8M4 12h9m4 0h3M4 18h2m4 0h10M8 3v6m5 0v6M6 15v6"/></symbol>
+      <symbol id="i-model" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    </defs>
+  </svg>
+  <div id="workbench" class="app">
+    <aside id="connection-sidebar" class="sidebar" aria-label="连接与工具">
+      <div class="brand"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-route"/></svg></span><span class="brand-copy"><strong>API Subagents</strong><small>Codex 模型管理</small></span></div>
+      <div class="sidebar-body">
+        <div class="list-heading"><span class="nav-label">模型连接</span><span id="connection-count" class="count">3</span></div>
+        <nav id="connections" aria-label="模型连接"></nav>
+        <button id="add-connection" class="add-connection" title="添加连接"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="nav-label">添加连接</span></button>
+        <div class="list-heading tools-heading"><span class="nav-label">工具</span></div>
+        <button id="plugin-button" class="nav-tool" title="插件管理"><svg aria-hidden="true"><use href="#i-plug"/></svg><span class="nav-label">插件管理</span><span class="nav-status">已安装<span class="tiny-dot"></span></span></button>
+        <button id="help-button" class="nav-tool" title="使用帮助"><svg aria-hidden="true"><use href="#i-help"/></svg><span class="nav-label">使用帮助</span></button>
+      </div>
+      <div class="sidebar-foot">
+        <div class="sidebar-mode"><span id="sidebar-dot" class="status-dot"></span><span id="sidebar-mode">Codex 使用自带模型</span></div>
+        <div class="sidebar-separator"></div>
+        <div class="local-foot"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>连接与密钥仅保存在本机</span></div>
+        <div class="sidebar-version"><span>v0.3.1</span><span>本机运行</span></div>
+      </div>
+    </aside>
+    <button id="sidebar-backdrop" class="sidebar-backdrop" aria-label="关闭侧栏" hidden></button>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-controls="connection-sidebar" aria-expanded="true" aria-label="收起侧栏" title="收起侧栏"><svg class="toggle-chevron" aria-hidden="true"><use href="#i-chevron"/></svg><svg class="toggle-menu" aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <main>
+      <div class="top-actions" aria-label="应用工具栏"><button id="update-button" class="toolbar-button" aria-label="检查更新"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>检查更新</span></button><span class="tool-separator"></span><button id="design-info-button" class="toolbar-icon" aria-label="设计稿说明" title="设计稿说明"><svg aria-hidden="true"><use href="#i-help"/></svg></button></div>
+      <div class="workspace">
+        <header class="page-header"><h1>模型配置</h1><div class="page-meta"><span><b id="summary-count">3</b> 个本机连接</span><span class="meta-divider">·</span><span id="save-status" class="save-status"><svg aria-hidden="true"><use href="#i-check"/></svg>已保存</span></div></header>
+        <div class="connection-toolbar">
+          <div class="title-group"><div id="profile-avatar" class="profile-avatar" aria-hidden="true">D</div><div><strong id="profile-title">daily-coder</strong><p id="profile-subtitle">DeepSeek · 编码与日常任务</p></div></div>
+          <section id="route-bar" class="route-bar" aria-label="挟持模式">
+            <div class="route-label"><svg aria-hidden="true"><use href="#i-route"/></svg><div><strong>挟持模式</strong><p id="route-description">开启后，让此连接承担 Codex 主对话</p></div></div>
+            <div class="route-path"><span>Codex</span><svg aria-hidden="true"><use href="#i-arrow"/></svg><span id="route-target" class="route-target">自带模型</span></div>
+            <div class="route-control"><span id="mode-label">未开启</span><button id="mode-switch" class="switch" role="switch" aria-checked="false" aria-label="挟持模式"><span></span></button></div>
+          </section>
+        </div>
+        <div class="tabs" role="tablist" aria-label="配置分类">
+          <button role="tab" aria-selected="true" aria-controls="panel-connection" id="tab-connection" data-tab="connection"><svg aria-hidden="true"><use href="#i-link"/></svg>连接信息</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-model" id="tab-model" data-tab="model" tabindex="-1"><svg aria-hidden="true"><use href="#i-model"/></svg>模型选择</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-purpose" id="tab-purpose" data-tab="purpose" tabindex="-1"><svg aria-hidden="true"><use href="#i-route"/></svg>任务分工</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-advanced" id="tab-advanced" data-tab="advanced" tabindex="-1"><svg aria-hidden="true"><use href="#i-sliders"/></svg>高级设置</button>
+        </div>
+        <section id="panel-connection" class="tab-panel" role="tabpanel" aria-labelledby="tab-connection">
+          <div class="form-intro"><svg aria-hidden="true"><use href="#i-link"/></svg><div><h2>连接信息</h2><p>设置接口与凭据，支持 OpenAI、Claude、Gemini 与 CPA。</p></div></div>
+          <div class="field-grid">
+            <div class="field"><label for="connection-name">连接名称</label><input id="connection-name" value="daily-coder" spellcheck="false" autocomplete="off"><p class="field-hint">用于 Codex 调用，可在这里重命名。</p></div>
+            <div class="field"><label for="protocol">接口类型</label><div class="select-wrap"><select id="protocol"><option value="compatible">OpenAI 兼容 / CPA</option><option value="responses">OpenAI Responses</option><option value="anthropic">Claude 原生</option><option value="gemini">Gemini 原生</option></select><svg><use href="#i-down"/></svg></div></div>
+            <div class="field full"><label for="endpoint">API 地址</label><div class="input-wrap"><svg><use href="#i-link"/></svg><input id="endpoint" value="https://api.example.com/v1" spellcheck="false" autocomplete="off"><span class="input-tag">HTTPS</span></div><p class="field-hint">使用服务商提供的 API 根地址。</p></div>
+            <div class="field full"><div class="field-label"><label for="api-key">API Key</label><span class="key-saved"><svg><use href="#i-lock"/></svg>已保存</span></div><div class="input-wrap key-input"><input id="api-key" type="password" value="example-key-not-real" autocomplete="off" spellcheck="false"><button id="show-key" class="icon-button" aria-label="显示示例 Key"><svg><use href="#i-eye"/></svg></button></div><div class="hint-row"><p class="field-hint">留空将保留已保存的 Key。</p><button id="env-link" class="text-button">使用环境变量<svg><use href="#i-arrow"/></svg></button></div></div>
+          </div>
+        </section>
+        <section id="panel-model" class="tab-panel" role="tabpanel" aria-labelledby="tab-model" hidden>
+          <div class="form-intro"><svg aria-hidden="true"><use href="#i-model"/></svg><div><h2>模型选择</h2><p>选择默认模型与思考深度，每个连接单独保存。</p></div></div>
+          <div class="field model-field"><div class="field-label"><label for="model-id">默认模型</label><button id="manual-model" class="text-button">手动输入</button></div><div class="model-row"><div class="select-wrap"><select id="model-id"><option>deepseek-v4-pro</option><option>deepseek-v4-flash</option></select><svg><use href="#i-down"/></svg></div><input id="model-manual" aria-label="手动输入模型 ID" hidden><button id="refresh-models" class="secondary"><svg><use href="#i-refresh"/></svg>刷新列表</button></div><p class="field-hint">当前连接的可用模型；不支持列表时可手动输入。</p></div>
+          <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">更快响应<span class="small-rule"></span>更深入思考</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><div class="effort-description"><svg><use href="#i-spark"/></svg><p id="effort-description">适合日常修改与简单排错，优先速度和较低用量。</p></div><p class="field-hint">具体档位需模型支持。在 Codex 中手动选择的等级优先。</p></div>
+          <div class="default-note"><svg><use href="#i-refresh"/></svg><span>保存后，重启 Codex 可刷新模型列表与默认思考等级。</span></div>
+        </section>
+        <section id="panel-purpose" class="tab-panel" role="tabpanel" aria-labelledby="tab-purpose" hidden>
+          <div class="form-intro"><svg aria-hidden="true"><use href="#i-route"/></svg><div><h2>任务分工</h2><p>告诉 Codex 这个模型擅长什么，用于插件任务委派。</p></div></div>
+          <div class="field"><label for="description">擅长与用途</label><textarea id="description" rows="6" maxlength="300">处理日常编码、小范围问题修复和批量补充注释。任务边界明确时优先使用此连接。</textarea><p class="field-hint">Codex 会参考这段描述，选择合适的连接承担任务。</p></div>
+          <div class="purpose-tip"><svg><use href="#i-spark"/></svg><div><strong>描述具体任务，会更有用</strong><p>例如：审查 Go 并发逻辑，重点检查取消、超时与资源释放。</p></div></div>
+        </section>
+        <section id="panel-advanced" class="tab-panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
+          <div class="form-intro"><svg aria-hidden="true"><use href="#i-sliders"/></svg><div><h2>高级设置</h2><p>调整响应、并发与等待时间，通常保持默认即可。</p></div></div>
+          <div class="field-grid advanced-grid">
+            <div class="field"><label for="max-tokens">最大输出长度</label><input id="max-tokens" type="number" value="4096" min="128" max="32000"></div>
+            <div class="field"><label for="concurrency">任务并发数<span class="label-note">全局</span></label><input id="concurrency" type="number" value="3" min="1" max="8"></div>
+            <div class="field full"><label for="stream">响应方式</label><div class="select-wrap"><select id="stream"><option>流式响应（推荐）</option><option>普通响应</option></select><svg><use href="#i-down"/></svg></div></div>
+            <div class="field"><label for="first-timeout">首个数据等待时间<span class="label-note">秒</span></label><input id="first-timeout" type="number" value="180" min="10" max="600"></div>
+            <div class="field"><label for="idle-timeout">响应中断等待时间<span class="label-note">秒</span></label><input id="idle-timeout" type="number" value="120" min="10" max="600"></div>
+            <div class="field"><label for="task-timeout">任务总时长上限<span class="label-note">分钟</span></label><input id="task-timeout" type="number" value="15" min="1" max="60"></div>
+            <div class="field"><label for="key-env">Key 环境变量<span class="label-note">可选</span></label><input id="key-env" placeholder="例如 MODEL_API_KEY" spellcheck="false"></div>
+          </div>
+        </section>
+        <p class="design-caption">交互设计稿 · 所有连接均为示例</p>
+      </div>
+      <footer class="action-bar"><div class="save-guidance"><svg><use href="#i-lock"/></svg><span id="save-guidance">修改将在保存后生效</span></div><div class="footer-actions"><button id="test-connection" class="secondary"><svg><use href="#i-plug"/></svg>测试连接</button><button id="save-button" class="primary">保存配置<kbd>Ctrl S</kbd></button></div></footer>
+    </main>
+  </div>
+  <div id="model-menu" class="model-menu" popover="manual" role="menu" aria-label="连接操作"><button id="copy-connection" role="menuitem"><svg><use href="#i-copy"/></svg>复制</button><button id="delete-connection" role="menuitem" class="danger"><svg><use href="#i-trash"/></svg>删除</button></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="help-dialog"><button class="dialog-close icon-button" aria-label="关闭帮助" onclick="this.closest('dialog').close()">×</button><span class="dialog-symbol"><svg><use href="#i-route"/></svg></span><h2>连接模型的两种方式</h2><p><strong>挟持模式</strong><br>外部模型直接承担 Codex 主对话。开启后重启 Codex，使用期间保持 App 运行。</p><p><strong>插件委派</strong><br>Codex 负责主任务，将明确的重复工作交给配置好的模型。</p><div class="dialog-caption">本页面是交互设计稿，所有连接均为示例，不会访问模型接口或改动你的配置。</div></dialog>
+</body>
+</html>

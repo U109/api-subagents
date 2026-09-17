@@ -10,11 +10,41 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/U109/api-subagents/frontend"
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
 	"github.com/U109/api-subagents/internal/testutil"
 )
+
+// TestSetupFrontendModules 验证浏览器入口能提供新增界面模块，并继续拒绝访问白名单外的文件。
+func TestSetupFrontendModules(t *testing.T) {
+	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")
+	setup, err := StartSetup(NewConfigService(store), frontend.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer setup.Server.Close()
+	for _, name := range []string{"shell-ui.js", "select-ui.js"} {
+		response, err := http.Get(setup.Origin + "/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil || response.StatusCode != http.StatusOK || len(body) == 0 || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/javascript") {
+			t.Fatalf("frontend module unavailable: %s, status=%d", name, response.StatusCode)
+		}
+	}
+	response, err := http.Get(setup.Origin + "/models.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("private path exposed as a static asset: %d", response.StatusCode)
+	}
+}
 
 // TestConfigValidation 验证旧配置默认值、非法地址、参数类型和密钥隐藏边界。
 func TestConfigValidation(t *testing.T) {

@@ -1,103 +1,85 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>API Subagents · 模型配置</title>
-    <link rel="stylesheet" href="/config.css" />
-    <link rel="stylesheet" href="/desktop.css" />
-    <script src="/bridge.js" defer></script>
-    <script src="/config-ui.js" defer></script>
-    <script src="/desktop-ui.js" defer></script>
-  </head>
-  <body>
-    <aside class="sidebar">
-      <div class="brand">api subagents</div>
-      <div class="aside-heading">已添加的连接</div>
-      <nav id="models" class="models" aria-label="模型连接"></nav>
-      <div class="sidebar-bottom">
-        <section id="relay-panel" class="relay-panel" aria-label="挟持模式" hidden>
-          <div class="relay-heading"><strong>挟持模式</strong><span id="relay-label" class="relay-label">未开启</span></div>
-          <p id="relay-state" role="status">让 Codex 直接使用你的模型。</p>
-          <div class="relay-actions">
-            <button id="enable-relay" class="secondary" disabled>用此连接开启</button>
-            <button id="disable-relay" class="text-button" hidden>关闭</button>
-          </div>
-          <p class="relay-note">开启后重启 Codex，使用期间保持 App 运行。</p>
-        </section>
-        <div class="local-note"><span class="local-dot"></span>配置保存在本机</div>
-      </div>
-    </aside>
-    <main>
-      <div class="content">
-        <section id="desktop-panel" class="desktop-panel" aria-label="桌面应用与插件" hidden>
-          <div class="desktop-intro">
-            <strong>连接你的模型，交给 Codex 使用</strong><span id="desktop-version"></span>
-          </div>
-          <div class="desktop-controls">
-            <section class="desktop-control">
-              <h2>Codex 插件</h2>
-              <p id="plugin-state" role="status">正在检查安装状态…</p>
-              <button id="install-plugin" class="primary" disabled>安装到 Codex</button>
-            </section>
-            <section class="desktop-control">
-              <h2>应用更新</h2>
-              <p id="update-state" role="status">检查是否有新版本</p>
-              <div class="desktop-links">
-                <button id="check-update" class="secondary" disabled>检查更新</button
-                ><button id="open-releases" class="text-button" hidden>打开版本下载页</button>
-              </div>
-              <progress
-                id="update-progress"
-                max="100"
-                value="0"
-                aria-label="更新下载进度"
-                hidden
-              ></progress>
-            </section>
-          </div>
-          <p id="desktop-error" role="alert"></p>
-        </section>
-        <header class="page-header">
-          <div>
-            <h1>模型配置</h1>
-            <p>作为 Codex 主模型使用，或通过插件委派重复工作。</p>
-          </div>
-          <button id="add" class="primary"><span aria-hidden="true">＋</span> 添加模型</button>
-        </header>
-        <div class="page-meta"><span id="model-count">0 个连接</span><span>支持多服务商混用</span></div>
-        <section id="editor" aria-label="连接配置"></section>
-        <div id="status" class="status" role="status" aria-live="polite"></div>
-        <footer>
-          <p>测试连接会发送一条简短请求，可能产生少量 API 费用。</p>
-          <p class="storage-path">配置位置 <code id="path">正在读取…</code></p>
-        </footer>
-      </div>
-    </main>
-    <div id="model-menu" class="model-menu" popover="manual" role="menu" aria-label="连接操作">
-      <button id="copy-model" role="menuitem" tabindex="-1">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <rect x="7" y="7" width="10" height="10" rx="2" />
-          <path d="M13 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-        </svg>
-        复制
-      </button>
-      <button id="delete-model" class="menu-danger" role="menuitem" tabindex="-1">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M3 5h14M8 3h4M5 5l1 12h8l1-12M8 8v6m4-6v6" />
-        </svg>
-        删除
-      </button>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>API Subagents · 模型配置</title>
+  <link rel="stylesheet" href="/config.css"><link rel="stylesheet" href="/desktop.css">
+  <script src="/bridge.js" defer></script><script src="/shell-ui.js" defer></script>
+  <script src="/select-ui.js" defer></script><script src="/config-ui.js" defer></script><script src="/desktop-ui.js" defer></script>
+</head>
+<body>
+  <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-5-5 5 5-5 5"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M8 3v5m8-5v5M6 8h12v3a6 6 0 0 1-12 0V8Zm6 9v4"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 7 3-3a5 5 0 0 1 7 7l-3 3m-3 3-3 3a5 5 0 0 1-7-7l3-3m1 6 8-8"/></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="2"/><rect x="15" y="15" width="6" height="6" rx="2"/><path d="M6 9v6a3 3 0 0 0 3 3h6M15 6h6m-3-3 3 3-3 3"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 0 1 4.8 1c0 1.5-2.4 1.6-2.4 3m0 3h.01"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M15 8V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h2"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h4m4 0h8M4 12h9m4 0h3M4 18h2m4 0h10M8 3v6m5 0v6M6 15v6"/></symbol>
+      <symbol id="i-model" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    </defs>
+  </svg>
+<div id="workbench" class="app">
+  <aside id="connection-sidebar" class="sidebar" aria-label="连接与工具">
+    <div class="brand"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-route"/></svg></span><span class="brand-copy"><strong>API Subagents</strong><small>Codex 模型管理</small></span></div>
+    <div class="sidebar-body">
+      <div class="list-heading"><span class="nav-label">模型连接</span><span id="sidebar-count" class="count">0</span></div>
+      <nav id="models" aria-label="模型连接"></nav>
+      <button id="add" class="add-connection" title="添加连接"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="nav-label">添加连接</span></button>
+      <div class="list-heading tools-heading"><span class="nav-label">工具</span></div>
+      <button id="plugin-entry" class="nav-tool desktop-only" data-dialog="plugin-dialog" data-shell hidden title="插件管理"><svg aria-hidden="true"><use href="#i-plug"/></svg><span class="nav-label">插件管理</span><span class="nav-status"><span id="plugin-label">待安装</span><span id="plugin-dot" class="tiny-dot" hidden></span></span></button>
+      <button class="nav-tool" data-dialog="help-dialog" data-shell title="使用帮助"><svg aria-hidden="true"><use href="#i-help"/></svg><span class="nav-label">使用帮助</span></button>
     </div>
-    <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
-      <form method="dialog">
-        <h2 id="remove-title">删除模型配置？</h2>
-        <p id="remove-description"></p>
-        <div class="dialog-actions">
-          <button class="secondary" value="cancel" autofocus>取消</button>
-          <button class="primary danger" value="remove">确认删除</button>
-        </div>
-      </form>
-    </dialog>
-  </body>
+    <div class="sidebar-foot">
+      <div class="sidebar-mode" id="sidebar-relay" title="Codex 使用自带模型"><span id="sidebar-dot" class="status-dot"></span><span id="sidebar-mode">Codex 使用自带模型</span></div>
+      <div class="sidebar-separator"></div>
+      <div class="local-foot"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>连接与密钥仅保存在本机</span></div>
+      <div class="sidebar-version"><span id="desktop-version">浏览器配置</span><span>本机运行</span></div>
+    </div>
+  </aside>
+  <button id="sidebar-backdrop" class="sidebar-backdrop" data-shell aria-label="关闭侧栏" hidden></button>
+  <button id="sidebar-toggle" class="sidebar-toggle" data-shell aria-controls="connection-sidebar" aria-expanded="true" aria-label="收起侧栏" title="收起侧栏"><svg class="toggle-chevron" aria-hidden="true"><use href="#i-chevron"/></svg><svg class="toggle-menu" aria-hidden="true"><use href="#i-menu"/></svg></button>
+  <main>
+    <div class="top-actions" aria-label="应用工具栏">
+      <button id="update-entry" class="toolbar-button desktop-only" data-shell hidden><svg aria-hidden="true"><use href="#i-refresh"/></svg><span id="update-label">检查更新</span><span id="update-dot" class="tiny-dot" hidden></span></button>
+      <span class="tool-separator desktop-only" hidden></span>
+      <button class="toolbar-icon" data-dialog="help-dialog" data-shell aria-label="使用帮助" title="使用帮助"><svg aria-hidden="true"><use href="#i-help"/></svg></button>
+    </div>
+    <div class="workspace">
+      <header class="page-header"><h1>模型配置</h1><div class="page-meta"><span id="model-count">0 个本机连接</span><span class="meta-divider">·</span><span id="save-state" class="save-status">正在读取…</span></div></header>
+      <div id="connection-toolbar" class="connection-toolbar">
+        <div id="connection-heading" class="title-group"><div id="profile-avatar" class="profile-avatar" aria-hidden="true">＋</div><div><strong id="connection-title">选择模型连接</strong><p id="connection-subtitle">从侧栏添加或选择一个连接</p></div></div>
+        <section id="relay-panel" class="route-bar" aria-label="挟持模式" data-desktop-control hidden>
+          <div class="route-label"><svg aria-hidden="true"><use href="#i-route"/></svg><div><strong>挟持模式</strong><p id="relay-state" role="status">开启后重启 Codex，使用期间保持 App 运行。</p></div></div>
+          <div class="route-path"><span>Codex</span><svg aria-hidden="true"><use href="#i-arrow"/></svg><span id="relay-target" class="route-target">自带模型</span></div>
+          <div class="route-control"><button id="enable-relay" class="text-button" hidden>切换到此连接</button><span id="relay-label">未开启</span><button id="relay-switch" class="switch" role="switch" aria-checked="false" aria-label="挟持模式" disabled><span></span></button></div>
+        </section>
+      </div>
+      <section id="editor" aria-label="连接配置"></section>
+    </div>
+    <div class="feedback"><div id="status" class="status" role="status" aria-live="polite"></div><div id="desktop-error" class="status bad" role="alert"></div></div>
+    <footer id="config-actions" class="action-bar" hidden><div class="save-guidance"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>修改将在保存后生效 · 测试可能产生少量 API 费用</span></div><div class="footer-actions"><button id="probe" class="secondary"><svg aria-hidden="true"><use href="#i-plug"/></svg>测试连接</button><button id="save" class="primary">保存配置<kbd>Ctrl S</kbd></button></div></footer>
+  </main>
+</div>
+<div id="model-menu" class="model-menu" popover="manual" role="menu" aria-label="连接操作">
+  <button id="copy-model" role="menuitem" tabindex="-1"><svg aria-hidden="true"><use href="#i-copy"/></svg>复制</button>
+  <button id="delete-model" role="menuitem" class="menu-danger" tabindex="-1"><svg aria-hidden="true"><use href="#i-trash"/></svg>删除</button>
+</div>
+<dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description"><form method="dialog"><h2 id="remove-title">删除模型配置？</h2><p id="remove-description"></p><div class="dialog-actions"><button class="secondary" value="cancel" autofocus>取消</button><button class="primary danger" value="remove">确认删除</button></div></form></dialog>
+<dialog id="plugin-dialog" aria-labelledby="plugin-title" data-desktop-control><button class="dialog-close icon-button" data-close aria-label="关闭插件管理">×</button><span class="dialog-symbol"><svg aria-hidden="true"><use href="#i-plug"/></svg></span><h2 id="plugin-title">Codex 插件</h2><p id="plugin-state" role="status">正在检查安装状态…</p><p class="dialog-hint">安装后，在 Codex 新建对话，即可将任务委派给配置的模型。</p><p class="dialog-error" data-desktop-error role="alert"></p><div class="dialog-actions"><button id="install-plugin" class="primary" disabled>安装到 Codex</button></div></dialog>
+<dialog id="update-dialog" aria-labelledby="update-title" data-desktop-control><button class="dialog-close icon-button" data-close aria-label="关闭更新">×</button><span class="dialog-symbol"><svg aria-hidden="true"><use href="#i-refresh"/></svg></span><h2 id="update-title">应用更新</h2><p id="update-state" role="status">检查是否有新版本</p><progress id="update-progress" max="100" value="0" aria-label="更新下载进度" hidden></progress><p class="dialog-error" data-desktop-error role="alert"></p><div class="dialog-actions"><button id="open-releases" class="text-button" hidden>打开版本下载页</button><button id="check-update" class="primary" disabled>检查更新</button></div></dialog>
+<dialog id="help-dialog" aria-labelledby="help-title"><button class="dialog-close icon-button" data-close aria-label="关闭帮助">×</button><span class="dialog-symbol"><svg aria-hidden="true"><use href="#i-route"/></svg></span><h2 id="help-title">连接模型的两种方式</h2><p><strong>挟持模式</strong><br>保存连接后开启，让外部模型承担 Codex 主对话。开启后重启 Codex，使用期间保持 App 运行。</p><p><strong>插件委派</strong><br>在「插件管理」安装插件，由 Codex 将明确的重复工作交给已配置模型。</p><p>思考等级需模型支持；测试连接会发送一条简短请求，可能产生少量 API 费用。</p><div class="dialog-caption storage-path">配置位置<br><code id="path">正在读取…</code></div></dialog>
+</body>
 </html>

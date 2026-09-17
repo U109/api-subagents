@@ -34,6 +34,8 @@ const catalogs = new Map(),
   dirty = new Set();
 const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
 const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
+const tabIcons = {connection: 'link', model: 'model', purpose: 'route', advanced: 'sliders'};
+const reasoningHints = {'': '由模型服务决定，不额外指定思考参数。', none: '适用于支持关闭推理的模型，优先快速生成。', minimal: '用尽量少的推理处理简单、明确的任务。', low: '适合日常修改与简单排错，优先速度和较低用量。', medium: '在响应速度与分析深度之间取得平衡。', high: '适合复杂分析与代码审查，通常需要更多时间与用量。', xhigh: '更深入地分析复杂问题，仅支持此档位的模型可用。'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;
@@ -66,13 +68,14 @@ function sidebar() {
   closeMenu();
   const entries = Object.entries(config.models);
   byId('model-count').textContent = `${entries.length} 个连接`;
+  byId('sidebar-count').textContent = entries.length;
   byId('models').innerHTML = entries.length
     ? entries
         .map(
           ([name, p]) => `
-    <div class="model ${name === selected ? 'active' : ''}">
-      <button class="model-select" data-name="${esc(name)}" ${name === selected ? 'aria-current="true"' : ''}>
-        <span class="model-dot" aria-hidden="true"></span><span class="model-copy"><strong>${esc(name)}<span class="relay-badge" hidden>挟持中</span></strong><small>${esc(p.model || '尚未选择模型')}</small></span>
+    <div class="model connection ${name === selected ? 'active' : ''}">
+      <button class="model-select" data-name="${esc(name)}" title="${esc(name)}" aria-label="${esc(name)}" ${name === selected ? 'aria-current="true"' : ''}>
+        <span class="connection-avatar" aria-hidden="true">${esc((p.model || name).slice(0, 1).toUpperCase())}</span><span class="model-copy"><strong><span class="model-name">${esc(name)}</span><span class="relay-badge connected-marker" hidden title="挟持中" aria-label="挟持中"></span></strong><small>${esc(p.model || '尚未选择模型')}</small></span>
       </button>
       <button class="model-more" data-menu="${esc(name)}" aria-label="${esc(name)} 的更多操作" title="更多操作" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false"><span aria-hidden="true">⋯</span></button>
     </div>`,
@@ -85,6 +88,7 @@ function sidebar() {
         selected = button.dataset.name;
         status('');
         render();
+        window.uiShell.closeSidebar();
       }
     };
   });
@@ -131,6 +135,44 @@ function openMenu(button) {
 function markChanged() {
   dirty.add(selected);
   byId('save-state').textContent = '待保存';
+  byId('save-state').classList.add('dirty');
+  window.dispatchEvent(new Event('config:changed'));
+}
+
+/** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘。 */
+function connectionHeading() {
+  const p = config.models[selected];
+  byId('connection-toolbar').hidden = !p && !window.desktopApp;
+  byId('connection-heading').hidden = !p;
+  byId('config-actions').hidden = !p;
+  byId('save-state').textContent = p ? dirty.has(selected) ? '待保存' : p.savedName ? '已保存' : '新连接' : '尚未配置';
+  byId('save-state').classList.toggle('dirty', Boolean(p && (dirty.has(selected) || !p.savedName)));
+  if (!p) return;
+  byId('connection-title').textContent = selected;
+  byId('connection-title').title = selected;
+  byId('profile-avatar').textContent = (p.model || selected).slice(0, 1).toUpperCase();
+  byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${p.model || '尚未选择模型'}`;
+}
+
+/** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果。 */
+function renderReasoning() {
+  const effort = config.models[selected].reasoningEffort || '';
+  byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value, label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');
+  byId('reasoning-description').textContent = reasoningHints[effort] || reasoningHints[''];
+}
+
+/** 提交已知思考等级并同步草稿保护；键盘操作后将焦点恢复到重新绘制的选项。 */
+function chooseReasoning(value, focus = false) {
+  if (busy || !Object.hasOwn(reasoningLevels, value)) return;
+  config.models[selected].reasoningEffort = value;
+  markChanged();
+  renderReasoning();
+  if (focus) byId('reasoning-options').querySelector('[aria-checked="true"]').focus();
+}
+
+/** 按当前 Tab 生成一致的标题、图标和说明，标题文本均来自固定界面文案。 */
+function sectionTitle(tab, description) {
+  return `<div class="form-intro"><svg aria-hidden="true"><use href="#i-${tabIcons[tab]}"/></svg><div><h2>${tabs[tab]}</h2><p>${description}</p></div></div>`;
 }
 
 /** 切换前校验名称，非法草稿保留在输入框中并获得焦点，避免悄悄丢失用户输入。 */
@@ -190,11 +232,13 @@ function rename(profile, input) {
   // 就地更新名称，保留失焦时正在点击的表单和侧栏节点。
   const button = byId('models').querySelector('[aria-current="true"]');
   button.dataset.name = name;
-  button.querySelector('strong').textContent = name;
+  button.querySelector('.model-name').textContent = name;
+  button.title = name;
+  button.setAttribute('aria-label', name);
   const moreButton = button.nextElementSibling;
   moreButton.dataset.menu = name;
   moreButton.setAttribute('aria-label', `${name} 的更多操作`);
-  byId('connection-title').textContent = name;
+  connectionHeading();
   return true;
 }
 /** 更新模型列表区域的状态提示，不重建下拉框或改变当前选择。 */
@@ -222,6 +266,7 @@ function modelOptions(query = '') {
       .join('');
   byId('model-select').value = p.model;
   byId('model-select').disabled = !catalog?.models.length && !p.model;
+  window.selectUI.refresh();
 }
 /** 绘制模型列表/手动输入两种模式，绑定只读拉取操作并维护连接级缓存。 */
 function renderPicker() {
@@ -229,17 +274,11 @@ function renderPicker() {
     isManual = manual.has(selected),
     catalog = catalogs.get(selected);
   byId('picker').innerHTML = `
-    <div class="model-toolbar"><div class="mode-switch" aria-label="模型选择方式">
-      <button id="mode-list" aria-pressed="${!isManual}">列表选择</button><button id="mode-manual" aria-pressed="${isManual}">手动输入</button>
-    </div><button id="pull-models" class="secondary pull"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 6a5.2 5.2 0 0 0-9-2L2 6m0-4v4h4M3 10a5.2 5.2 0 0 0 9 2l2-2m0 4v-4h-4" /></svg>拉取模型列表</button></div>
-    <div class="model-picker">${
-      isManual
-        ? field('model', '默认模型', p.model, '输入服务支持的模型 ID')
-        : `
-      ${catalog?.models.length ? '<input id="model-filter" class="search" aria-label="筛选模型" placeholder="搜索模型名称或 ID" autocomplete="off">' : ''}
-      <div class="field"><label for="model-select">默认模型</label><select id="model-select"></select></div>`
-    }
-    </div><div id="model-hint" class="model-hint" role="status" aria-live="polite"></div>`;
+    <div class="field-label"><label for="${isManual ? 'model' : 'model-select'}">默认模型</label><div class="model-mode">
+      <button id="mode-list" class="text-button" ${!isManual ? 'hidden' : ''}>列表选择</button><button id="mode-manual" class="text-button" ${isManual ? 'hidden' : ''}>手动输入</button>
+    </div></div><div class="model-row"><div class="model-input">${isManual ? `<input id="model" value="${esc(p.model)}" placeholder="输入服务支持的模型 ID" autocomplete="off">` : '<select id="model-select"></select>'}</div><button id="pull-models" class="secondary"><svg aria-hidden="true"><use href="#i-refresh"/></svg>刷新列表</button></div>
+    ${!isManual && catalog?.models.length ? '<input id="model-filter" class="search" aria-label="筛选模型" placeholder="搜索模型名称或 ID" autocomplete="off">' : ''}
+    <div id="model-hint" class="model-hint" role="status" aria-live="polite"></div>`;
   byId('mode-list').onclick = () => {
     manual.delete(selected);
     renderPicker();
@@ -253,6 +292,7 @@ function renderPicker() {
       p.model = event.target.value;
       markChanged();
       sidebar();
+      connectionHeading();
     };
   else {
     modelOptions();
@@ -260,6 +300,7 @@ function renderPicker() {
       p.model = event.target.value;
       markChanged();
       sidebar();
+      connectionHeading();
     };
     if (byId('model-filter')) byId('model-filter').oninput = (event) => modelOptions(event.target.value);
   }
@@ -290,12 +331,14 @@ function renderPicker() {
         pickerHint(error.message, 'error');
       }
     });
+  window.selectUI.enhance(byId('picker'));
 }
 
 /** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试。 */
 function render() {
   queueMicrotask(() => window.dispatchEvent(new Event('config:rendered')));
   sidebar();
+  connectionHeading();
   const editor = byId('editor'),
     p = config.models[selected];
   if (!p) {
@@ -305,17 +348,14 @@ function render() {
     return;
   }
   editor.innerHTML = `
-    <div class="editor-toolbar"><div class="editor-heading"><h2 id="connection-title">${esc(selected)}</h2><span id="save-state" class="badge">${dirty.has(selected) ? '待保存' : p.savedName ? '已保存' : '新连接'}</span></div>
-      <div class="actions"><button id="save" class="primary">保存配置</button><button id="probe" class="secondary">测试连接</button></div>
-    </div>
-    <div class="config-tabs" role="tablist" aria-label="配置分类">${Object.entries(tabs)
+    <div class="config-tabs tabs" role="tablist" aria-label="配置分类">${Object.entries(tabs)
       .map(
         ([id, label]) =>
-          `<button id="tab-${id}" role="tab" aria-selected="${id === activeTab}" aria-controls="panel-${id}" tabindex="${id === activeTab ? 0 : -1}" data-tab="${id}">${label}</button>`,
+          `<button id="tab-${id}" role="tab" aria-selected="${id === activeTab}" aria-controls="panel-${id}" tabindex="${id === activeTab ? 0 : -1}" data-tab="${id}"><svg aria-hidden="true"><use href="#i-${tabIcons[id]}"/></svg>${label}</button>`,
       )
       .join('')}</div>
-    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0"><div class="section-title"><h3>连接信息</h3><span>连接你已有的模型服务</span></div><div class="grid">
-      ${field('name', '调用名称', selected, '例如 reviewer', false, 'text', '可在这里重命名，保存后生效。使用小写字母、数字、_ 或 -，最多 48 字符。')}
+    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0">${sectionTitle('connection', '设置接口与凭据，支持 OpenAI、Claude、Gemini 与 CPA。')}<div class="grid">
+      ${field('name', '连接名称', selected, '例如 reviewer', false, 'text', '用于 Codex 调用，可在这里重命名。')}
       <div class="field"><label for="protocol">接口类型</label><select id="protocol">${Object.entries(
         types,
       )
@@ -325,15 +365,15 @@ function render() {
         )
         .join('')}</select></div>
       ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1。')}
-      ${field('apiKey', 'API Key', p.apiKey, p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key', true, 'password')}
+      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key。</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
     </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div class="section-title"><h3>模型选择</h3><span>选择模型与默认思考等级</span></div><div id="picker"></div>
-      <div class="field reasoning-field"><label for="reasoningEffort">思考等级</label><select id="reasoningEffort">${Object.entries(reasoningLevels).map(([value, label]) => `<option value="${value}" ${value === (p.reasoningEffort || '') ? 'selected' : ''}>${label}</option>`).join('')}</select><span class="hint">档位支持取决于模型；越高通常越慢、用量越多。Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div>
+    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0">${sectionTitle('model', '选择默认模型与思考深度，每个连接单独保存。')}<div id="picker" class="model-field"></div>
+      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">更快响应<span class="small-rule"></span>更深入思考</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p><span class="hint">具体档位需模型支持；Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div><div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存后，重启 Codex 可刷新模型列表与默认思考等级。</span></div>
     </section>
-    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0"><div class="section-title"><h3>任务分工</h3><span>帮助 Codex 选择合适的模型</span></div>
+    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">${sectionTitle('purpose', '告诉 Codex 这个模型擅长什么，用于插件任务委派。')}
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查。">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务。</span></div>
     </section>
-    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0"><div class="section-title"><h3>高级设置</h3><span>调整输出、并发和等待时间</span></div><div class="grid">
+    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0">${sectionTitle('advanced', '调整响应、并发与等待时间，通常保持默认即可。')}<div class="grid">
         ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number')}
         ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8。')}
         <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">流式接收可持续更新任务进度，服务仍有数据时继续等待。</span></div>
@@ -365,10 +405,21 @@ function render() {
     };
   });
   renderPicker();
-  byId('reasoningEffort').onchange = (event) => {
-    p.reasoningEffort = event.target.value;
-    markChanged();
+  renderReasoning();
+  byId('reasoning-options').onclick = event => { const button = event.target.closest('[data-effort]'); if (button) chooseReasoning(button.dataset.effort, true); };
+  byId('reasoning-options').onkeydown = event => {
+    const levels = Object.keys(reasoningLevels), current = levels.indexOf(p.reasoningEffort || '');
+    const next = {ArrowRight: (current + 1) % levels.length, ArrowLeft: (current + levels.length - 1) % levels.length, Home: 0, End: levels.length - 1}[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    chooseReasoning(levels[next], true);
   };
+  byId('toggle-key').onclick = () => {
+    const hidden = byId('apiKey').type === 'password';
+    byId('apiKey').type = hidden ? 'text' : 'password';
+    byId('toggle-key').setAttribute('aria-label', hidden ? '隐藏输入的 Key' : '显示输入的 Key');
+  };
+  byId('key-env-link').onclick = () => { if (!busy && commitName()) { activateTab('advanced'); byId('apiKeyEnv').focus(); } };
   byId('name').onchange = (event) => rename(p, event.target);
   const numeric = [
     'maxTokens',
@@ -380,6 +431,7 @@ function render() {
     byId(prop).oninput = (event) => {
       p[prop] = numeric.includes(prop) ? Number(event.target.value) : event.target.value;
       markChanged();
+      if (prop === 'apiKey') byId('toggle-key').disabled = !event.target.value;
       if (['baseUrl', 'apiKey', 'apiKeyEnv'].includes(prop)) {
         catalogs.delete(selected);
         renderPicker();
@@ -391,6 +443,11 @@ function render() {
     markChanged();
   };
   byId('protocol').onchange = (event) => {
+    if (!commitName()) {
+      byId('protocol').value = p.protocol;
+      window.selectUI.refresh();
+      return;
+    }
     p.protocol = event.target.value;
     p.baseUrl = urls[p.protocol];
     markChanged();
@@ -408,6 +465,7 @@ function render() {
       const result = await api('/api/probe', {config, name: selected});
       status('连接成功：' + result.reply);
     });
+  window.selectUI.enhance(editor);
 }
 /** 创建名称不重复的空白连接草稿；用户保存前不会影响已配置模型。 */
 function add() {
@@ -428,13 +486,16 @@ function add() {
   };
   render();
   status('');
+  window.uiShell.closeSidebar();
+  byId('name').focus();
 }
 /** 请求期间禁用控件，结束时恢复原状态，避免迟到响应覆盖期间发生的新编辑。 */
 function setBusy(value) {
   busy = value;
+  if (value) window.selectUI.close();
   document.querySelectorAll('button, input, select, textarea').forEach((control) => {
     // 桌面按钮由安装和更新状态独立管理，不能被配置请求结束时的旧快照覆盖。
-    if (control.closest('#desktop-panel')) return;
+    if (control.closest('[data-desktop-control]') || control.matches('[data-shell]')) return;
     // 保留本来就不可用的下拉框状态；请求结束不应把空列表误启用。
     if (value) {
       control.dataset.wasDisabled = String(control.disabled);
@@ -444,6 +505,7 @@ function setBusy(value) {
       delete control.dataset.wasDisabled;
     }
   });
+  window.dispatchEvent(new Event('config:changed'));
 }
 /** 统一校验名称、锁定控件和捕获错误；定点删除或复制可跳过其他连接的名称校验。 */
 async function action(fn, {checkName = true} = {}) {
@@ -486,6 +548,7 @@ async function copyModel(name) {
       render();
       status(`已复制并保存为“${selected}”，可在连接信息中重命名。其他连接的编辑仍保留在草稿中。`);
       byId('name').focus();
+      window.uiShell.closeSidebar();
     },
     {checkName: false},
   );
@@ -582,6 +645,7 @@ if (window.desktopApp) {
   document.addEventListener('input', () => queueMicrotask(syncDrafts));
   document.addEventListener('change', () => queueMicrotask(syncDrafts));
   window.addEventListener('config:rendered', syncDrafts);
+  window.addEventListener('config:changed', syncDrafts);
   window.addEventListener('desktop:before-update', (event) => {
     if (hasDrafts() || busy) {
       event.preventDefault();
@@ -603,5 +667,11 @@ void action(async () => {
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: byId('reasoningEffort')?.options.length || 0, reasoningValue: byId('reasoningEffort')?.value ?? null, expanders: document.querySelectorAll('details').length});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length});
+});
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    if (selected && !document.querySelector('dialog[open]')) void save();
+  }
 });
