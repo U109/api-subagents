@@ -25,14 +25,18 @@ func TestSetupFrontendModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer setup.Server.Close()
-	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "relay-models-ui.js"} {
+	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"} {
 		response, err := http.Get(setup.Origin + "/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		body, readErr := io.ReadAll(response.Body)
 		response.Body.Close()
-		if readErr != nil || response.StatusCode != http.StatusOK || len(body) == 0 || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/javascript") {
+		contentType := "text/javascript"
+		if strings.HasSuffix(name, ".css") {
+			contentType = "text/css"
+		}
+		if readErr != nil || response.StatusCode != http.StatusOK || len(body) == 0 || !strings.HasPrefix(response.Header.Get("Content-Type"), contentType) {
 			t.Fatalf("frontend module unavailable: %s, status=%d", name, response.StatusCode)
 		}
 	}
@@ -125,6 +129,7 @@ func TestConfigurationActions(t *testing.T) {
 	p := c.Models["demo"]
 	p.ReasoningEffort = "high"
 	p.RelayModels = []string{"alternate"}
+	p.ModelNames = map[string]string{p.Model: "默认别名", "alternate": "额外别名"}
 	c.Models["demo"] = p
 	draft := configstore.Editable(c)
 	draft.Models["unfinished"] = configstore.Profile{}
@@ -142,6 +147,9 @@ func TestConfigurationActions(t *testing.T) {
 	}
 	if len(saved.Models["demo-copy-2"].RelayModels) != 1 || saved.Models["demo-copy-2"].RelayModels[0] != "alternate" {
 		t.Fatal("copy lost hijack model list")
+	}
+	if saved.Models["demo-copy-2"].ModelName("alternate") != "额外别名" || saved.Models["demo-copy-2"].ModelName(p.Model) != "默认别名" {
+		t.Fatal("copy lost display names")
 	}
 	if _, err = service.Handle(context.Background(), "/api/config/remove", shared.Marshal(shared.Object{"name": "demo"})); err != nil {
 		t.Fatal(err)

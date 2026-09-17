@@ -180,7 +180,7 @@ func StartSetup(service *ConfigService, assets fs.FS) (*SetupServer, error) {
 			if name == "" {
 				name = "index.html"
 			}
-			if shared.Contains([]string{"index.html", "config-ui.js", "config.css", "desktop-ui.js", "desktop.css", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "relay-models-ui.js"}, name) {
+			if shared.Contains([]string{"index.html", "config-ui.js", "config.css", "desktop-ui.js", "desktop.css", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"}, name) {
 				data, err := fs.ReadFile(assets, name)
 				if err != nil {
 					http.NotFound(w, r)

@@ -22,7 +22,8 @@ func RelayModelAlias(connection, model string) string {
 	return relayModel + "/" + connection + "/" + hex.EncodeToString(digest[:])
 }
 
-// ModelEntries 为 Codex 和本地 /models 提供同一有序目录；默认模型自动加入，额外模型按保存顺序展示。
+// ModelEntries 为 Codex 和本地 /models 提供同一有序目录，使用自定义显示名称且保留稳定路由。
+// 默认模型自动加入，额外模型按保存顺序展示；改名不影响已有对话或实际调用的模型 ID。
 func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: config.Models[defaultName].ReasoningEffort}}
 	names := make([]string, 0, len(config.Models))
@@ -32,14 +33,14 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	sort.Strings(names)
 	for _, name := range names {
 		profile := config.Models[name]
-		entries = append(entries, ModelEntry{Slug: relayModel + "/" + name, Name: name + " · " + profile.Model, Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
+		entries = append(entries, ModelEntry{Slug: relayModel + "/" + name, Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
 		seen := map[string]bool{profile.Model: true}
 		for _, model := range profile.RelayModels {
 			if seen[model] {
 				continue
 			}
 			seen[model] = true
-			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + model, Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
+			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort})
 		}
 	}
 	return entries

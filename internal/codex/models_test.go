@@ -11,6 +11,49 @@ import (
 	"github.com/U109/api-subagents/internal/shared"
 )
 
+// TestModelDisplayNames 通过公开目录和解析入口确认改名只改变显示，历史别名与上游模型仍稳定。
+func TestModelDisplayNames(t *testing.T) {
+	c := configstore.EmptyConfig()
+	c.Models["demo"] = configstore.Profile{Model: "vendor/default", RelayModels: []string{"vendor/extra"}, APIKey: "synthetic-key"}
+	before := ModelEntries(c, "demo")
+	p := c.Models["demo"]
+	p.ModelNames = map[string]string{"vendor/default": "日常编码", "vendor/extra": "深入分析"}
+	c.Models["demo"] = p
+	after := ModelEntries(c, "demo")
+	if after[1].Name != "demo · 日常编码" || after[2].Name != "demo · 深入分析" {
+		t.Fatal("display names absent from catalog")
+	}
+	for index, entry := range after {
+		if entry.Slug != before[index].Slug {
+			t.Fatal("rename changed persistent alias")
+		}
+		_, resolved, err := ResolveCatalogModel(c, "demo", entry.Slug)
+		model := "vendor/default"
+		if index == 2 {
+			model = "vendor/extra"
+		}
+		if err != nil || resolved.Model != model || resolved.APIKey != "synthetic-key" {
+			t.Fatal("display name leaked into routing", err)
+		}
+	}
+	disk := CodexConfig{Home: t.TempDir(), DataRoot: t.TempDir()}
+	if err := disk.WriteCatalog(c, "demo"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(disk.catalogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Models []struct {
+			DisplayName string `json:"display_name"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(data, &catalog) != nil || len(catalog.Models) != 3 || catalog.Models[2].DisplayName != "demo · 深入分析" {
+		t.Fatal("Codex catalog omitted model name")
+	}
+}
+
 // TestHijackCatalogMappings 验证目录去重、跨连接唯一性、思考等级和密钥隔离；列表重排不改变模型别名。
 func TestHijackCatalogMappings(t *testing.T) {
 	c := configstore.EmptyConfig()

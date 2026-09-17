@@ -30,7 +30,6 @@ let selected = null,
   busy = false,
   activeTab = 'connection';
 const catalogs = new Map(),
-  manual = new Set(),
   dirty = new Set();
 const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
 const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
@@ -74,7 +73,7 @@ function sidebar() {
           ([name, p]) => `
     <div class="model connection ${name === selected ? 'active' : ''}">
       <button class="model-select" data-name="${esc(name)}" title="${esc(name)}" aria-label="${esc(name)}" ${name === selected ? 'aria-current="true"' : ''}>
-        <span class="connection-avatar" aria-hidden="true">${esc((p.model || name).slice(0, 1).toUpperCase())}</span><span class="model-copy"><strong><span class="model-name">${esc(name)}</span><span class="relay-badge connected-marker" hidden title="挟持中" aria-label="挟持中"></span></strong><small>${esc(p.model || '尚未选择模型')}</small></span>
+        <span class="connection-avatar" aria-hidden="true">${esc((window.modelPickerUI.nameFor(p, p.model) || name).slice(0, 1).toUpperCase())}</span><span class="model-copy"><strong><span class="model-name">${esc(name)}</span><span class="relay-badge connected-marker" hidden title="挟持中" aria-label="挟持中"></span></strong><small>${esc(window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型')}</small></span>
       </button>
       <button class="model-more" data-menu="${esc(name)}" aria-label="${esc(name)} 的更多操作" title="更多操作" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false"><span aria-hidden="true">⋯</span></button>
     </div>`,
@@ -149,8 +148,8 @@ function connectionHeading() {
   if (!p) return;
   byId('connection-title').textContent = selected;
   byId('connection-title').title = selected;
-  byId('profile-avatar').textContent = (p.model || selected).slice(0, 1).toUpperCase();
-  byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${p.model || '尚未选择模型'}`;
+  byId('profile-avatar').textContent = (window.modelPickerUI.nameFor(p, p.model) || selected).slice(0, 1).toUpperCase();
+  byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'}`;
 }
 
 /** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果。 */
@@ -223,7 +222,6 @@ function rename(profile, input) {
     Object.entries(config.models).map(([id, value]) => [id === selected ? name : id, value]),
   );
   if (catalogs.has(selected)) catalogs.set(name, catalogs.get(selected));
-  if (manual.delete(selected)) manual.add(name);
   catalogs.delete(selected);
   dirty.delete(selected);
   selected = name;
@@ -240,104 +238,32 @@ function rename(profile, input) {
   connectionHeading();
   return true;
 }
-/** 更新模型列表区域的状态提示，不重建下拉框或改变当前选择。 */
-function pickerHint(text, kind = '') {
-  byId('model-hint').textContent = text;
-  byId('model-hint').className = 'model-hint ' + kind;
-}
-/** 筛选可选模型；即使当前模型不在新列表中也保留原值，防止自动切换。 */
-function modelOptions(query = '') {
-  const p = config.models[selected],
-    catalog = catalogs.get(selected);
-  const entries = (catalog?.models || []).filter((item) =>
-    `${item.id} ${item.name}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  // 已保存的模型即使不在新列表中，也保留原值，绝不自动切换到别的模型。
-  if (p.model && !entries.some((item) => item.id === p.model))
-    entries.unshift({id: p.model, name: p.model, current: true});
-  byId('model-select').innerHTML =
-    '<option value="">请选择模型</option>' +
-    entries
-      .map(
-        (item) =>
-          `<option value="${esc(item.id)}">${esc(item.current ? item.id + '（当前选择）' : item.name === item.id ? item.id : item.name + ' · ' + item.id)}</option>`,
-      )
-      .join('');
-  byId('model-select').value = p.model;
-  byId('model-select').disabled = !catalog?.models.length && !p.model;
-  window.selectUI.refresh();
-}
-/** 将当前连接的模型列表交给独立编辑器；新增和移除只标记草稿，不触发服务请求。 */
-function renderRelayModels() {
-  window.relayModelsUI.render(byId('relay-models'), {profile: config.models[selected], catalog: catalogs.get(selected), onChange: markChanged});
-}
-/** 绘制模型列表/手动输入两种模式，绑定只读拉取操作并维护连接级缓存。 */
+/** 连接统一模型编辑器与配置草稿，目录刷新只读取服务列表，不测试模型或覆盖已选配置。 */
 function renderPicker() {
-  const p = config.models[selected],
-    isManual = manual.has(selected),
-    catalog = catalogs.get(selected);
-  byId('picker').innerHTML = `
-    <div class="field-label"><label for="${isManual ? 'model' : 'model-select'}">默认模型</label><div class="model-mode">
-      <button id="mode-list" class="text-button" ${!isManual ? 'hidden' : ''}>列表选择</button><button id="mode-manual" class="text-button" ${isManual ? 'hidden' : ''}>手动输入</button>
-    </div></div><div class="model-row"><div class="model-input">${isManual ? `<input id="model" value="${esc(p.model)}" placeholder="输入服务支持的模型 ID" autocomplete="off">` : '<select id="model-select"></select>'}</div><button id="pull-models" class="secondary"><svg aria-hidden="true"><use href="#i-refresh"/></svg>刷新列表</button></div>
-    ${!isManual && catalog?.models.length ? '<input id="model-filter" class="search" aria-label="筛选模型" placeholder="搜索模型名称或 ID" autocomplete="off">' : ''}
-    <div id="model-hint" class="model-hint" role="status" aria-live="polite"></div>`;
-  byId('mode-list').onclick = () => {
-    manual.delete(selected);
-    renderPicker();
-  };
-  byId('mode-manual').onclick = () => {
-    manual.add(selected);
-    renderPicker();
-  };
-  if (isManual)
-    byId('model').oninput = (event) => {
-      p.model = event.target.value;
-      markChanged();
-      sidebar();
-      connectionHeading();
-      renderRelayModels();
-    };
-  else {
-    modelOptions();
-    byId('model-select').onchange = (event) => {
-      p.model = event.target.value;
-      markChanged();
-      sidebar();
-      connectionHeading();
-      renderRelayModels();
-    };
-    if (byId('model-filter')) byId('model-filter').oninput = (event) => modelOptions(event.target.value);
-  }
-  pickerHint(
-    isManual
-      ? '填写服务商提供的模型 ID；不支持列表接口时可直接使用此方式。'
-      : catalog
-        ? catalog.models.length
-          ? `已获取 ${catalog.models.length} 个模型${catalog.truncated ? '（列表已限制数量）' : ''}。请选择支持工具调用的对话模型。`
-          : '接口没有返回可选模型，可切换为手动输入。'
-        : '填写 API 地址和 Key 后拉取列表；所选模型用于此连接。',
-  );
-  byId('pull-models').onclick = () =>
-    action(async () => {
-      pickerHint('正在获取服务提供的模型…');
+  window.modelPickerUI.render(byId('picker'), {
+    profile: config.models[selected],
+    catalog: catalogs.get(selected),
+    /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿。 */
+    isBusy: () => busy,
+    /** 同步默认值和草稿标记，不重绘列表以保留搜索、焦点和滚动位置。 */
+    onChange: () => { markChanged(); sidebar(); connectionHeading(); },
+    /** 通过已鉴权入口刷新目录；失败保留旧候选和全部已选模型。 */
+    onRefresh: () => action(async () => {
+      const button = byId('pull-models');
+      const label = button.innerHTML;
+      button.textContent = '正在获取…';
       try {
         const result = await api('/api/models', {config, name: selected});
         catalogs.set(selected, result);
-        manual.delete(selected);
         renderPicker();
-        pickerHint(
-          result.models.length
-            ? `已获取 ${result.models.length} 个模型${result.truncated ? '（最多显示 1000 个）' : ''}，选择后保存配置。`
-            : '接口没有返回可选模型，可切换为手动输入。',
-          result.models.length ? 'success' : '',
-        );
-      } catch (error) {
-        pickerHint(error.message, 'error');
+        status(result.models.length ? `已获取 ${result.models.length} 个模型，勾选即可加入挟持列表。` : '接口未返回模型，可手动添加。已选配置保持不变。');
+      } finally {
+        if (button.isConnected) button.innerHTML = label;
       }
-    });
-  window.selectUI.enhance(byId('picker'));
-  renderRelayModels();
+    }),
+  });
+  // 刷新回调可能在请求锁内重建节点，新控件也应锁定到请求结束。
+  if (busy) setBusy(true);
 }
 
 /** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试。 */
@@ -373,8 +299,9 @@ function render() {
       ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1。')}
       <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key。</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
     </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0">${sectionTitle('model', '选择默认模型、挟持模型列表与思考深度。')}<div class="model-layout"><div class="model-main"><div id="picker" class="model-field"></div>
-      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">更快响应<span class="small-rule"></span>更深入思考</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p><span class="hint">具体档位需模型支持；Codex 中的手动选择优先，原生预算受最大输出长度约束。</span></div></div><section id="relay-models" class="relay-models-block" aria-labelledby="relay-models-label"></section></div><div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存后，重启 Codex 可刷新模型列表与默认思考等级。</span></div>
+    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div id="picker"></div>
+      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">此连接的默认等级 · Codex 中可单独切换</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p></div>
+      <div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存配置后，重启 Codex 刷新模型列表。思考档位需模型支持。</span></div>
     </section>
     <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">${sectionTitle('purpose', '告诉 Codex 这个模型擅长什么，用于插件任务委派。')}
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查。">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务。</span></div>
@@ -504,7 +431,7 @@ function setBusy(value) {
     if (control.closest('[data-desktop-control]') || control.matches('[data-shell]')) return;
     // 保留本来就不可用的下拉框状态；请求结束不应把空列表误启用。
     if (value) {
-      control.dataset.wasDisabled = String(control.disabled);
+      if (!('wasDisabled' in control.dataset)) control.dataset.wasDisabled = String(control.disabled);
       control.disabled = true;
     } else if ('wasDisabled' in control.dataset) {
       control.disabled = control.dataset.wasDisabled === 'true';
@@ -548,7 +475,6 @@ async function copyModel(name) {
       config.models[result.name] = result.config.models[result.name];
       saved.add(result.name);
       if (catalogs.has(name)) catalogs.set(result.name, catalogs.get(name));
-      if (manual.has(name)) manual.add(result.name);
       selected = result.name;
       activeTab = 'connection';
       render();
@@ -571,7 +497,6 @@ async function removeModel(name) {
       saved.delete(original);
       dirty.delete(name);
       catalogs.delete(name);
-      manual.delete(name);
       if (selected === name) {
         selected = Object.keys(config.models)[0] || null;
         render();
@@ -673,7 +598,7 @@ void action(async () => {
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: document.querySelectorAll('#relay-model-list .relay-model-item').length});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: Number(byId('picker')?.dataset.selectedCount || 0)});
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {

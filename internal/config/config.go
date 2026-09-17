@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/U109/api-subagents/internal/shared"
 )
@@ -21,21 +23,22 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
-	Protocol        string   `json:"protocol"`
-	Model           string   `json:"model"`
-	BaseURL         string   `json:"baseUrl"`
-	APIKey          string   `json:"apiKey"`
-	APIKeyEnv       string   `json:"apiKeyEnv"`
-	Description     string   `json:"description"`
-	ReasoningEffort string   `json:"reasoningEffort,omitempty"`
-	RelayModels     []string `json:"relayModels,omitempty"`
-	MaxTokens       int      `json:"maxTokens"`
-	Stream          bool     `json:"stream"`
-	FirstTimeout    int      `json:"firstResponseTimeoutSeconds"`
-	IdleTimeout     int      `json:"streamIdleTimeoutSeconds"`
-	TaskTimeout     int      `json:"taskTimeoutMinutes"`
-	HasKey          bool     `json:"hasKey,omitempty"`
-	SavedName       *string  `json:"savedName,omitempty"`
+	Protocol        string            `json:"protocol"`
+	Model           string            `json:"model"`
+	BaseURL         string            `json:"baseUrl"`
+	APIKey          string            `json:"apiKey"`
+	APIKeyEnv       string            `json:"apiKeyEnv"`
+	Description     string            `json:"description"`
+	ReasoningEffort string            `json:"reasoningEffort,omitempty"`
+	RelayModels     []string          `json:"relayModels,omitempty"`
+	ModelNames      map[string]string `json:"modelNames,omitempty"`
+	MaxTokens       int               `json:"maxTokens"`
+	Stream          bool              `json:"stream"`
+	FirstTimeout    int               `json:"firstResponseTimeoutSeconds"`
+	IdleTimeout     int               `json:"streamIdleTimeoutSeconds"`
+	TaskTimeout     int               `json:"taskTimeoutMinutes"`
+	HasKey          bool              `json:"hasKey,omitempty"`
+	SavedName       *string           `json:"savedName,omitempty"`
 }
 
 type Config struct {
@@ -108,11 +111,15 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		if !ValidReasoningEffort(p.ReasoningEffort) {
 			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high 或 xhigh。")
 		}
-		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 {
+		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 || strings.IndexFunc(p.Model, unicode.IsControl) >= 0 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
 		}
 		var err error
 		p.RelayModels, err = normalizeRelayModels(p.RelayModels)
+		if err != nil {
+			return c, fmt.Errorf("%s: %w", name, err)
+		}
+		p.ModelNames, err = normalizeModelNames(p)
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
@@ -178,6 +185,7 @@ func Editable(c Config) Config {
 	result.Models = map[string]Profile{}
 	for name, p := range c.Models {
 		p.RelayModels = append([]string(nil), p.RelayModels...)
+		p.ModelNames = maps.Clone(p.ModelNames)
 		p.HasKey = p.APIKey != "" || (p.APIKeyEnv != "" && os.Getenv(p.APIKeyEnv) != "")
 		p.APIKey = ""
 		source := name
