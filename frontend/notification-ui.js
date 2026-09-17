@@ -6,6 +6,11 @@
   stack.setAttribute('aria-label', '操作提示');
   const entries = new Map();
 
+  /** 统一提示文案的结尾样式，仅移除末尾中文句号，保留句间标点、英文句点和换行 */
+  function formatMessage(message) {
+    return String(message ?? '').replace(/。+(\s*)$/u, '$1');
+  }
+
   /** 保持提示位于最上层弹窗内，防止模态窗口把关闭按钮设为不可操作。 */
   function mount() {
     const owner = [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;
@@ -38,9 +43,10 @@
     entry.timer = setTimeout(() => clear(entry.key), entry.remaining);
   }
 
-  /** 同一通道替换旧提示，最多同时显示三条；所有关闭操作均可通过键盘完成。 */
+  /** 同一通道替换旧提示并统一文末标点，最多显示三条；所有关闭操作均可通过键盘完成 */
   function show(key, message, kind = 'success') {
     clear(key);
+    message = formatMessage(message);
     if (!message) return;
     if (!['success', 'info', 'warning', 'error'].includes(kind)) kind = 'info';
     if (entries.size >= 3) clear(entries.keys().next().value);
@@ -80,5 +86,5 @@
   }
 
   new MutationObserver(mount).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['open']});
-  window.notices = {show, clear};
+  window.notices = {show, clear, formatMessage};
 })();

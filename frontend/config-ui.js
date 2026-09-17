@@ -4,7 +4,7 @@ if (key) {
   sessionStorage.setItem('setup-token', key);
   history.replaceState(null, '', '/');
 }
-/** 按固定 ID 获取当前渲染的表单节点。 */
+/** 按固定 ID 获取当前渲染的表单节点 */
 const byId = (id) => document.getElementById(id);
 const types = {
   compatible: 'OpenAI 兼容 / CPA',
@@ -18,13 +18,13 @@ const urls = {
   anthropic: 'https://api.anthropic.com/v1',
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
 };
-/** 将配置文本转义后嵌入 HTML 属性或内容，防止模型名称等输入成为可执行标记。 */
+/** 将配置文本转义后嵌入 HTML 属性或内容，防止模型名称等输入成为可执行标记 */
 const esc = (value) =>
   String(value ?? '').replace(
     /[&<>"']/g,
     (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c],
   );
-// 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用。
+// 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用
 let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
 let selected = null,
   saved = new Set(),
@@ -35,18 +35,18 @@ const catalogs = new Map(),
 const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
 const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
 const tabIcons = {connection: 'link', model: 'model', purpose: 'route', advanced: 'sliders'};
-const reasoningHints = {'': '由模型服务决定，不额外指定思考参数。', none: '适用于支持关闭推理的模型，优先快速生成。', minimal: '用尽量少的推理处理简单、明确的任务。', low: '适合日常修改与简单排错，优先速度和较低用量。', medium: '在响应速度与分析深度之间取得平衡。', high: '适合复杂分析与代码审查，通常需要更多时间与用量。', xhigh: '更深入地分析复杂问题，仅支持此档位的模型可用。'};
+const reasoningHints = {'': '由模型服务决定，不额外指定思考参数', none: '适用于支持关闭推理的模型，优先快速生成', minimal: '用尽量少的推理处理简单、明确的任务', low: '适合日常修改与简单排错，优先速度和较低用量', medium: '在响应速度与分析深度之间取得平衡', high: '适合复杂分析与代码审查，通常需要更多时间与用量', xhigh: '更深入地分析复杂问题，仅支持此档位的模型可用'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;
 let menuAnchor = null,
   menuName = null;
 
-/** 将配置操作结果显示为顶部轻提示；错误保留到主动关闭，空消息只清除此通道。 */
+/** 将配置操作结果显示为顶部轻提示；错误保留到主动关闭，空消息只清除此通道 */
 function status(message, good = true) {
   window.notices.show('config', message, good ? (message.startsWith('正在') ? 'info' : 'success') : 'error');
 }
-/** 桌面版调用 Go 绑定，浏览器版使用会话令牌；两者共享配置校验与错误提示。 */
+/** 桌面版调用 Go 绑定，浏览器版使用会话令牌；两者共享配置校验与错误提示 */
 async function api(route, body) {
   if (window.desktopApp) {
     const data = await window.desktopApp.api(route, body);
@@ -62,7 +62,7 @@ async function api(route, body) {
   if (!res.ok) throw Error(data.error || '请求失败');
   return data;
 }
-/** 根据当前草稿重建连接列表；切换前提交名称，每个连接只提供复制和删除菜单。 */
+/** 根据当前草稿重建连接列表；切换前提交名称，每个连接只提供复制和删除菜单 */
 function sidebar() {
   closeMenu();
   const entries = Object.entries(config.models);
@@ -80,7 +80,7 @@ function sidebar() {
     </div>`,
         )
         .join('')
-    : '<p class="sidebar-empty">添加连接后，在这里切换。</p>';
+    : '<p class="sidebar-empty">添加连接后，在这里切换</p>';
   document.querySelectorAll('[data-name]').forEach((button) => {
     button.onclick = () => {
       if (!busy && commitName()) {
@@ -102,7 +102,7 @@ function sidebar() {
   });
 }
 
-/** 收起顶层菜单并复原展开状态；键盘退出时将焦点还给原入口。 */
+/** 收起顶层菜单并复原展开状态；键盘退出时将焦点还给原入口 */
 function closeMenu(restoreFocus = false) {
   const anchor = menuAnchor;
   if (menu.matches(':popover-open')) menu.hidePopover();
@@ -112,7 +112,7 @@ function closeMenu(restoreFocus = false) {
   if (restoreFocus) anchor?.focus();
 }
 
-/** 在侧栏入口旁打开两项菜单；顶层弹出避免列表滚动裁切，并限制位置不超出窗口。 */
+/** 在侧栏入口旁打开两项菜单；顶层弹出避免列表滚动裁切，并限制位置不超出窗口 */
 function openMenu(button) {
   if (busy || !commitName()) return;
   const wasOpen = menuAnchor === button && menu.matches(':popover-open');
@@ -130,7 +130,7 @@ function openMenu(button) {
   byId('copy-model').focus();
 }
 
-/** 标记当前连接有待保存编辑，让改名和跨 Tab 编辑始终显示一致的保存状态。 */
+/** 标记当前连接有待保存编辑，让改名和跨 Tab 编辑始终显示一致的保存状态 */
 function markChanged() {
   dirty.add(selected);
   byId('save-state').textContent = '待保存';
@@ -138,7 +138,7 @@ function markChanged() {
   window.dispatchEvent(new Event('config:changed'));
 }
 
-/** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘。 */
+/** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘 */
 function connectionHeading() {
   const p = selected === null ? null : config.models[selected];
   byId('connection-toolbar').hidden = !p && !window.desktopApp;
@@ -153,14 +153,14 @@ function connectionHeading() {
   byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'}`;
 }
 
-/** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果。 */
+/** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果 */
 function renderReasoning() {
   const effort = config.models[selected].reasoningEffort || '';
   byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value, label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');
   byId('reasoning-description').textContent = reasoningHints[effort] || reasoningHints[''];
 }
 
-/** 提交已知思考等级并同步草稿保护；键盘操作后将焦点恢复到重新绘制的选项。 */
+/** 提交已知思考等级并同步草稿保护；键盘操作后将焦点恢复到重新绘制的选项 */
 function chooseReasoning(value, focus = false) {
   if (busy || !Object.hasOwn(reasoningLevels, value)) return;
   config.models[selected].reasoningEffort = value;
@@ -169,12 +169,7 @@ function chooseReasoning(value, focus = false) {
   if (focus) byId('reasoning-options').querySelector('[aria-checked="true"]').focus();
 }
 
-/** 按当前 Tab 生成一致的标题、图标和说明，标题文本均来自固定界面文案。 */
-function sectionTitle(tab, description) {
-  return `<div class="form-intro"><svg aria-hidden="true"><use href="#i-${tabIcons[tab]}"/></svg><div><h2>${tabs[tab]}</h2><p>${description}</p></div></div>`;
-}
-
-/** 切换前提交改名；空名称或重名时保留输入并聚焦，避免覆盖其他连接。 */
+/** 切换前提交改名；空名称或重名时保留输入并聚焦，避免覆盖其他连接 */
 function commitName() {
   const input = byId('name');
   if (!input || rename(config.models[selected], input)) return true;
@@ -183,7 +178,7 @@ function commitName() {
   return false;
 }
 
-/** 仅切换面板可见性，不重建表单；模型筛选、密钥及尚未保存的输入都保持原样。 */
+/** 仅切换面板可见性，不重建表单；模型筛选、密钥及尚未保存的输入都保持原样 */
 function activateTab(name) {
   activeTab = name;
   for (const id of Object.keys(tabs)) {
@@ -193,26 +188,26 @@ function activateTab(name) {
     byId('panel-' + id).hidden = !active;
   }
 }
-/** 生成带标签与说明的单个输入框，输入值及占位符均先转义。 */
+/** 生成带标签与说明的单个输入框，输入值及占位符均先转义 */
 function field(id, label, value, placeholder = '', full = false, type = 'text', hint = '') {
   return `<div class="field ${full ? 'full' : ''}"><label for="${id}">${label}</label>
     <input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="${type === 'password' ? 'new-password' : 'off'}">
     ${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 }
-/** 按自由文本重命名连接，仅阻止空名称与重名；保留原密钥来源，就地更新以免吞掉点击。 */
+/** 按自由文本重命名连接，仅阻止空名称与重名；保留原密钥来源，就地更新以免吞掉点击 */
 function rename(profile, input) {
   const name = input.value.trim();
   const duplicate = (name !== selected && Object.hasOwn(config.models, name)) ||
     (name !== profile.savedName && saved.has(name));
   if (!name || duplicate) {
-    status(name ? '连接名称已被使用，请换一个名称。' : '请填写连接名称。', false);
+    status(name ? '连接名称已被使用，请换一个名称' : '请填写连接名称', false);
     input.setAttribute('aria-invalid', 'true');
     return false;
   }
   input.removeAttribute('aria-invalid');
   input.value = name;
   if (name === selected) return true;
-  // 替换键但保留侧栏顺序，原保存名称只在保存成功后更新。
+  // 替换键但保留侧栏顺序，原保存名称只在保存成功后更新
   config.models = Object.assign(Object.create(null), Object.fromEntries(
     Object.entries(config.models).map(([id, value]) => [id === selected ? name : id, value]),
   ));
@@ -221,7 +216,7 @@ function rename(profile, input) {
   dirty.delete(selected);
   selected = name;
   markChanged();
-  // 就地更新名称，保留失焦时正在点击的表单和侧栏节点。
+  // 就地更新名称，保留失焦时正在点击的表单和侧栏节点
   const button = byId('models').querySelector('[aria-current="true"]');
   button.dataset.name = name;
   button.querySelector('.model-name').textContent = name;
@@ -233,16 +228,16 @@ function rename(profile, input) {
   connectionHeading();
   return true;
 }
-/** 连接统一模型编辑器与配置草稿，目录刷新只读取服务列表，不测试模型或覆盖已选配置。 */
+/** 连接统一模型编辑器与配置草稿，目录刷新只读取服务列表，不测试模型或覆盖已选配置 */
 function renderPicker() {
   window.modelPickerUI.render(byId('picker'), {
     profile: config.models[selected],
     catalog: catalogs.get(selected),
-    /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿。 */
+    /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿 */
     isBusy: () => busy,
-    /** 同步默认值和草稿标记，不重绘列表以保留搜索、焦点和滚动位置。 */
+    /** 同步默认值和草稿标记，不重绘列表以保留搜索、焦点和滚动位置 */
     onChange: () => { markChanged(); sidebar(); connectionHeading(); },
-    /** 通过已鉴权入口刷新目录；失败保留旧候选和全部已选模型。 */
+    /** 通过已鉴权入口刷新目录；失败保留旧候选和全部已选模型 */
     onRefresh: () => action(async () => {
       const button = byId('pull-models');
       const label = button.innerHTML;
@@ -251,17 +246,17 @@ function renderPicker() {
         const result = await api('/api/models', {config, name: selected});
         catalogs.set(selected, result);
         renderPicker();
-        status(result.models.length ? `已获取 ${result.models.length} 个模型，勾选即可加入挟持列表。` : '接口未返回模型，可手动添加。已选配置保持不变。');
+        status(result.models.length ? `已获取 ${result.models.length} 个模型，勾选即可加入挟持列表` : '接口未返回模型，可手动添加；已选配置保持不变');
       } finally {
         if (button.isConnected) button.innerHTML = label;
       }
     }),
   });
-  // 刷新回调可能在请求锁内重建节点，新控件也应锁定到请求结束。
+  // 刷新回调可能在请求锁内重建节点，新控件也应锁定到请求结束
   if (busy) setBusy(true);
 }
 
-/** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试。 */
+/** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试 */
 function render() {
   queueMicrotask(() => window.dispatchEvent(new Event('config:rendered')));
   sidebar();
@@ -270,7 +265,7 @@ function render() {
     p = selected === null ? null : config.models[selected];
   if (!p) {
     editor.innerHTML =
-      '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>支持 OpenAI、Claude、Gemini 和 CPA 等兼容服务。<br>填入接口和 Key，直接从列表选择模型。</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>拉取模型</span><i>→</i><span>交给 Codex</span></div></div>';
+      '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>支持 OpenAI、Claude、Gemini 和 CPA 等兼容服务<br>填入接口和 Key，直接从列表选择模型</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>拉取模型</span><i>→</i><span>交给 Codex</span></div></div>';
     byId('first').onclick = add;
     return;
   }
@@ -281,8 +276,8 @@ function render() {
           `<button id="tab-${id}" role="tab" aria-selected="${id === activeTab}" aria-controls="panel-${id}" tabindex="${id === activeTab ? 0 : -1}" data-tab="${id}"><svg aria-hidden="true"><use href="#i-${tabIcons[id]}"/></svg>${label}</button>`,
       )
       .join('')}</div>
-    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0">${sectionTitle('connection', '设置接口与凭据，支持 OpenAI、Claude、Gemini 与 CPA。')}<div class="grid">
-      ${field('name', '连接名称', selected, '例如 日常助手 / Gemini', false, 'text', '按你的习惯命名，支持中文、空格和符号。')}
+    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0"><div class="grid">
+      ${field('name', '连接名称', selected, '例如 日常助手 / Gemini', false, 'text', '按你的习惯命名，支持中文、空格和符号')}
       <div class="field"><label for="protocol">接口类型</label><select id="protocol">${Object.entries(
         types,
       )
@@ -291,24 +286,24 @@ function render() {
             `<option value="${value}" ${p.protocol === value ? 'selected' : ''}>${label}</option>`,
         )
         .join('')}</select></div>
-      ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1。')}
-      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key。</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
+      ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1')}
+      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
     </div></section>
     <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div id="picker"></div>
       <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">此连接的默认等级 · Codex 中可单独切换</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p></div>
-      <div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存配置后，重启 Codex 刷新模型列表。思考档位需模型支持。</span></div>
+      <div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存配置后，重启 Codex 刷新模型列表；思考档位需模型支持</span></div>
     </section>
-    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">${sectionTitle('purpose', '告诉 Codex 这个模型擅长什么，用于插件任务委派。')}
-      <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查。">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务。</span></div>
+    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">
+      <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务</span></div>
     </section>
-    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0">${sectionTitle('advanced', '调整响应、并发与等待时间，通常保持默认即可。')}<div class="grid">
+    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0"><div class="grid">
         ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number')}
-        ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8。')}
-        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">流式接收可持续更新任务进度，服务仍有数据时继续等待。</span></div>
-        ${field('firstResponseTimeoutSeconds', '首个数据等待时间（秒）', p.firstResponseTimeoutSeconds ?? 180, '180', false, 'number', '10–600 秒，包含连接和等待服务开始返回数据的时间。')}
-        ${field('streamIdleTimeoutSeconds', '响应中断等待时间（秒）', p.streamIdleTimeoutSeconds ?? 120, '120', false, 'number', '10–600 秒，每次收到数据后重新计时。')}
-        ${field('taskTimeoutMinutes', '任务总时长上限（分钟）', p.taskTimeoutMinutes ?? 15, '15', false, 'number', '1–60 分钟，包含所有模型轮次与文件操作。')}
-        ${field('apiKeyEnv', '从环境变量读取 Key（可选）', p.apiKeyEnv, '例如 MY_MODEL_API_KEY', true, 'text', '设置后优先使用环境变量；留空则使用上面保存的 Key。')}
+        ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8')}
+        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">流式接收可持续更新任务进度，服务仍有数据时继续等待</span></div>
+        ${field('firstResponseTimeoutSeconds', '首个数据等待时间（秒）', p.firstResponseTimeoutSeconds ?? 180, '180', false, 'number', '10–600 秒，包含连接和等待服务开始返回数据的时间')}
+        ${field('streamIdleTimeoutSeconds', '响应中断等待时间（秒）', p.streamIdleTimeoutSeconds ?? 120, '120', false, 'number', '10–600 秒，每次收到数据后重新计时')}
+        ${field('taskTimeoutMinutes', '任务总时长上限（分钟）', p.taskTimeoutMinutes ?? 15, '15', false, 'number', '1–60 分钟，包含所有模型轮次与文件操作')}
+        ${field('apiKeyEnv', '从环境变量读取 Key（可选）', p.apiKeyEnv, '例如 MY_MODEL_API_KEY', true, 'text', '设置后优先使用环境变量；留空则使用上面保存的 Key')}
       </div>
     </section>`;
   activateTab(activeTab);
@@ -395,10 +390,10 @@ function render() {
     });
   window.selectUI.enhance(editor);
 }
-/** 创建名称不重复的空白连接草稿；用户保存前不会影响已配置模型。 */
+/** 创建名称不重复的空白连接草稿；用户保存前不会影响已配置模型 */
 function add() {
   if (busy || !commitName()) return;
-  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型。', false);
+  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型', false);
   let index = 1;
   while (Object.hasOwn(config.models, 'worker-' + index) || saved.has('worker-' + index)) index++;
   selected = 'worker-' + index;
@@ -417,14 +412,14 @@ function add() {
   window.uiShell.closeSidebar();
   byId('name').focus();
 }
-/** 请求期间禁用控件，结束时恢复原状态，避免迟到响应覆盖期间发生的新编辑。 */
+/** 请求期间禁用控件，结束时恢复原状态，避免迟到响应覆盖期间发生的新编辑 */
 function setBusy(value) {
   busy = value;
   if (value) window.selectUI.close();
   document.querySelectorAll('button, input, select, textarea').forEach((control) => {
-    // 桌面按钮由安装和更新状态独立管理，不能被配置请求结束时的旧快照覆盖。
+    // 桌面按钮由安装和更新状态独立管理，不能被配置请求结束时的旧快照覆盖
     if (control.closest('[data-desktop-control]') || control.matches('[data-shell]')) return;
-    // 保留本来就不可用的下拉框状态；请求结束不应把空列表误启用。
+    // 保留本来就不可用的下拉框状态；请求结束不应把空列表误启用
     if (value) {
       if (!('wasDisabled' in control.dataset)) control.dataset.wasDisabled = String(control.disabled);
       control.disabled = true;
@@ -435,22 +430,22 @@ function setBusy(value) {
   });
   window.dispatchEvent(new Event('config:changed'));
 }
-/** 提交当前改名、锁定控件并捕获错误；定点删除或复制不提交其他连接的名称草稿。 */
+/** 提交当前改名、锁定控件并捕获错误；定点删除或复制不提交其他连接的名称草稿 */
 async function action(fn, {checkName = true} = {}) {
   if (busy) return;
-  // 保存和拉取前提交名称，不依赖浏览器是否已经发出失焦 change 事件。
+  // 保存和拉取前提交名称，不依赖浏览器是否已经发出失焦 change 事件
   if (checkName && !commitName()) return;
   setBusy(true);
   try {
     await fn();
   } catch (error) {
-    status(typeof error === 'string' ? error : error.message || '操作失败，请重试。', false);
+    status(typeof error === 'string' ? error : error.message || '操作失败，请重试', false);
   } finally {
     setBusy(false);
     window.dispatchEvent(new Event('config:rendered'));
   }
 }
-/** 保存全部草稿，并用服务端标准化且已隐藏密钥的响应刷新页面。 */
+/** 保存全部草稿，并用服务端标准化且已隐藏密钥的响应刷新页面 */
 async function save() {
   await action(async () => {
     const result = await api('/api/config', {config});
@@ -458,12 +453,12 @@ async function save() {
     saved = new Set(Object.keys(config.models));
     dirty.clear();
     render();
-    status('已保存。后续请求使用新配置；模型列表与默认思考等级在重启 Codex 后刷新。');
+    status('已保存，后续请求使用新配置；模型列表与默认思考等级在重启 Codex 后刷新');
   });
 }
-/** 将目标连接的当前草稿复制并单独保存；服务端保留密钥，其他连接的草稿不受影响。 */
+/** 将目标连接的当前草稿复制并单独保存；服务端保留密钥，其他连接的草稿不受影响 */
 async function copyModel(name) {
-  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型。', false);
+  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型', false);
   await action(
     async () => {
       const result = await api('/api/config/copy', {config, name});
@@ -473,19 +468,19 @@ async function copyModel(name) {
       selected = result.name;
       activeTab = 'connection';
       render();
-      status(`已复制并保存为“${selected}”，可在连接信息中重命名。其他连接的编辑仍保留在草稿中。`);
+      status(`已复制并保存为“${selected}”，可在连接信息中重命名；其他连接的编辑仍保留在草稿中`);
       byId('name').focus();
       window.uiShell.closeSidebar();
     },
     {checkName: false},
   );
 }
-/** 只持久化目标连接的删除，保留其他连接未保存的草稿；请求失败时不移除侧栏项。 */
+/** 只持久化目标连接的删除，保留其他连接未保存的草稿；请求失败时不移除侧栏项 */
 async function removeModel(name) {
   if (!Object.hasOwn(config.models, name)) return;
   await action(
     async () => {
-      // 单独持久化删除，保留其他表单草稿；请求失败时不改变本地列表。
+      // 单独持久化删除，保留其他表单草稿；请求失败时不改变本地列表
       const original = config.models[name].savedName;
       if (original) await api('/api/config/remove', {name: original});
       delete config.models[name];
@@ -496,14 +491,14 @@ async function removeModel(name) {
         selected = Object.keys(config.models)[0] || null;
         render();
       } else sidebar();
-      status(`已删除模型配置“${name}”。`);
+      status(`已删除模型配置“${name}”`);
     },
     {checkName: false},
   );
   if (!Object.hasOwn(config.models, name))
     (byId('models').querySelector('[aria-current="true"]') || byId('add')).focus();
 }
-// 使用手动 popover：保留顶层显示，但避免原生外部点击先收起、入口 click 又把菜单打开。
+// 使用手动 popover：保留顶层显示，但避免原生外部点击先收起、入口 click 又把菜单打开
 document.addEventListener('pointerdown', (event) => {
   if (!menu.contains(event.target) && !menuAnchor?.contains(event.target)) closeMenu();
 });
@@ -540,7 +535,7 @@ byId('delete-model').onclick = () => {
   pendingRemoval = menuName;
   closeMenu(true);
   if (!pendingRemoval) return;
-  byId('remove-description').textContent = `确定删除“${pendingRemoval}”的模型配置吗？确认后立即生效。`;
+  byId('remove-description').textContent = `确定删除“${pendingRemoval}”的模型配置吗？确认后立即生效`;
   removeDialog.returnValue = '';
   removeDialog.showModal();
 };
@@ -550,22 +545,22 @@ removeDialog.onclose = () => {
   if (removeDialog.returnValue === 'remove' && name) void removeModel(name);
 };
 byId('add').onclick = add;
-// 桌面版关闭或更新前保留未保存草稿；浏览器入口沿用原有行为。
+// 桌面版关闭或更新前保留未保存草稿；浏览器入口沿用原有行为
 if (window.desktopApp) {
-  /** 检查新增连接、改名和字段草稿，避免更新安装丢失用户输入。 */
+  /** 检查新增连接、改名和字段草稿，避免更新安装丢失用户输入 */
   const hasDrafts = () =>
     dirty.size > 0 ||
     Object.values(config.models).some((profile) => !profile.savedName) ||
     (byId('name') && byId('name').value.trim() !== selected);
-  /** 输入和保存完成后同步原生关闭保护；仅传布尔值，不传配置和 Key。 */
+  /** 输入和保存完成后同步原生关闭保护；仅传布尔值，不传配置和 Key */
   const syncDrafts = () => {
     void window.desktopApp.setDirty(Boolean(hasDrafts()));
     window.dispatchEvent(new Event('config:draft'));
   };
   window.modelEditor = {
-    /** 返回当前选中的连接名称，供桌面模式按钮选择已保存连接。 */
+    /** 返回当前选中的连接名称，供桌面模式按钮选择已保存连接 */
     selectedName: () => selected,
-    /** 存在任何草稿或请求时先要求保存，避免开启后实际使用旧参数。 */
+    /** 存在任何草稿或请求时先要求保存，避免开启后实际使用旧参数 */
     ready: () => Boolean(selected && config.models[selected]?.savedName && !hasDrafts() && !busy),
   };
   document.addEventListener('input', () => queueMicrotask(syncDrafts));
@@ -575,10 +570,10 @@ if (window.desktopApp) {
   window.addEventListener('desktop:before-update', (event) => {
     if (hasDrafts() || busy) {
       event.preventDefault();
-      status('请先保存配置并等待当前操作完成，再重启更新。', false);
+      status('请先保存配置并等待当前操作完成，再重启更新', false);
     }
   });
-  // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认。
+  // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认
 }
 render();
 void action(async () => {

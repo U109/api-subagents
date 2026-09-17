@@ -29,7 +29,7 @@
     node('plugin-available-version').textContent = update.availableVersion ? 'v' + update.availableVersion : '—';
     node('plugin-label').textContent = installing ? '安装中' : installed ? '已安装' : '待安装';
     node('plugin-dot').hidden = !installed;
-    node('plugin-state').textContent = downloading ? '正在下载插件更新… ' + Math.round(update.progress) + '%' : installing || update.phase === 'idle' ? plugin.message : update.message;
+    node('plugin-state').textContent = window.notices.formatMessage(downloading ? '正在下载插件更新… ' + Math.round(update.progress) + '%' : installing || update.phase === 'idle' ? plugin.message : update.message);
     node('plugin-progress').hidden = !downloading;
     node('plugin-progress').value = update.progress || 0;
     node('check-plugin-update').disabled = actionPending || installing || update.phase === 'checking';
@@ -63,7 +63,7 @@
     node('desktop-version').textContent = 'v' + next.version;
     renderPlugin(next);
     const phase = next.update.phase;
-    node('update-state').textContent = next.update.message;
+    node('update-state').textContent = window.notices.formatMessage(next.update.message);
     node('update-available-row').hidden = !next.update.availableVersion;
     node('update-available-version').textContent = next.update.availableVersion ? 'v' + next.update.availableVersion : '—';
     node('check-update').textContent = phase === 'available' ? '下载 ' + next.update.availableVersion : phase === 'downloaded' ? '重启并更新' : phase === 'checking' ? '正在检查…' : phase === 'downloading' ? '正在下载…' : '检查更新';

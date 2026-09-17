@@ -122,7 +122,7 @@ h1 { margin: 0; font-size: 31px; line-height: 1.35; font-weight: 700; letter-spa
 .enabled .route-control { color: var(--success-text); }
 .enabled .route-target { color: var(--success-text); background: var(--success-soft); border-color: #bee9da; }
 
-/* 单层分组面板与图标 Tab 对应，表单始终展开，标题下的分隔线建立内容层级。 */
+/* Tab 下直接呈现配置字段，面板不重复显示标题和说明。 */
 .tabs { display: flex; gap: 13px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
 .tabs button { display: flex; align-items: center; gap: 8px; position: relative; padding: 12px 11px 14px; color: var(--muted); font-size: 14px; white-space: nowrap; }
 .tabs button svg { width: 15px; height: 15px; color: var(--accent); }
@@ -131,10 +131,7 @@ h1 { margin: 0; font-size: 31px; line-height: 1.35; font-weight: 700; letter-spa
 .tabs button[aria-selected='true'] svg { color: var(--secondary); }
 .tabs button[aria-selected='true']::after { content: ''; height: 1px; background: var(--ink); position: absolute; bottom: -1px; left: 10px; right: 10px; }
 .tab-panel { padding: 25px 27px 26px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); }
-.form-intro { display: flex; align-items: flex-start; gap: 14px; padding: 1px 4px 21px; margin-bottom: 23px; border-bottom: 1px solid var(--line); }
-.form-intro > svg { margin-top: 5px; width: 19px; height: 19px; color: var(--accent); }
 h2 { margin: 0; font-size: 22px; font-weight: 650; line-height: 1.45; }
-.form-intro p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .field { min-width: 0; }
 .field.full { grid-column: 1 / -1; }
 label { display: block; margin-bottom: 9px; font-size: 14px; font-weight: 600; color: var(--secondary); }
@@ -233,8 +230,6 @@ dialog strong { color: var(--secondary); font-size: 15px; }
   .tabs button { flex: 1; justify-content: center; font-size: 13px; padding: 12px 4px; }
   .tabs button svg { width: 13px; height: 13px; }
   .tab-panel { padding: 20px 18px; border-radius: 11px; }
-  .form-intro { padding: 0 0 18px; gap: 10px; }
-  .form-intro p { font-size: 12px; }
   h2 { font-size: 20px; }
   .save-guidance { display: none; }
   .action-bar { padding: 13px 20px; }

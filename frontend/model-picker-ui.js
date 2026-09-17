@@ -176,9 +176,9 @@
     const profile = context.profile;
     const chosen = selectedModels(profile);
     let error = '';
-    if (!id || [...id].length > 200 || /[\u0000-\u001f\u007f-\u009f]/u.test(id)) error = '请输入有效的模型 ID，最多 200 字符，不包含控制字符。';
-    else if (chosen.includes(id)) error = '此模型已选中，无需重复添加。';
-    else if (profile.model && chosen.length >= maxExtraModels + 1) error = '列表已满，请先取消勾选一个模型。';
+    if (!id || [...id].length > 200 || /[\u0000-\u001f\u007f-\u009f]/u.test(id)) error = '请输入有效的模型 ID，最多 200 字符，不包含控制字符';
+    else if (chosen.includes(id)) error = '此模型已选中，无需重复添加';
+    else if (profile.model && chosen.length >= maxExtraModels + 1) error = '列表已满，请先取消勾选一个模型';
     root.querySelector('#manual-model-error').textContent = error;
     input.setAttribute('aria-invalid', String(Boolean(error)));
     if (error) { input.focus(); return; }
@@ -207,7 +207,7 @@
       input.value = '';
       input.removeAttribute('aria-invalid');
       root.querySelector('#manual-model-error').textContent = '';
-      root.querySelector('#manual-model-description').textContent = context.profile.model ? '填写此服务支持的模型 ID。添加后自动勾选，可在列表中设为默认。' : '填写此服务支持的模型 ID。第一个模型将同时设为默认模型。';
+      root.querySelector('#manual-model-description').textContent = context.profile.model ? '填写此服务支持的模型 ID，添加后自动勾选，可在列表中设为默认' : '填写此服务支持的模型 ID，第一个模型将同时设为默认模型';
       dialog.returnValue = '';
       dialog.showModal();
       input.focus();
@@ -237,8 +237,8 @@
       if (context.isBusy() || !chosen.includes(id)) return;
       const nextID = modelID.value.trim();
       let idError = '';
-      if (!nextID || [...nextID].length > 200 || /[\u0000-\u001f\u007f-\u009f]/u.test(nextID)) idError = '模型 ID 不能为空、超过 200 字符或包含控制字符。';
-      else if (nextID !== id && chosen.includes(nextID)) idError = '该模型 ID 已在已选列表中，请直接编辑对应模型。';
+      if (!nextID || [...nextID].length > 200 || /[\u0000-\u001f\u007f-\u009f]/u.test(nextID)) idError = '模型 ID 不能为空、超过 200 字符或包含控制字符';
+      else if (nextID !== id && chosen.includes(nextID)) idError = '该模型 ID 已在已选列表中，请直接编辑对应模型';
       if (idError) {
         error.textContent = idError;
         modelID.setAttribute('aria-invalid', 'true');
@@ -247,7 +247,7 @@
       }
       const value = input.value.trim();
       if ([...value].length > 80 || /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
-        error.textContent = '显示名称最多 80 字符，不能包含控制字符。';
+        error.textContent = '显示名称最多 80 字符，不能包含控制字符';
         input.setAttribute('aria-invalid', 'true');
         input.focus();
         return;
@@ -328,7 +328,7 @@
       <div class="model-catalog" role="group" aria-label="模型列表"><div class="model-catalog-head"><span>在 Codex 中显示</span><span id="model-result-count" role="status" aria-live="polite"></span></div><div id="model-catalog-list" class="model-catalog-list"></div></div>
       <div class="model-catalog-footer"><span id="model-selection-count" role="status" aria-live="polite"></span><span id="model-catalog-hint"></span></div>
       <dialog id="manual-model-dialog" aria-labelledby="manual-model-title" aria-describedby="manual-model-description"><form id="manual-model-form" novalidate><h2 id="manual-model-title">手动添加模型</h2><p id="manual-model-description"></p><label for="manual-model-id">模型 ID</label><input id="manual-model-id" autocomplete="off" placeholder="输入服务提供的完整模型 ID" aria-describedby="manual-model-error"><div id="manual-model-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="cancel-manual-model" class="secondary" type="button">取消</button><button class="primary" type="submit">添加模型</button></div></form></dialog>
-      <dialog id="rename-model-dialog" aria-labelledby="rename-model-title" aria-describedby="rename-model-description"><form id="rename-model-form" novalidate><h2 id="rename-model-title">编辑模型</h2><p id="rename-model-description">服务返回的模型不正确时，在这里修正实际调用的模型 ID。</p><label for="edit-model-id">上游模型 ID</label><input id="edit-model-id" autocomplete="off" aria-describedby="model-id-help model-name-error"><p id="model-id-help" class="hint model-edit-help">实际发送给上游的 model 值，请填写正确的完整 ID。</p><label for="model-display-name">显示名称（可选）</label><input id="model-display-name" autocomplete="off" aria-describedby="model-display-help model-name-error"><p id="model-display-help" class="hint model-edit-help">仅用于 App 与 Codex 列表展示，留空使用模型默认名称。</p><div id="model-name-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="reset-model-name" type="button" class="text-button">恢复默认名称</button><button id="cancel-model-name" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>`;
+      <dialog id="rename-model-dialog" aria-labelledby="rename-model-title" aria-describedby="rename-model-description"><form id="rename-model-form" novalidate><h2 id="rename-model-title">编辑模型</h2><p id="rename-model-description">服务返回的模型不正确时，在这里修正实际调用的模型 ID</p><label for="edit-model-id">上游模型 ID</label><input id="edit-model-id" autocomplete="off" aria-describedby="model-id-help model-name-error"><p id="model-id-help" class="hint model-edit-help">实际发送给上游的 model 值，请填写正确的完整 ID</p><label for="model-display-name">显示名称（可选）</label><input id="model-display-name" autocomplete="off" aria-describedby="model-display-help model-name-error"><p id="model-display-help" class="hint model-edit-help">仅用于 App 与 Codex 列表展示，留空使用模型默认名称</p><div id="model-name-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="reset-model-name" type="button" class="text-button">恢复默认名称</button><button id="cancel-model-name" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>`;
     const state = editorState(context.profile);
     const search = root.querySelector('#model-search');
     search.value = state.query;
