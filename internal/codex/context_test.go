@@ -14,7 +14,7 @@ import (
 // TestCatalogContextWindows 验证同一连接内不同模型与跟随别名分别声明容量和压缩阈值。
 func TestCatalogContextWindows(t *testing.T) {
 	c := configstore.EmptyConfig()
-	c.Models["demo"] = configstore.Profile{Model: "one", RelayModels: []string{"two", "unknown"}, ModelContextWindows: map[string]int{"one": 128000, "two": 1000000}}
+	c.Models["demo"] = configstore.Profile{Model: "gpt-6-astra", RelayModels: []string{"two", "unknown", "gemini-3.8-flash-high", "minimax-m2.7"}, ModelContextWindows: map[string]int{"two": 128000}}
 	disk := CodexConfig{Home: t.TempDir(), DataRoot: t.TempDir()}
 	if err := disk.WriteCatalog(c, "demo"); err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestCatalogContextWindows(t *testing.T) {
 	if err := json.Unmarshal(data, &catalog); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{relayModel: 128000, RelayModelAlias("demo", "one"): 128000, RelayModelAlias("demo", "two"): 1000000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow}
+	want := map[string]int{relayModel: 1050000, RelayModelAlias("demo", "gpt-6-astra"): 1050000, RelayModelAlias("demo", "two"): 128000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow, RelayModelAlias("demo", "gemini-3.8-flash-high"): 1048576, RelayModelAlias("demo", "minimax-m2.7"): 204800}
 	if len(shared.Arr(catalog["models"])) != len(want) {
 		t.Fatal("missing catalog entries")
 	}

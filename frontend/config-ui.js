@@ -26,6 +26,8 @@ const esc = (value) =>
   );
 // 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用
 let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
+let modelContextDefaults = Object.create(null);
+let modelContextFallback = 256000;
 let selected = null,
   saved = new Set(),
   busy = false,
@@ -42,7 +44,7 @@ let pendingRemoval = null;
 let menuAnchor = null,
   menuName = null;
 
-/** 将配置操作结果显示为顶部轻提示；错误保留到主动关闭，空消息只清除此通道 */
+/** 将配置结果显示为三秒轻提示，空消息只清除此通道 */
 function status(message, good = true) {
   window.notices.show('config', message, good ? (message.startsWith('正在') ? 'info' : 'success') : 'error');
 }
@@ -232,6 +234,8 @@ function rename(profile, input) {
 function renderPicker() {
   window.modelPickerUI.render(byId('picker'), {
     profile: config.models[selected],
+    contextDefaults: modelContextDefaults,
+    contextFallback: modelContextFallback,
     catalog: catalogs.get(selected),
     /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿 */
     isBusy: () => busy,
@@ -246,7 +250,7 @@ function renderPicker() {
         const result = await api('/api/models', {config, name: selected});
         catalogs.set(selected, result);
         renderPicker();
-        status(result.models.length ? `已获取 ${result.models.length} 个模型，勾选即可加入挟持列表` : '接口未返回模型，可手动添加；已选配置保持不变');
+        status(result.models.length ? `已获取 ${result.models.length} 个模型` : '未返回模型，可手动添加');
       } finally {
         if (button.isConnected) button.innerHTML = label;
       }
@@ -386,8 +390,8 @@ function render() {
   byId('probe').onclick = () =>
     action(async () => {
       status('正在测试连接…');
-      const result = await api('/api/probe', {config, name: selected});
-      status('连接成功：' + result.reply);
+      await api('/api/probe', {config, name: selected});
+      status('连接测试成功');
     });
   window.selectUI.enhance(editor);
 }
@@ -454,7 +458,7 @@ async function save() {
     saved = new Set(Object.keys(config.models));
     dirty.clear();
     render();
-    status('已保存，后续请求使用新配置；模型列表与默认思考等级在重启 Codex 后刷新');
+    status('配置已保存，重启 Codex 生效');
   });
 }
 /** 将目标连接的当前草稿复制并单独保存；服务端保留密钥，其他连接的草稿不受影响 */
@@ -469,7 +473,7 @@ async function copyModel(name) {
       selected = result.name;
       activeTab = 'connection';
       render();
-      status(`已复制并保存为“${selected}”，可在连接信息中重命名；其他连接的编辑仍保留在草稿中`);
+      status('连接已复制，可在连接信息中重命名');
       byId('name').focus();
       window.uiShell.closeSidebar();
     },
@@ -492,7 +496,7 @@ async function removeModel(name) {
         selected = Object.keys(config.models)[0] || null;
         render();
       } else sidebar();
-      status(`已删除模型配置“${name}”`);
+      status('已删除模型配置');
     },
     {checkName: false},
   );
@@ -571,7 +575,7 @@ if (window.desktopApp) {
   window.addEventListener('desktop:before-update', (event) => {
     if (hasDrafts() || busy) {
       event.preventDefault();
-      status('请先保存配置并等待当前操作完成，再重启更新', false);
+      status('请先保存配置，等待操作完成', false);
     }
   });
   // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认
@@ -579,6 +583,8 @@ if (window.desktopApp) {
 render();
 void action(async () => {
   const result = await api('/api/config');
+  modelContextDefaults = Object.assign(Object.create(null), result.modelContextDefaults);
+  modelContextFallback = result.modelContextFallback || 256000;
   config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
   saved = new Set(Object.keys(config.models));
   selected = Object.keys(config.models)[0] || null;

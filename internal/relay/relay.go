@@ -127,7 +127,7 @@ func (r *Relay) Enable(model string) error {
 	r.host = host
 	r.server = server
 	r.cancel = cancel
-	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由；原自定义提供商的旧对话也可选择挟持模型继续"}
+	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由"}
 	r.mu.Unlock()
 	go func() { _ = server.Serve(listener) }()
 	if err = r.Codex.Enable(config, model, port, token); err != nil {

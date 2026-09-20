@@ -17,6 +17,27 @@ import (
 	"github.com/U109/api-subagents/internal/testutil"
 )
 
+// TestOfficialContextsMetadata 验证桌面和浏览器共用的配置响应包含官方依据，但不会将默认表写入用户配置。
+func TestOfficialContextsMetadata(t *testing.T) {
+	store, _ := testutil.Config(t, "responses", "http://127.0.0.1:9/v1")
+	before, err := os.ReadFile(store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := NewConfigService(store).Handle(context.Background(), "/api/config", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	presets, ok := result["modelContextDefaults"].(map[string]configstore.ContextPreset)
+	if !ok || presets["gpt-6-astra"].Tokens != 1050000 || presets["gemini-3.8-flash-high"].Source == "" {
+		t.Fatal("official context metadata missing")
+	}
+	after, err := os.ReadFile(store.Path)
+	if err != nil || string(after) != string(before) || strings.Contains(string(shared.Marshal(result["config"])), "modelContextDefaults") {
+		t.Fatal("reading defaults mutated user configuration")
+	}
+}
+
 // TestSetupFrontendModules 验证浏览器入口能提供新增界面模块，并继续拒绝访问白名单外的文件。
 func TestSetupFrontendModules(t *testing.T) {
 	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")

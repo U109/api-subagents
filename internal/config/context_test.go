@@ -1,11 +1,58 @@
 package config
 
 import (
+	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/U109/api-subagents/internal/shared"
 )
+
+// TestOfficialModelContexts 验证具体型号和明确别名的自动容量、手动优先及未知型号默认 256K。
+func TestOfficialModelContexts(t *testing.T) {
+	if DefaultContextWindow != 256000 {
+		t.Fatal("unknown model default must stay at 256K")
+	}
+	for _, tc := range []struct {
+		model string
+		want  int
+	}{
+		{"gpt-6-astra", 1050000}, {"gpt-5.6-luna", 1050000},
+		{"gpt-5.6-sol", 1050000}, {"gpt-5.6-terra", 1050000},
+		{"gemini-3.8-flash-high", 1048576}, {"gemini-3.1-pro-low", 1048576},
+		{"deepseek-v4-flash", 1000000}, {"deepseek-v4-pro", 1000000},
+		{"kimi-k3", 1000000}, {"MiniMax-M3", 1000000}, {"glm-5.3", 1000000},
+		{"minimax-m2.7-highspeed", 204800},
+		{"claude-opus-5", 1000000}, {"claude-haiku-4-5", 200000},
+		{"gpt-6-private", DefaultContextWindow}, {"unknown", DefaultContextWindow},
+		{"gemini-3.8-flash-private", DefaultContextWindow},
+	} {
+		p := Profile{}
+		if got := p.ContextWindow(tc.model); got != tc.want {
+			t.Fatalf("%s: got %d, want %d", tc.model, got, tc.want)
+		}
+		p.ModelContextWindows = map[string]int{tc.model: 500000}
+		if p.ContextWindow(tc.model) != 500000 {
+			t.Fatal("official default overrode user value", tc.model)
+		}
+		delete(p.ModelContextWindows, tc.model)
+		if p.ContextWindow(tc.model) != tc.want {
+			t.Fatal("clearing manual value did not restore automatic capacity", tc.model)
+		}
+	}
+	for model, preset := range OfficialModelContexts() {
+		source, err := url.Parse(preset.Source)
+		if err != nil || source.Scheme != "https" || source.Host == "" || preset.VerifiedAt == "" || preset.Model == "" || preset.Tokens < MinContextWindow || preset.Tokens > MaxContextWindow || model != strings.ToLower(model) {
+			t.Fatal("invalid official capacity record", model)
+		}
+	}
+	copy := OfficialModelContexts()
+	delete(copy, "gpt-6-astra")
+	if (Profile{}).ContextWindow("gpt-6-astra") != 1050000 {
+		t.Fatal("UI metadata changed the shared defaults")
+	}
+}
 
 // TestModelContextValidation 覆盖旧配置回退、容量边界、非法类型及取消选择后的清理。
 func TestModelContextValidation(t *testing.T) {

@@ -153,7 +153,7 @@
     if (checked) extra.push(id);
     if (extra.length > maxExtraModels) {
       row.querySelector('input').checked = false;
-      window.notices.show('model-picker', '最多选择 32 个额外模型，请先取消勾选一个模型。', 'error');
+      window.notices.show('model-picker', '最多选择 32 个额外模型', 'error');
       return;
     }
     // 取消手动模型后仍将其保留为候选，用户可立即重新勾选。
@@ -168,7 +168,7 @@
     if (context.isBusy() || id === context.profile.model) return;
     const extra = selectedModels(context.profile).filter(value => value !== id);
     if (extra.length > maxExtraModels) {
-      window.notices.show('model-picker', '挟持列表已满，请先取消勾选一个模型，再设置新的默认模型。', 'error');
+      window.notices.show('model-picker', '列表已满，请先取消勾选一个模型', 'error');
       return;
     }
     context.profile.model = id;
@@ -202,7 +202,7 @@
     context.onChange();
     renderList(root, context);
     list.scrollTop = scroll;
-    window.notices.show('model-picker', profile.model ? '模型已从当前连接移除，保存配置后生效' : '模型已移除，请先选择或添加默认模型，再保存配置', profile.model ? 'success' : 'warning');
+    window.notices.show('model-picker', profile.model ? '模型已移除，请保存配置' : '模型已移除，请选择默认模型', profile.model ? 'success' : 'warning');
     return true;
   }
 
@@ -271,7 +271,7 @@
     const row = [...root.querySelectorAll('.model-catalog-row')].find(item => item.dataset.modelId === id);
     row?.querySelector('[data-set-default]').focus({preventScroll: true});
     row?.scrollIntoView({block: 'nearest'});
-    window.notices.show('model-picker', '模型已加入已选列表，保存配置后生效。');
+    window.notices.show('model-picker', '模型已添加，请保存配置');
   }
 
   /** 初始化独立的手动输入弹窗，取消不会修改配置，Esc 与关闭按钮均返回添加入口。 */
@@ -294,14 +294,21 @@
     dialog.onclose = () => { if (dialog.returnValue !== 'added') root.querySelector('#add-manual-model').focus({preventScroll: true}); };
   }
 
-  /** 更新上下文说明及自动压缩阈值；未知上游容量保守回退，输入只修改弹窗草稿 */
-  function updateContextHint(root) {
+  /** 根据当前 ID 显示官方依据、手动覆盖及压缩阈值；未收录型号回退，不修改弹窗以外的草稿 */
+  function updateContextHint(root, context) {
     const field = root.querySelector('#model-context-window');
-    const size = field.value === '' ? 32768 : Number(field.value);
+    const model = root.querySelector('#edit-model-id').value.trim().toLowerCase();
+    const preset = Object.hasOwn(context.contextDefaults || {}, model) ? context.contextDefaults[model] : null;
+    const fallback = context.contextFallback || 256000;
+    const automatic = field.value === '' && !field.validity.badInput;
+    const size = automatic ? (preset?.tokens || fallback) : Number(field.value);
     const valid = Number.isInteger(size) && size >= 4096 && size <= 2000000;
+    field.placeholder = preset ? `自动 · ${preset.tokens.toLocaleString('zh-CN')} tokens` : `未识别 · 默认 ${fallback.toLocaleString('zh-CN')} tokens`;
+    root.querySelector('#reset-model-context').disabled = automatic;
+    const basis = preset ? `${model === preset.model ? '官方' : `按别名参考 ${preset.model} 官方`}${preset.inputOnly ? '输入上限' : '上下文'} ${preset.tokens.toLocaleString('zh-CN')} tokens（核对 ${preset.verifiedAt}）` : `尚无已核实的官方容量，自动模式使用 ${fallback.toLocaleString('zh-CN')} tokens，可按上游限制手动填写`;
     root.querySelector('#model-context-help').textContent = valid
-      ? `${size.toLocaleString('zh-CN')} tokens 上下文，约 ${(Math.floor(size * 0.9)).toLocaleString('zh-CN')} tokens 自动压缩。请按上游实际容量填写，保存后重启 Codex 生效`
-      : '填写 4096–2000000 的整数 tokens；留空使用保守默认值 32768';
+      ? `${automatic ? '自动' : '手动'}：${size.toLocaleString('zh-CN')} tokens，约 ${(Math.floor(size * 0.9)).toLocaleString('zh-CN')} tokens 自动压缩。${basis}。上游可能另有限制，保存后重启 Codex 生效`
+      : `填写 4096–2000000 的整数 tokens；留空使用已核实的官方容量，未知型号使用 ${fallback.toLocaleString('zh-CN')}`;
   }
 
   /** 一次校验并提交 ID、名称、容量、图片能力与兼容策略；改 ID 时迁移独立设置，失败或取消不改变原选择 */
@@ -315,8 +322,9 @@
     root.querySelector('#cancel-model-name').onclick = () => dialog.close();
     root.querySelector('#reset-model-name').onclick = () => { input.value = ''; input.removeAttribute('aria-invalid'); error.textContent = ''; input.focus(); };
     input.oninput = () => { input.removeAttribute('aria-invalid'); error.textContent = ''; };
-    modelID.oninput = () => { modelID.removeAttribute('aria-invalid'); error.textContent = ''; input.placeholder = modelID.value.trim(); };
-    contextInput.oninput = () => { contextInput.removeAttribute('aria-invalid'); error.textContent = ''; updateContextHint(root); };
+    modelID.oninput = () => { modelID.removeAttribute('aria-invalid'); error.textContent = ''; input.placeholder = modelID.value.trim(); updateContextHint(root, context); };
+    contextInput.oninput = () => { contextInput.removeAttribute('aria-invalid'); error.textContent = ''; updateContextHint(root, context); };
+    root.querySelector('#reset-model-context').onclick = () => { contextInput.value = ''; contextInput.removeAttribute('aria-invalid'); error.textContent = ''; updateContextHint(root, context); };
     form.onsubmit = event => {
       event.preventDefault();
       const id = dialog.dataset.modelId;
@@ -388,7 +396,7 @@
         const scroll = list.scrollTop;
         renderList(root, context);
         list.scrollTop = scroll;
-        window.notices.show('model-picker', nextID !== id ? '模型 ID 已修改。保存后请求将使用新 ID；重启 Codex 后重新选择更新的模型' : size !== previousSize || mode !== previousMode || image !== previousImage ? '模型设置已更新，保存配置并重启 Codex 后生效' : '显示名称已更新，保存配置后生效');
+        window.notices.show('model-picker', nextID !== id ? 'ID 已修改，保存并重启 Codex 后重选模型' : size !== previousSize || mode !== previousMode || image !== previousImage ? '模型已修改，保存并重启 Codex 生效' : '名称已修改，请保存配置');
       }
       dialog.close();
     };
@@ -421,7 +429,7 @@
     const images = context.profile.modelImageInputs || {};
     root.querySelector('#model-image-input').value = Object.hasOwn(images, id) ? String(images[id]) : '';
     window.selectUI.refresh();
-    updateContextHint(root);
+    updateContextHint(root, context);
     root.querySelector('#model-name-error').textContent = '';
     dialog.showModal();
     modelID.focus();
@@ -457,7 +465,7 @@
       <div class="model-catalog-footer"><span id="model-selection-count" role="status" aria-live="polite"></span><span id="model-catalog-hint"></span></div>
       <dialog id="remove-picker-model-dialog" aria-labelledby="remove-picker-model-title" aria-describedby="remove-picker-model-description"><form id="remove-picker-model-form"><h2 id="remove-picker-model-title">移除模型？</h2><p id="remove-picker-model-description"></p><div class="dialog-actions"><button id="cancel-remove-picker-model" class="secondary" type="button" autofocus>取消</button><button class="primary danger" type="submit">确认移除</button></div></form></dialog>
       <dialog id="manual-model-dialog" aria-labelledby="manual-model-title" aria-describedby="manual-model-description"><form id="manual-model-form" novalidate><h2 id="manual-model-title">手动添加模型</h2><p id="manual-model-description"></p><label for="manual-model-id">模型 ID</label><input id="manual-model-id" autocomplete="off" placeholder="输入服务提供的完整模型 ID" aria-describedby="manual-model-error"><div id="manual-model-error" class="manual-model-error" role="status" aria-live="polite"></div><div class="dialog-actions"><button id="cancel-manual-model" class="secondary" type="button">取消</button><button class="primary" type="submit">添加模型</button></div></form></dialog>
-      <dialog id="rename-model-dialog" aria-labelledby="rename-model-title" aria-describedby="rename-model-description"><form id="rename-model-form" novalidate><h2 id="rename-model-title">编辑模型</h2><p id="rename-model-description">服务返回的模型不正确时，在这里修正实际调用的模型 ID</p><div class="model-editor-fields"><label for="edit-model-id">上游模型 ID</label><input id="edit-model-id" autocomplete="off" aria-describedby="model-id-help model-name-error"><p id="model-id-help" class="hint model-edit-help">实际发送给上游的 model 值，请填写正确的完整 ID</p><label for="model-display-name">显示名称（可选）</label><input id="model-display-name" autocomplete="off" aria-describedby="model-display-help model-name-error"><p id="model-display-help" class="hint model-edit-help">仅用于 App 与 Codex 列表展示，留空使用模型默认名称</p><label for="model-image-input">图片输入</label><select id="model-image-input" aria-describedby="model-image-help"><option value="">自动识别模型系列</option><option value="true">支持图片</option><option value="false">仅文字</option></select><p id="model-image-help" class="hint model-edit-help">控制 Codex 的图片上传入口，需上游实际支持。自定义模型可手动开启；保存后重启 Codex 刷新</p><div id="model-compatibility-fields"><label for="model-compatibility">兼容策略</label><select id="model-compatibility" aria-describedby="model-compatibility-help"><option value="">自动（官方地址识别）</option><option value="generic">通用 Chat Completions</option><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="kimi">Kimi / Moonshot</option><option value="kimi-coding">Kimi Coding</option><option value="doubao">Doubao / 豆包</option><option value="minimax">MiniMax</option><option value="glm">GLM / 智谱</option></select><p id="model-compatibility-help" class="hint model-edit-help">用于 Chat Completions 接口。自定义地址默认通用；直转厂商接口时可指定对应策略。原生接口按接口类型处理</p></div><label for="model-context-window">上下文长度（tokens）</label><input id="model-context-window" type="number" inputmode="numeric" min="4096" max="2000000" step="1" placeholder="默认 32768，例如 128000" aria-describedby="model-context-help model-name-error"><p id="model-context-help" class="hint model-edit-help"></p><div id="model-name-error" class="manual-model-error" role="status" aria-live="polite"></div></div><div class="dialog-actions"><button id="reset-model-name" type="button" class="text-button">恢复默认名称</button><button id="cancel-model-name" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>`;
+      <dialog id="rename-model-dialog" aria-labelledby="rename-model-title" aria-describedby="rename-model-description"><form id="rename-model-form" novalidate><h2 id="rename-model-title">编辑模型</h2><p id="rename-model-description">服务返回的模型不正确时，在这里修正实际调用的模型 ID</p><div class="model-editor-fields"><label for="edit-model-id">上游模型 ID</label><input id="edit-model-id" autocomplete="off" aria-describedby="model-id-help model-name-error"><p id="model-id-help" class="hint model-edit-help">实际发送给上游的 model 值，请填写正确的完整 ID</p><label for="model-display-name">显示名称（可选）</label><input id="model-display-name" autocomplete="off" aria-describedby="model-display-help model-name-error"><p id="model-display-help" class="hint model-edit-help">仅用于 App 与 Codex 列表展示，留空使用模型默认名称</p><label for="model-image-input">图片输入</label><select id="model-image-input" aria-describedby="model-image-help"><option value="">自动识别模型系列</option><option value="true">支持图片</option><option value="false">仅文字</option></select><p id="model-image-help" class="hint model-edit-help">控制 Codex 的图片上传入口，需上游实际支持。自定义模型可手动开启；保存后重启 Codex 刷新</p><div id="model-compatibility-fields"><label for="model-compatibility">兼容策略</label><select id="model-compatibility" aria-describedby="model-compatibility-help"><option value="">自动（官方地址识别）</option><option value="generic">通用 Chat Completions</option><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option><option value="kimi">Kimi / Moonshot</option><option value="kimi-coding">Kimi Coding</option><option value="doubao">Doubao / 豆包</option><option value="minimax">MiniMax</option><option value="glm">GLM / 智谱</option></select><p id="model-compatibility-help" class="hint model-edit-help">用于 Chat Completions 接口。自定义地址默认通用；直转厂商接口时可指定对应策略。原生接口按接口类型处理</p></div><label for="model-context-window">上下文长度（tokens）</label><input id="model-context-window" type="number" inputmode="numeric" min="4096" max="2000000" step="1" placeholder="留空按已核实的官方容量" aria-describedby="model-context-help model-name-error"><p id="model-context-help" class="hint model-edit-help"></p><button id="reset-model-context" type="button" class="text-button">恢复自动</button><div id="model-name-error" class="manual-model-error" role="status" aria-live="polite"></div></div><div class="dialog-actions"><button id="reset-model-name" type="button" class="text-button">恢复默认名称</button><button id="cancel-model-name" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>`;
     const state = editorState(context.profile);
     const search = root.querySelector('#model-search');
     search.value = state.query;
