@@ -28,6 +28,7 @@ const esc = (value) =>
 let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
 let modelContextDefaults = Object.create(null);
 let modelContextFallback = 256000;
+let modelOutputDefaults = Object.create(null);
 let selected = null,
   saved = new Set(),
   busy = false,
@@ -236,6 +237,7 @@ function renderPicker() {
     profile: config.models[selected],
     contextDefaults: modelContextDefaults,
     contextFallback: modelContextFallback,
+    outputDefaults: modelOutputDefaults,
     catalog: catalogs.get(selected),
     /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿 */
     isBusy: () => busy,
@@ -585,6 +587,7 @@ void action(async () => {
   const result = await api('/api/config');
   modelContextDefaults = Object.assign(Object.create(null), result.modelContextDefaults);
   modelContextFallback = result.modelContextFallback || 256000;
+  modelOutputDefaults = result.modelOutputDefaults || Object.create(null);
   config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
   saved = new Set(Object.keys(config.models));
   selected = Object.keys(config.models)[0] || null;

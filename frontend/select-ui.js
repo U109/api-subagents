@@ -39,7 +39,10 @@
     menu.querySelectorAll('[data-choice]').forEach(item => item.classList.toggle('highlighted', Number(item.dataset.choice) === index));
     const item = menu.querySelector(`[data-choice="${index}"]`);
     active.binding.button.setAttribute('aria-activedescendant', item.id);
-    item.scrollIntoView({block: 'nearest'});
+    // 只滚动菜单本身，避免候选定位带动弹窗字段区并误触菜单关闭。
+    const top = item.offsetTop;
+    if (top < menu.scrollTop) menu.scrollTop = top;
+    else if (top + item.offsetHeight > menu.scrollTop + menu.clientHeight) menu.scrollTop = top + item.offsetHeight - menu.clientHeight;
   }
 
   /** 跳过禁用项并循环移动候选焦点，边界模式用于 Home 和 End。 */
@@ -97,6 +100,7 @@
     // 弹窗中的下拉必须留在该弹窗内，避免被模态窗口的 inert 规则屏蔽。
     (binding.button.closest('dialog') || document.body).append(menu);
     const rect = binding.button.getBoundingClientRect();
+    active.anchor = {top: rect.top, left: rect.left};
     const below = innerHeight - rect.bottom - 12;
     const above = rect.top - 12;
     const up = below < Math.min(260, options.length * 38 + 10) && above > below;
@@ -183,6 +187,11 @@
   menu.addEventListener('pointerdown', event => event.preventDefault());
   menu.addEventListener('click', event => { const item = event.target.closest('[data-choice]'); if (item) choose(Number(item.dataset.choice)); });
   document.addEventListener('pointerdown', event => { if (active && !menu.contains(event.target) && !active.binding.button.contains(event.target)) close(); });
-  document.addEventListener('scroll', event => { if (active && !menu.contains(event.target)) close(); }, true);
+  // 点击前自动滚动产生的延迟事件无需关闭；按钮位置真的改变时再收起，避免菜单悬空。
+  document.addEventListener('scroll', event => {
+    if (!active || menu.contains(event.target)) return;
+    const rect = active.binding.button.getBoundingClientRect();
+    if (Math.abs(rect.top - active.anchor.top) > 1 || Math.abs(rect.left - active.anchor.left) > 1) close();
+  }, true);
   window.addEventListener('resize', () => close());
 })();

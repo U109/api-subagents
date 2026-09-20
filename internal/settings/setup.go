@@ -42,7 +42,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if err != nil {
 			return nil, err
 		}
-		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow}, nil
+		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}, nil
 	}
 	var input struct {
 		Config json.RawMessage `json:"config"`
@@ -127,7 +127,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	if err = s.Store.Save(c); err != nil {
 		return nil, err
 	}
-	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow}
+	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}
 	if copiedName != "" {
 		result["name"] = copiedName
 	}

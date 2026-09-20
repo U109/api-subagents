@@ -12,16 +12,27 @@ import (
 
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/providers"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
-// forwardResponses 只替换已选模型及上游凭据，逐块转发 Responses 正文；参数、事件和错误由上游与 Codex 解释。
+// forwardResponses 替换模型及凭据，仅在普通生成请求未给出额度时补模型预算；正文和返回流保持原样。
 // 不解析或改写 SSE，不合成完成事件，不缓存思考历史；客户端取消和超时会终止上游请求，失败不重试。
 func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile) {
 	body, err := sjson.SetBytes(original, "model", profile.Model)
 	if err != nil {
 		replyError(w, http.StatusBadRequest, "请求 JSON 无效")
 		return
+	}
+	// null、零值或非标准输出字段也视为调用方显式参数，交给上游校验；压缩接口不接受生成额度。
+	if req.URL.Path == "/v1/responses" && !gjson.GetBytes(original, "max_output_tokens").Exists() && !gjson.GetBytes(original, "max_tokens").Exists() && !gjson.GetBytes(original, "max_completion_tokens").Exists() {
+		if limit := profile.OutputLimit(profile.Model); limit > 0 {
+			body, err = sjson.SetBytes(body, "max_output_tokens", limit)
+			if err != nil {
+				replyError(w, http.StatusBadRequest, "无法设置模型输出额度")
+				return
+			}
+		}
 	}
 	endpoint, _, _ := providers.RequestSpec(profile, nil, "", nil)
 	if req.URL.Path == "/v1/responses/compact" {

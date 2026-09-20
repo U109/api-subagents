@@ -21,25 +21,26 @@ var Defaults = map[string]string{"compatible": "https://api.openai.com/v1", "res
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
-	Protocol            string            `json:"protocol"`
-	Model               string            `json:"model"`
-	BaseURL             string            `json:"baseUrl"`
-	APIKey              string            `json:"apiKey"`
-	APIKeyEnv           string            `json:"apiKeyEnv"`
-	Description         string            `json:"description"`
-	ReasoningEffort     string            `json:"reasoningEffort,omitempty"`
-	RelayModels         []string          `json:"relayModels,omitempty"`
-	ModelNames          map[string]string `json:"modelNames,omitempty"`
-	ModelContextWindows map[string]int    `json:"modelContextWindows,omitempty"`
-	ModelCompatibility  map[string]string `json:"modelCompatibility,omitempty"`
-	ModelImageInputs    map[string]bool   `json:"modelImageInputs,omitempty"`
-	MaxTokens           int               `json:"maxTokens"`
-	Stream              bool              `json:"stream"`
-	FirstTimeout        int               `json:"firstResponseTimeoutSeconds"`
-	IdleTimeout         int               `json:"streamIdleTimeoutSeconds"`
-	TaskTimeout         int               `json:"taskTimeoutMinutes"`
-	HasKey              bool              `json:"hasKey,omitempty"`
-	SavedName           *string           `json:"savedName,omitempty"`
+	Protocol            string                        `json:"protocol"`
+	Model               string                        `json:"model"`
+	BaseURL             string                        `json:"baseUrl"`
+	APIKey              string                        `json:"apiKey"`
+	APIKeyEnv           string                        `json:"apiKeyEnv"`
+	Description         string                        `json:"description"`
+	ReasoningEffort     string                        `json:"reasoningEffort,omitempty"`
+	RelayModels         []string                      `json:"relayModels,omitempty"`
+	ModelNames          map[string]string             `json:"modelNames,omitempty"`
+	ModelContextWindows map[string]int                `json:"modelContextWindows,omitempty"`
+	ModelCompatibility  map[string]string             `json:"modelCompatibility,omitempty"`
+	ModelImageInputs    map[string]bool               `json:"modelImageInputs,omitempty"`
+	ModelOutputs        map[string]ModelOutputSetting `json:"modelOutputs,omitempty"`
+	MaxTokens           int                           `json:"maxTokens"`
+	Stream              bool                          `json:"stream"`
+	FirstTimeout        int                           `json:"firstResponseTimeoutSeconds"`
+	IdleTimeout         int                           `json:"streamIdleTimeoutSeconds"`
+	TaskTimeout         int                           `json:"taskTimeoutMinutes"`
+	HasKey              bool                          `json:"hasKey,omitempty"`
+	SavedName           *string                       `json:"savedName,omitempty"`
 }
 
 type Config struct {
@@ -133,6 +134,10 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
 		p.ModelImageInputs = normalizeModelImageInputs(p)
+		p.ModelOutputs, err = normalizeModelOutputs(p)
+		if err != nil {
+			return c, fmt.Errorf("%s: %w", name, err)
+		}
 		if p.BaseURL == "" {
 			p.BaseURL = base
 		}
@@ -199,6 +204,7 @@ func Editable(c Config) Config {
 		p.ModelContextWindows = maps.Clone(p.ModelContextWindows)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
 		p.ModelImageInputs = maps.Clone(p.ModelImageInputs)
+		p.ModelOutputs = maps.Clone(p.ModelOutputs)
 		p.HasKey = p.APIKey != "" || (p.APIKeyEnv != "" && os.Getenv(p.APIKeyEnv) != "")
 		p.APIKey = ""
 		source := name
