@@ -67,10 +67,11 @@
     node('update-state').textContent = window.notices.formatMessage(next.update.message);
     node('update-available-row').hidden = !next.update.availableVersion;
     node('update-available-version').textContent = next.update.availableVersion ? 'v' + next.update.availableVersion : '—';
-    node('check-update').textContent = phase === 'available' ? '下载 ' + next.update.availableVersion : phase === 'downloaded' ? '重启并更新' : phase === 'checking' ? '正在检查…' : phase === 'downloading' ? '正在下载…' : '检查更新';
+    node('check-update').textContent = phase === 'available' ? '下载 ' + next.update.availableVersion : phase === 'downloaded' ? '重启并更新' : phase === 'downloading' ? '正在下载…' : phase === 'installing' ? '正在安装…' : '下载更新';
+    node('check-update').hidden = !['available', 'downloaded', 'downloading', 'installing'].includes(phase);
     node('check-update').disabled = actionPending || ['checking', 'downloading', 'installing'].includes(phase) || next.plugin.phase === 'installing';
-    node('recheck-update').hidden = !['available', 'downloaded'].includes(phase);
-    node('recheck-update').disabled = node('check-update').disabled;
+    node('recheck-update').textContent = phase === 'checking' ? '正在检查最新版本…' : '检查最新版本';
+    node('recheck-update').disabled = actionPending || ['checking', 'downloading', 'installing'].includes(phase) || next.plugin.phase === 'installing';
     node('update-label').textContent = phase === 'available' ? '有新版本' : phase === 'downloaded' ? '更新已就绪' : phase === 'downloading' ? '正在下载' : phase === 'checking' ? '正在检查' : '检查更新';
     node('update-dot').hidden = !['available', 'downloaded'].includes(phase);
     node('open-releases').hidden = !['manual', 'error'].includes(phase);

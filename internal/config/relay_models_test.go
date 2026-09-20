@@ -51,11 +51,11 @@ func TestRelayModelsValidation(t *testing.T) {
 	}
 }
 
-// TestRelayModelsPersistence 保存、读取和重命名保留模型列表；编辑副本不能改动原配置的共享切片。
+// TestRelayModelsPersistence 保存、读取和重命名保留模型列表与拖拽顺序；编辑副本不能改动原配置的共享切片。
 func TestRelayModelsPersistence(t *testing.T) {
 	store := NewConfigStore(filepath.Join(t.TempDir(), "models.json"))
 	c := EmptyConfig()
-	c.Models["demo"] = Profile{Protocol: "responses", Model: "default", RelayModels: []string{"model-a", "model-b"}, APIKey: "synthetic-key", MaxTokens: 4096, FirstTimeout: 180, IdleTimeout: 120, TaskTimeout: 15}
+	c.Models["demo"] = Profile{Protocol: "responses", Model: "default", RelayModels: []string{"model-a", "model-b"}, ModelOrder: []string{"model-b", "default", "model-a", "removed"}, APIKey: "synthetic-key", MaxTokens: 4096, FirstTimeout: 180, IdleTimeout: 120, TaskTimeout: 15}
 	if err := store.Save(c); err != nil {
 		t.Fatal(err)
 	}
@@ -65,21 +65,25 @@ func TestRelayModelsPersistence(t *testing.T) {
 	}
 	draft := Editable(saved)
 	draft.Models["demo"].RelayModels[0] = "draft-model"
+	draft.Models["demo"].ModelOrder[0] = "draft-order"
 	if saved.Models["demo"].RelayModels[0] != "model-a" {
 		t.Fatal("editing mutated original slice")
+	}
+	if !reflect.DeepEqual(saved.Models["demo"].ModelOrder, []string{"model-b", "default", "model-a"}) {
+		t.Fatal("model order was not normalized or draft mutated saved order")
 	}
 	draft = Editable(saved)
 	draft.Models["renamed"] = draft.Models["demo"]
 	delete(draft.Models, "demo")
 	merged, err := MergeKeys(shared.Marshal(draft), saved, true)
-	if err != nil || !reflect.DeepEqual(merged.Models["renamed"].RelayModels, []string{"model-a", "model-b"}) || merged.Models["renamed"].APIKey != "synthetic-key" {
+	if err != nil || !reflect.DeepEqual(merged.Models["renamed"].RelayModels, []string{"model-a", "model-b"}) || !reflect.DeepEqual(merged.Models["renamed"].ModelOrder, []string{"model-b", "default", "model-a"}) || merged.Models["renamed"].APIKey != "synthetic-key" {
 		t.Fatal("rename lost models or credentials", err)
 	}
 	if err = store.Save(merged); err != nil {
 		t.Fatal(err)
 	}
 	reread, err := store.Read()
-	if err != nil || !reflect.DeepEqual(reread.Models["renamed"].RelayModels, []string{"model-a", "model-b"}) {
+	if err != nil || !reflect.DeepEqual(reread.Models["renamed"].RelayModels, []string{"model-a", "model-b"}) || !reflect.DeepEqual(reread.Models["renamed"].ModelOrder, []string{"model-b", "default", "model-a"}) {
 		t.Fatal("save lost list", err)
 	}
 }

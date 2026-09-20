@@ -42,13 +42,7 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	sort.Strings(names)
 	for _, name := range names {
 		profile := config.Models[name]
-		entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, profile.Model), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(profile.Model), SupportsImages: profile.SupportsImages(profile.Model)})
-		seen := map[string]bool{profile.Model: true}
-		for _, model := range profile.RelayModels {
-			if seen[model] {
-				continue
-			}
-			seen[model] = true
+		for _, model := range profile.OrderedModels() {
 			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model), SupportsImages: profile.SupportsImages(model)})
 		}
 	}

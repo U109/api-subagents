@@ -26,6 +26,14 @@
 .model-catalog-row + .model-catalog-row { border-top: 1px solid #f0f0f0; }
 .model-catalog-row.is-selected { background: #fafaf9; }
 .model-catalog-row:hover { background: #f3f3f2; }
+.model-catalog-row.is-dragging { opacity: .46; background: #eceae7; }
+.model-catalog-row.drag-before { box-shadow: inset 0 2px 0 var(--action); }
+.model-catalog-row.drag-after { box-shadow: inset 0 -2px 0 var(--action); }
+.model-drag-handle { align-self: stretch; display: grid; place-items: center; width: 28px; margin-right: -8px; padding: 0 0 0 6px; color: #aaa49e; cursor: grab; flex-shrink: 0; touch-action: none; }
+.model-drag-handle:hover, .model-drag-handle:focus-visible { color: var(--action); }
+.model-drag-handle:active { cursor: grabbing; }
+.model-drag-handle[aria-disabled="true"] { color: #d2cfcc; cursor: not-allowed; }
+.model-drag-handle svg { width: 16px; height: 20px; fill: currentColor; stroke: none; }
 .model-catalog-choice { display: flex; align-items: center; align-self: stretch; gap: 12px; padding: 10px 0 10px 16px; margin: 0; flex: 1; min-width: 0; cursor: pointer; color: var(--ink); font-weight: 400; }
 .model-catalog-choice input { appearance: auto; width: 15px; height: 15px; padding: 0; margin: 0; accent-color: var(--action); flex-shrink: 0; cursor: pointer; }
 .model-catalog-choice input:disabled { opacity: .75; cursor: default; }
@@ -80,7 +88,8 @@ dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7;
   .model-catalog-actions .secondary svg, .model-catalog-actions .secondary > span { display: none; }
   .model-catalog-head { padding: 9px 10px; }
   .model-catalog-row { gap: 5px; padding-right: 5px; }
-  .model-catalog-choice { padding-left: 10px; gap: 9px; }
+  .model-drag-handle { width: 24px; margin-right: -5px; padding-left: 4px; }
+  .model-catalog-choice { padding-left: 6px; gap: 9px; }
   .model-catalog-name { font-size: 13px; }
   .model-default-button { min-width: 65px; padding: 6px 7px; font-size: 12px; }
   .model-catalog-footer { align-items: flex-start; gap: 8px; }

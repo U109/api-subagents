@@ -36,6 +36,25 @@ func TestConcreteModelSelectionSurvivesDefaultChange(t *testing.T) {
 	}
 }
 
+// TestModelEntriesFollowSavedOrder 验证拖拽顺序控制 Codex 目录位置，但不会改变默认模型身份或稳定别名。
+func TestModelEntriesFollowSavedOrder(t *testing.T) {
+	c := configstore.EmptyConfig()
+	c.Models["worker"] = configstore.Profile{Model: "default", RelayModels: []string{"fast", "deep"}, ModelOrder: []string{"deep", "default", "fast"}}
+	entries := ModelEntries(c, "worker")
+	want := []string{relayModel, RelayModelAlias("worker", "deep"), RelayModelAlias("worker", "default"), RelayModelAlias("worker", "fast")}
+	if len(entries) != len(want) {
+		t.Fatalf("catalog length=%d, want %d", len(entries), len(want))
+	}
+	for index, slug := range want {
+		if entries[index].Slug != slug {
+			t.Fatalf("catalog[%d]=%q, want %q", index, entries[index].Slug, slug)
+		}
+	}
+	if _, profile, err := ResolveCatalogModel(c, "worker", relayModel); err != nil || profile.Model != "default" {
+		t.Fatal("sorting changed follow-App default", err)
+	}
+}
+
 // TestFreeTextConnectionRouting 验证自由名称进入目录后可准确恢复，斜线与转义文本不能串到另一连接。
 func TestFreeTextConnectionRouting(t *testing.T) {
 	c := configstore.EmptyConfig()

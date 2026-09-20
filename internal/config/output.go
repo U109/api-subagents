@@ -9,7 +9,7 @@ import (
 
 const MaxModelOutputTokens = 1000000
 
-// ModelOutputSetting 区分厂商资料、火山 Coding Plan、上游默认和自定义预算；只用于 Codex Responses。
+// ModelOutputSetting 区分自动、旧版平台覆盖、上游默认和自定义预算；只用于 Codex Responses。
 type ModelOutputSetting struct {
 	Mode   string `json:"mode"`
 	Tokens int    `json:"tokens,omitempty"`

@@ -29,6 +29,7 @@ type Profile struct {
 	Description         string                        `json:"description"`
 	ReasoningEffort     string                        `json:"reasoningEffort,omitempty"`
 	RelayModels         []string                      `json:"relayModels,omitempty"`
+	ModelOrder          []string                      `json:"modelOrder,omitempty"`
 	ModelNames          map[string]string             `json:"modelNames,omitempty"`
 	ModelContextWindows map[string]int                `json:"modelContextWindows,omitempty"`
 	ModelCompatibility  map[string]string             `json:"modelCompatibility,omitempty"`
@@ -121,6 +122,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
+		p.ModelOrder = normalizeModelOrder(p)
 		p.ModelNames, err = normalizeModelNames(p)
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
@@ -200,6 +202,7 @@ func Editable(c Config) Config {
 	result.Models = map[string]Profile{}
 	for name, p := range c.Models {
 		p.RelayModels = append([]string(nil), p.RelayModels...)
+		p.ModelOrder = append([]string(nil), p.ModelOrder...)
 		p.ModelNames = maps.Clone(p.ModelNames)
 		p.ModelContextWindows = maps.Clone(p.ModelContextWindows)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
