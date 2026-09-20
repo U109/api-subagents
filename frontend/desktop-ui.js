@@ -69,6 +69,8 @@
     node('update-available-version').textContent = next.update.availableVersion ? 'v' + next.update.availableVersion : '—';
     node('check-update').textContent = phase === 'available' ? '下载 ' + next.update.availableVersion : phase === 'downloaded' ? '重启并更新' : phase === 'checking' ? '正在检查…' : phase === 'downloading' ? '正在下载…' : '检查更新';
     node('check-update').disabled = actionPending || ['checking', 'downloading', 'installing'].includes(phase) || next.plugin.phase === 'installing';
+    node('recheck-update').hidden = !['available', 'downloaded'].includes(phase);
+    node('recheck-update').disabled = node('check-update').disabled;
     node('update-label').textContent = phase === 'available' ? '有新版本' : phase === 'downloaded' ? '更新已就绪' : phase === 'downloading' ? '正在下载' : phase === 'checking' ? '正在检查' : '检查更新';
     node('update-dot').hidden = !['available', 'downloaded'].includes(phase);
     node('open-releases').hidden = !['manual', 'error'].includes(phase);
@@ -161,9 +163,11 @@
   node('enable-relay').onclick = () => desktopAction(() => bridge.enableRelay(window.modelEditor.selectedName()));
   node('relay-switch').onclick = () => desktopAction(() => state.relay.enabled ? bridge.disableRelay() : bridge.enableRelay(window.modelEditor.selectedName()));
   node('check-update').onclick = updateAction;
+  node('recheck-update').onclick = () => desktopAction(() => bridge.checkUpdate());
   node('update-entry').onclick = () => {
     window.uiShell.openDialog('update-dialog');
-    if (state && !['available', 'downloaded', 'downloading', 'checking', 'installing'].includes(state.update.phase)) void updateAction();
+    // 每次打开都刷新发布信息，已有下载仅在后台确认仍为最新版时复用。
+    if (state && !actionPending && !['downloading', 'checking', 'installing'].includes(state.update.phase)) void desktopAction(() => bridge.checkUpdate());
   };
   node('open-releases').onclick = () => desktopAction(() => bridge.openReleases());
   node('confirm-exit').onclick = () => {

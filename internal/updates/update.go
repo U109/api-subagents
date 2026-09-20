@@ -150,7 +150,7 @@ func NewerVersion(next, current string) bool {
 	return false
 }
 
-// getJSON 限制发布元数据为 1 MB，网络错误不回显 URL 或响应原文。
+// getJSON 要求重新验证发布元数据并限制为 1 MB，网络错误不回显 URL 或响应原文。
 func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
@@ -158,6 +158,8 @@ func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) erro
 	}
 	req.Header.Set("User-Agent", "API-Subagents/"+u.Release.Version)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
 	res, err := u.Client.Do(req)
 	if err != nil {
 		return errors.New("无法连接更新服务。")
@@ -173,10 +175,10 @@ func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) erro
 	return nil
 }
 
-// Check 仅显式操作时查询最新稳定 Release；发现版本后核对固定名称的下载清单。
-func (u *Updater) Check(ctx context.Context) error {
+// Check 仅显式操作时查询最新稳定 Release；已下载旧包时也会重新比较，发现更高版本则改推最新包。
+func (u *Updater) Check(ctx context.Context) (checkErr error) {
 	u.mu.Lock()
-	if shared.Contains([]string{"checking", "downloading", "downloaded", "installing"}, u.state.Phase) {
+	if shared.Contains([]string{"checking", "downloading", "installing"}, u.state.Phase) {
 		u.mu.Unlock()
 		return nil
 	}
@@ -191,10 +193,24 @@ func (u *Updater) Check(ctx context.Context) error {
 		u.notify()
 		return nil
 	}
+	previousState, previousManifest := u.state, u.manifest
+	previousURL, previousFile := u.downloadURL, u.file
+	hadDownload := previousState.Phase == "downloaded" && previousFile != ""
+	// 检查失败仍保留此前完整下载的包；重新进入安装时仍须核对大小和哈希。
+	defer func() {
+		if checkErr != nil && hadDownload {
+			u.mu.Lock()
+			u.state, u.manifest = previousState, previousManifest
+			u.downloadURL, u.file = previousURL, previousFile
+			u.mu.Unlock()
+			u.notify()
+		}
+	}()
 	u.state.Phase = "checking"
 	u.state.AvailableVersion = ""
 	u.state.Message = "正在检查更新…"
-	u.file = ""
+	u.state.Progress = 0
+	u.manifest, u.downloadURL, u.file = UpdateManifest{}, "", ""
 	u.mu.Unlock()
 	u.notify()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -251,6 +267,10 @@ func (u *Updater) Check(ctx context.Context) error {
 		u.change("latest", "插件已是最新版本")
 		return nil
 	}
+	if hadDownload && NewerVersion(previousManifest.Version, version) {
+		u.change("error", "版本信息暂未同步，请稍后重试")
+		return errors.New("版本信息暂未同步，请稍后重试")
+	}
 	u.mu.Lock()
 	u.manifest = manifest
 	u.downloadURL = root + url.PathEscape(manifest.File)
@@ -258,6 +278,15 @@ func (u *Updater) Check(ctx context.Context) error {
 	u.state.AvailableVersion = version
 	u.state.Message = "发现新版本 " + version
 	u.state.Progress = 0
+	if hadDownload && previousManifest == manifest {
+		u.file = previousFile
+		u.state.Phase = "downloaded"
+		u.state.Progress = 100
+		u.state.Message = "最新版已下载，可以重启更新"
+		if u.plugin {
+			u.state.Message = "最新版插件已下载"
+		}
+	}
 	u.mu.Unlock()
 	u.notify()
 	return nil
