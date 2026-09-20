@@ -15,6 +15,7 @@ import (
 type ModelEntry struct {
 	Slug, Name, Description, ReasoningEffort string
 	ContextWindow                            int
+	SupportsImages                           bool
 }
 
 // relayConnectionAlias 将自由文本名称编码为单个路由段；旧版连接名称保持原别名不变。
@@ -33,7 +34,7 @@ func RelayModelAlias(connection, model string) string {
 // 默认模型与额外模型都使用固定模型别名；只有“跟随 App”追踪默认值，改默认不误切已选具体模型。
 func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	selected := config.Models[defaultName]
-	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: selected.ReasoningEffort, ContextWindow: selected.ContextWindow(selected.Model)}}
+	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: selected.ReasoningEffort, ContextWindow: selected.ContextWindow(selected.Model), SupportsImages: selected.SupportsImages(selected.Model)}}
 	names := make([]string, 0, len(config.Models))
 	for name := range config.Models {
 		names = append(names, name)
@@ -41,26 +42,26 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	sort.Strings(names)
 	for _, name := range names {
 		profile := config.Models[name]
-		entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, profile.Model), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(profile.Model)})
+		entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, profile.Model), Name: name + " · " + profile.ModelName(profile.Model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(profile.Model), SupportsImages: profile.SupportsImages(profile.Model)})
 		seen := map[string]bool{profile.Model: true}
 		for _, model := range profile.RelayModels {
 			if seen[model] {
 				continue
 			}
 			seen[model] = true
-			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model)})
+			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model), SupportsImages: profile.SupportsImages(model)})
 		}
 	}
 	return entries
 }
 
-// ResolveCatalogModel 只接受当前配置中的本地别名，继续支持跟随 App 和旧版连接别名。
+// ResolveCatalogModel 解析当前配置中的本地别名；旧对话的真实模型 ID 只允许匹配已配置模型。
 // 连接名仅解码一次；返回请求独享的副本，切换模型不会修改默认模型、地址或 Key。
 func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (string, configstore.Profile, error) {
 	connection, suffix := defaultName, ""
 	if alias != "" && alias != relayModel {
 		if !strings.HasPrefix(alias, relayModel+"/") {
-			return "", configstore.Profile{}, errors.New("请选择 API Subagents 挟持模型列表中的模型。")
+			return resolveOriginalModel(config, defaultName, alias)
 		}
 		var hasSuffix bool
 		connection, suffix, hasSuffix = strings.Cut(strings.TrimPrefix(alias, relayModel+"/"), "/")
@@ -96,4 +97,33 @@ func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (
 	}
 	resolved.Model = model
 	return connection, resolved, nil
+}
+
+// resolveOriginalModel 让原自定义提供商的旧对话继续使用已配置模型；优先当前连接，其余重名拒绝猜测凭据。
+func resolveOriginalModel(config configstore.Config, defaultName, model string) (string, configstore.Profile, error) {
+	connection := ""
+	for name, profile := range config.Models {
+		matched := profile.Model == model
+		for _, candidate := range profile.RelayModels {
+			matched = matched || candidate == model
+		}
+		if !matched {
+			continue
+		}
+		if name == defaultName {
+			connection = name
+			break
+		}
+		if connection != "" {
+			connection = "\x00"
+		} else {
+			connection = name
+		}
+	}
+	if connection == "" || connection == "\x00" {
+		return "", configstore.Profile{}, errors.New("请在 Codex 中选择具体的挟持模型；原模型未配置或对应多个连接")
+	}
+	profile, err := configstore.ResolveProfile(config, connection)
+	profile.Model = model
+	return connection, profile, err
 }

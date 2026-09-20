@@ -23,12 +23,19 @@ import (
 func TestCodexProviderReload(t *testing.T) {
 	bin := codexBinary(t)
 	var requests atomic.Int32
+	var originalRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		requests.Add(1)
 		var body shared.Object
 		json.NewDecoder(req.Body).Decode(&body)
-		if body["model"] != "mock-model" || req.Header.Get("Authorization") != "Bearer synthetic-relay-key" || req.Header.Get("X-Api-Subagents-Token") != "" {
+		if req.Header.Get("Authorization") == "Bearer synthetic-original-key" {
+			originalRequests.Add(1)
+			if body["model"] != "original-model" {
+				t.Error("local alias escaped through the original provider")
+			}
+		} else if body["model"] != "mock-model" || req.Header.Get("Authorization") != "Bearer synthetic-relay-key" || req.Header.Get("X-Api-Subagents-Token") != "" {
 			t.Error("local alias or credentials crossed the upstream boundary")
+		} else {
+			requests.Add(1)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		io.WriteString(w, upstreamReply("responses", true))
@@ -38,11 +45,30 @@ func TestCodexProviderReload(t *testing.T) {
 	if err := r.Disable(); err != nil {
 		t.Fatal(err)
 	}
-	original := "model='original-model'\nmodel_provider='original'\n[model_providers.original]\nname='Original mock'\nbase_url='" + server.URL + "/v1'\nwire_api='responses'\nrequires_openai_auth=false\n"
+	original := "model='original-model'\nmodel_provider='original'\n[model_providers.original]\nname='Original mock'\nbase_url='" + server.URL + "/v1'\nwire_api='responses'\nrequires_openai_auth=false\nhttp_headers={Authorization='Bearer synthetic-original-key'}\n"
 	if err := os.WriteFile(filepath.Join(r.Codex.Home, "config.toml"), []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Second)
+	defer cancel()
+	initialCmd := codexTestCommand(ctx, bin, "exec", "--skip-git-repo-check", "--json", "-s", "read-only", "-C", root, "Reply OK without tools.")
+	initialCmd.Env = codexTestEnv(r.Codex.Home)
+	initialCmd.Dir = root
+	output, err := initialCmd.CombinedOutput()
+	if err != nil || originalRequests.Load() != 1 {
+		t.Fatalf("original provider setup failed: %v\n%s", err, output)
+	}
+	threadID := ""
+	for _, line := range bytes.Split(output, []byte("\n")) {
+		var item shared.Object
+		if json.Unmarshal(line, &item) == nil && item["type"] == "thread.started" {
+			threadID = shared.Str(item["thread_id"])
+		}
+	}
+	if threadID == "" {
+		t.Fatal("original conversation was not saved")
+	}
 	oldClient := startCodexRPC(t, bin, r.Codex.Home, root)
 	initial := oldClient.call(t, "thread/start", shared.Object{"ephemeral": true})
 	if initial["modelProvider"] != "original" {
@@ -65,16 +91,28 @@ func TestCodexProviderReload(t *testing.T) {
 			t.Fatal("restarted Codex did not select local provider", result["modelProvider"])
 		}
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	cmd := codexTestCommand(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-m", alias, "-C", root, "Reply OK without tools.")
 	cmd.Env = codexTestEnv(r.Codex.Home)
 	cmd.Dir = root
 	if output, err := cmd.CombinedOutput(); err != nil || requests.Load() != 1 {
 		t.Fatalf("reloaded route failed: %v, requests=%d\n%s", err, requests.Load(), output)
 	}
+	for i, selected := range []string{alias, "mock-model"} {
+		cmd = codexTestCommand(ctx, bin, "-c", "model_provider=\"original\"", "exec", "resume", "--skip-git-repo-check", "--json", "-m", selected, threadID, "Reply OK without tools.")
+		cmd.Env = codexTestEnv(r.Codex.Home)
+		cmd.Dir = root
+		if output, err := cmd.CombinedOutput(); err != nil || requests.Load() != int32(i+2) {
+			t.Fatalf("old provider identity bypassed relay: %v, requests=%d\n%s", err, requests.Load(), output)
+		}
+	}
 	if err := r.Disable(); err != nil {
 		t.Fatal(err)
+	}
+	cmd = codexTestCommand(ctx, bin, "exec", "resume", "--skip-git-repo-check", "--json", "-m", "original-model", threadID, "Reply OK without tools.")
+	cmd.Env = codexTestEnv(r.Codex.Home)
+	cmd.Dir = root
+	if output, err := cmd.CombinedOutput(); err != nil || originalRequests.Load() != 2 || requests.Load() != 3 {
+		t.Fatalf("restored conversation route failed: %v\n%s", err, output)
 	}
 	t.Run("restarted-after-disable", func(t *testing.T) {
 		client := startCodexRPC(t, bin, r.Codex.Home, root)

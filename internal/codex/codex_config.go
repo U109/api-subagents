@@ -105,7 +105,7 @@ func RootKeySpans(data []byte, keys map[string]bool) ([][2]int, error) {
 	return spans, nil
 }
 
-// PatchCodexConfig 接管模型、提供商与目录；暂存全局上下文覆盖项，让不同模型的容量生效，关闭时恢复。
+// PatchCodexConfig 接管模型、目录及原自定义提供商；旧对话的提供商身份保持可用，关闭时恢复完整原配置。
 func PatchCodexConfig(original []byte, catalog string, port int, token string) ([]byte, error) {
 	var err error
 	original, err = withoutInactiveProvider(original)
@@ -122,6 +122,10 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 	if shared.Obj(parsed["model_providers"])[providerID] != nil {
 		return nil, errors.New("Codex 已有同名自定义提供商，未覆盖。")
 	}
+	original, previousProvider, err := preservePreviousProvider(original, parsed)
+	if err != nil {
+		return nil, err
+	}
 	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true})
 	if err != nil {
 		return nil, err
@@ -133,7 +137,11 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 		rest = append(append(append([]byte{}, rest[:span[0]]...), []byte(saved)...), rest[span[1]:]...)
 	}
 	prefix := fmt.Sprintf("%s\nmodel = %q\nmodel_provider = %q\nmodel_catalog_json = %s\n%s\n", defaultsBegin, relayModel, providerID, string(shared.Marshal(filepath.ToSlash(catalog))), defaultsEnd)
-	suffix := fmt.Sprintf("\n%s\n[model_providers.%s]\nname = \"API Subagents · 挟持模式\"\nbase_url = \"http://127.0.0.1:%d/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = false\nsupports_websockets = false\nrequest_max_retries = 0\nstream_max_retries = 0\nstream_idle_timeout_ms = 650000\nhttp_headers = { \"X-Api-Subagents-Token\" = %q }\n%s\n", providerBegin, providerID, port, token, providerEnd)
+	suffix := "\n" + providerBegin + "\n" + localProviderConfig(providerID, port, token)
+	if previousProvider != "" {
+		suffix += "\n" + localProviderConfig(fmt.Sprintf("%q", previousProvider), port, token)
+	}
+	suffix += providerEnd + "\n"
 	patched := append(append([]byte(prefix), rest...), []byte(suffix)...)
 	if toml.Unmarshal(patched, &parsed) != nil {
 		return nil, errors.New("生成的 Codex 配置校验失败。")
@@ -175,7 +183,7 @@ func RestoreCodexConfig(current []byte, backup codexBackup) ([]byte, error) {
 				return nil, errors.New("Codex 的托管提供商设置已被修改，未自动覆盖；请检查本机备份。")
 			}
 			// Codex 自己切换模型会改写 model，并可能在此处新增推理设置；这些是正常操作。
-			extra, err = restoreSelectedModel(rest[start:end], backup.Written[oldStart:oldEnd])
+			extra, err = restoreSelectedModel(rest[start:end], backup.Written[oldStart:oldEnd], backup)
 			if err != nil {
 				return nil, err
 			}
@@ -201,16 +209,27 @@ func RestoreCodexConfig(current []byte, backup codexBackup) ([]byte, error) {
 	return result.Bytes(), nil
 }
 
-// restoreSelectedModel 允许 Codex 在托管别名之间切换，保留同时新增的其他顶层设置。
+// restoreSelectedModel 允许 Codex 在托管别名、原默认模型和接管的提供商身份之间切换，保留新增的其他顶层设置。
 // 提供商、目录或模型被切换到本功能之外时拒绝猜测恢复，备份和正在运行的服务保持可用。
-func restoreSelectedModel(current, written []byte) ([]byte, error) {
+func restoreSelectedModel(current, written []byte, backup codexBackup) ([]byte, error) {
 	var now, old shared.Object
 	conflict := errors.New("Codex 的托管模型设置已被手动修改，未自动覆盖；请检查本机备份。")
 	if toml.Unmarshal(current, &now) != nil || toml.Unmarshal(written, &old) != nil {
 		return nil, conflict
 	}
 	model := shared.Str(now["model"])
-	if (model != relayModel && !strings.HasPrefix(model, relayModel+"/")) || now["model_provider"] != old["model_provider"] || now["model_catalog_json"] != old["model_catalog_json"] {
+	var original, managed shared.Object
+	if toml.Unmarshal(backup.Original, &original) != nil {
+		return nil, conflict
+	}
+	start, end, err := managedBlock(backup.Written, providerBegin, providerEnd)
+	if err != nil || toml.Unmarshal(backup.Written[start:end], &managed) != nil {
+		return nil, conflict
+	}
+	provider := shared.Str(now["model_provider"])
+	providerOK := provider == shared.Str(old["model_provider"]) || (provider == shared.Str(original["model_provider"]) && shared.Obj(managed["model_providers"])[provider] != nil)
+	modelOK := model == relayModel || strings.HasPrefix(model, relayModel+"/") || (model != "" && model == shared.Str(original["model"]))
+	if !modelOK || !providerOK || now["model_catalog_json"] != old["model_catalog_json"] {
 		return nil, conflict
 	}
 	spans, err := RootKeySpans(current, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true})
@@ -231,14 +250,18 @@ func restoreSelectedModel(current, written []byte) ([]byte, error) {
 func (c CodexConfig) WriteCatalog(config configstore.Config, defaultName string) error {
 	models := []any{}
 	for index, entry := range ModelEntries(config, defaultName) {
-		models = append(models, catalogModel(entry.Slug, entry.Name, entry.Description, entry.ReasoningEffort, index, entry.ContextWindow))
+		models = append(models, catalogModel(entry.Slug, entry.Name, entry.Description, entry.ReasoningEffort, index, entry.ContextWindow, entry.SupportsImages))
 	}
 	return shared.AtomicWrite(c.catalogPath(), shared.Marshal(shared.Object{"models": models}), 0600)
 }
 
-// catalogModel 按模型声明上下文容量并在 90% 时压缩，不注入用于约束思考标签或进度语言的额外指令。
+// catalogModel 按模型声明图片输入与上下文容量并在 90% 时压缩，不注入用于约束思考标签或进度语言的额外指令。
 // 未确认的容量由配置层保守回退，不启用远端专属搜索、WebSocket 或付费辅助模型。
-func catalogModel(slug, name, description, effort string, priority, contextWindow int) shared.Object {
+func catalogModel(slug, name, description, effort string, priority, contextWindow int, supportsImages bool) shared.Object {
+	modalities := []string{"text"}
+	if supportsImages {
+		modalities = append(modalities, "image")
+	}
 	var defaultEffort any
 	if effort != "" {
 		defaultEffort = effort
@@ -272,7 +295,7 @@ func catalogModel(slug, name, description, effort string, priority, contextWindo
 		"effective_context_window_percent":     95,
 		"supports_parallel_tool_calls":         true,
 		"experimental_supported_tools":         []string{},
-		"input_modalities":                     []string{"text"},
+		"input_modalities":                     modalities,
 		"supports_search_tool":                 false,
 		"prefer_websockets":                    false,
 		"use_responses_lite":                   false,

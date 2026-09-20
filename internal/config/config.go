@@ -32,6 +32,7 @@ type Profile struct {
 	ModelNames          map[string]string `json:"modelNames,omitempty"`
 	ModelContextWindows map[string]int    `json:"modelContextWindows,omitempty"`
 	ModelCompatibility  map[string]string `json:"modelCompatibility,omitempty"`
+	ModelImageInputs    map[string]bool   `json:"modelImageInputs,omitempty"`
 	MaxTokens           int               `json:"maxTokens"`
 	Stream              bool              `json:"stream"`
 	FirstTimeout        int               `json:"firstResponseTimeoutSeconds"`
@@ -131,6 +132,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
+		p.ModelImageInputs = normalizeModelImageInputs(p)
 		if p.BaseURL == "" {
 			p.BaseURL = base
 		}
@@ -196,6 +198,7 @@ func Editable(c Config) Config {
 		p.ModelNames = maps.Clone(p.ModelNames)
 		p.ModelContextWindows = maps.Clone(p.ModelContextWindows)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
+		p.ModelImageInputs = maps.Clone(p.ModelImageInputs)
 		p.HasKey = p.APIKey != "" || (p.APIKeyEnv != "" && os.Getenv(p.APIKeyEnv) != "")
 		p.APIKey = ""
 		source := name
