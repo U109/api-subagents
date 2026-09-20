@@ -39,7 +39,7 @@
     install.disabled = actionPending || installing || (!available && (!bundled || wouldDowngrade));
   }
 
-  /** 只在后台阶段改变时提示结果，进度事件不会重复弹出；安装失败由操作入口统一显示 */
+  /** 只在后台阶段改变时提示结果；模式切换提示保留到主动关闭或收到本地请求，避免误把模型选择当作提供商切换 */
   function notifyChanges(previous, next) {
     if (!previous) return;
     if (previous.update.phase !== next.update.phase) {
@@ -53,7 +53,8 @@
       if (next.pluginUpdate?.phase === 'incompatible') window.notices.show('plugin-update', next.pluginUpdate.message, 'warning');
     }
     if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件 v' + next.plugin.installedVersion + ' 已安装，请在 Codex 新建对话');
-    if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新');
+    if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.message || '挟持模式状态已更新', 'warning');
+    if (next.relay?.enabled && !previous.relay?.requests && next.relay.requests > 0) window.notices.show('relay', 'Codex 请求已接入本地网关');
   }
 
   /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗 */

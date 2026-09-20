@@ -127,7 +127,7 @@ func (r *Relay) Enable(model string) error {
 	r.host = host
 	r.server = server
 	r.cancel = cancel
-	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启。首次使用请重启 Codex，在模型列表选择连接。"}
+	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex，再选择挟持模型；旧对话若仍使用原提供商，请在重启后新建对话"}
 	r.mu.Unlock()
 	go func() { _ = server.Serve(listener) }()
 	if err = r.Codex.Enable(config, model, port, token); err != nil {
@@ -155,7 +155,7 @@ func (r *Relay) Disable() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
-	r.state = State{Message: "已恢复原模型。旧对话可打开；继续使用外部模型需重新开启。"}
+	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话继续发送前请选择原提供商支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -185,6 +185,7 @@ func (r *Relay) RefreshCatalog() error {
 }
 
 // ServeHTTP 限定回环 Host 和固定路径，拒绝浏览器跨站访问及未持有本地随机令牌的请求。
+// 首次收到有效模型请求时确认本地路由已接入；该状态不代表上游已经生成成功。
 func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.RLock()
 	state, host, token := r.state, r.host, r.token
@@ -260,6 +261,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.state.ActiveModel = connection
 	r.state.ActiveModelID = profile.Model
 	r.state.Requests++
+	r.state.Message = "Codex 请求已接入本地网关，当前模型：" + profile.Model
 	r.mu.Unlock()
 	r.notify()
 	if profile.Protocol == "responses" {

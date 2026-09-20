@@ -92,3 +92,12 @@
 | 已安装插件 | `%USERPROFILE%\plugins\api-subagents\` |
 
 `API_SUBAGENTS_HOME` 可指定数据目录，`CODEX_HOME` 可指定 Codex 目录。Key 和备份仅保存在本机；Git 与安装包不包含这些数据。备份可能包含原 Codex 配置中的私人字段，应和 Key 一样保管。
+
+## 出现 Upstream request failed
+
+如果上游日志中的模型是 `api-subagents/连接名/摘要`，并报 `unknown provider for model`，说明本地路由标识被直接发给了远程服务。仅在 Codex 中切换模型不会保证同时切换已打开对话的提供商，这与 API Key 泄露无关。
+
+- 继续使用挟持模型：开启 App 的挟持模式，完全退出并重启 Codex，再选择该连接的模型。如果旧对话仍使用原提供商，请在开启模式后新建对话。App 收到请求后会显示「Codex 请求已接入本地网关」。
+- 回到原提供商：关闭挟持模式，完全退出并重启 Codex，在旧对话中重新选择原提供商支持的模型，不能继续选择 `api-subagents/…`。
+
+每次重新开启时本地端口和令牌都会变化，因此不能只在第一次开启时重启。App 不会修改聊天记录或强制结束正在运行的 Codex。若上游错误不是以上内容，应按对应请求 ID 排查，不应一律归因于此问题。
