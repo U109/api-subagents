@@ -262,6 +262,10 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.state.Requests++
 	r.mu.Unlock()
 	r.notify()
+	if profile.Protocol == "responses" {
+		r.forwardResponses(w, req, data, profile)
+		return
+	}
 	r.forward(w, req, input, profile)
 }
 
@@ -286,7 +290,7 @@ func replyError(w http.ResponseWriter, status int, message string) {
 	json.NewEncoder(w).Encode(shared.Object{"error": shared.Object{"message": message, "type": "api_subagents_error", "code": strconv.Itoa(status)}})
 }
 
-// forward 保持工具调用和多轮历史，通过 CPA 转换事件；失败不自动重复付费生成请求。
+// forward 仅为 Chat Completions、Claude、Gemini 旧连接执行本地转换；Responses 由独立透传路径处理。
 func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.Object, profile configstore.Profile) {
 	ctx, timeout := context.WithTimeout(req.Context(), time.Duration(profile.TaskTimeout)*time.Minute)
 	defer timeout()
@@ -375,9 +379,7 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	if profile.Protocol != "gemini" {
 		converted["stream"] = upstreamStream
 	}
-	if profile.Protocol == "responses" {
-		converted["store"] = false
-	} else if profile.Protocol == "gemini" {
+	if profile.Protocol == "gemini" {
 		delete(converted, "model")
 		generation := shared.Obj(converted["generationConfig"])
 		if generation["maxOutputTokens"] == nil {
@@ -408,12 +410,6 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	requestBody = shared.Marshal(converted)
 	profile.Stream = upstreamStream
 	endpoint, headers, _ := providers.RequestSpec(profile, nil, "", nil)
-	if req.URL.Path == "/v1/responses/compact" {
-		endpoint = strings.TrimSuffix(endpoint, "/responses") + "/responses/compact"
-		delete(converted, "stream")
-		delete(converted, "store")
-		requestBody = shared.Marshal(converted)
-	}
 	upstream, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(requestBody))
 	if err != nil {
 		replyError(w, 400, "API 地址无效。")

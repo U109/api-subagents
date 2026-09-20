@@ -7,8 +7,8 @@ if (key) {
 /** 按固定 ID 获取当前渲染的表单节点 */
 const byId = (id) => document.getElementById(id);
 const types = {
-  compatible: 'OpenAI 兼容 / CPA',
-  responses: 'OpenAI Responses',
+  responses: 'Responses 透传（推荐 CPA）',
+  compatible: 'Chat Completions（本地转换）',
   anthropic: 'Claude 原生',
   gemini: 'Gemini 原生',
 };
@@ -285,7 +285,7 @@ function render() {
           ([value, label]) =>
             `<option value="${value}" ${p.protocol === value ? 'selected' : ''}>${label}</option>`,
         )
-        .join('')}</select></div>
+        .join('')}</select><p id="protocol-help" class="hint">${p.protocol === 'responses' ? '挟持模式原样转发请求与响应，由上游负责模型兼容；上游须支持 /responses' : '挟持模式需要在本地转换协议；CPA 等支持 Responses 的网关建议选择透传'}</p></div>
       ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1')}
       <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
     </div></section>
@@ -297,9 +297,9 @@ function render() {
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务</span></div>
     </section>
     <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0"><div class="grid">
-        ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number')}
+        ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number', p.protocol === 'responses' ? '用于插件委派；透传请求的输出限制由 Codex 与上游决定' : '')}
         ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8')}
-        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">流式接收可持续更新任务进度，服务仍有数据时继续等待</span></div>
+        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">${p.protocol === 'responses' ? '用于插件委派；挟持透传始终保留 Codex 请求的响应方式' : '流式接收可持续更新任务进度，服务仍有数据时继续等待'}</span></div>
         ${field('firstResponseTimeoutSeconds', '首个数据等待时间（秒）', p.firstResponseTimeoutSeconds ?? 180, '180', false, 'number', '10–600 秒，包含连接和等待服务开始返回数据的时间')}
         ${field('streamIdleTimeoutSeconds', '响应中断等待时间（秒）', p.streamIdleTimeoutSeconds ?? 120, '120', false, 'number', '10–600 秒，每次收到数据后重新计时')}
         ${field('taskTimeoutMinutes', '任务总时长上限（分钟）', p.taskTimeoutMinutes ?? 15, '15', false, 'number', '1–60 分钟，包含所有模型轮次与文件操作')}
@@ -371,8 +371,9 @@ function render() {
       window.selectUI.refresh();
       return;
     }
+    const keepAddress = ['compatible', 'responses'].includes(p.protocol) && ['compatible', 'responses'].includes(event.target.value);
     p.protocol = event.target.value;
-    p.baseUrl = urls[p.protocol];
+    if (!keepAddress) p.baseUrl = urls[p.protocol];
     markChanged();
     catalogs.delete(selected);
     render();
@@ -399,8 +400,8 @@ function add() {
   selected = 'worker-' + index;
   activeTab = 'connection';
   config.models[selected] = {
-    protocol: 'compatible',
-    baseUrl: urls.compatible,
+    protocol: 'responses',
+    baseUrl: urls.responses,
     apiKey: '',
     model: '',
     description: '',

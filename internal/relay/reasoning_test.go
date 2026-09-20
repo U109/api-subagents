@@ -10,7 +10,7 @@ import (
 	"github.com/U109/api-subagents/internal/shared"
 )
 
-// TestRelayReasoningPriority 检查四种协议实际收到默认等级、Codex 覆盖与关闭，缺省时不添加参数。
+// TestRelayReasoningPriority 检查转换协议的默认等级与覆盖；透传仅保留 Codex 已发送的等级，不补写参数。
 func TestRelayReasoningPriority(t *testing.T) {
 	for _, protocol := range []string{"responses", "compatible", "anthropic", "gemini"} {
 		t.Run(protocol, func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestRelayReasoningPriority(t *testing.T) {
 				}
 				switch protocol {
 				case "responses":
-					if shared.Str(shared.Obj(actual["reasoning"])["effort"]) != tc.want {
+					if shared.Str(shared.Obj(actual["reasoning"])["effort"]) != tc.chosen {
 						t.Fatal(actual)
 					}
 				case "compatible":

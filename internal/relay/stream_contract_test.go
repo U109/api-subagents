@@ -82,8 +82,8 @@ func TestReasoningStaysSeparate(t *testing.T) {
 	}
 }
 
-// TestResponsesRequiresCompletion 仅有文本、DONE 或半途断开都不得冒充完成；正确结束后的尾帧不破坏终态。
-func TestResponsesRequiresCompletion(t *testing.T) {
+// TestResponsesPreservesCompletionContract 透传不伪造完成或失败事件，缺少完成事件由 Codex 判断，尾帧保持原样。
+func TestResponsesPreservesCompletionContract(t *testing.T) {
 	partial := "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"
 	for _, tc := range []struct {
 		name, data string
@@ -108,11 +108,14 @@ func TestResponsesRequiresCompletion(t *testing.T) {
 			if requests != 1 {
 				t.Fatal("unexpected retry")
 			}
+			if status != 200 || body != tc.data {
+				t.Fatal("Responses stream was rewritten", status, body)
+			}
 			if tc.complete {
 				if status != 200 || !strings.Contains(body, "response.completed") || strings.Contains(body, "response.failed") {
 					t.Fatal(status, body)
 				}
-			} else if strings.Contains(body, "response.completed") || (status != 502 && !strings.Contains(body, "response.failed")) {
+			} else if strings.Contains(body, "response.completed") {
 				t.Fatal("incomplete stream treated as success", status, body)
 			}
 		})

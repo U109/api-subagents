@@ -236,14 +236,14 @@ func (c CodexConfig) WriteCatalog(config configstore.Config, defaultName string)
 	return shared.AtomicWrite(c.catalogPath(), shared.Marshal(shared.Object{"models": models}), 0600)
 }
 
-// catalogModel 按模型声明上下文容量并在 90% 时压缩；普通进度使用用户语言，不要求输出思考标签。
+// catalogModel 按模型声明上下文容量并在 90% 时压缩，不注入用于约束思考标签或进度语言的额外指令。
 // 未确认的容量由配置层保守回退，不启用远端专属搜索、WebSocket 或付费辅助模型。
 func catalogModel(slug, name, description, effort string, priority, contextWindow int) shared.Object {
 	var defaultEffort any
 	if effort != "" {
 		defaultEffort = effort
 	}
-	instructions := "You are a coding assistant running in Codex. Follow the user's request and the provided system and developer instructions. Use available tools according to their permissions. Keep changes focused, inspect project instructions, and verify your work. Keep user-facing progress updates brief and in the user's language. Do not wrap user-facing messages in <thinking> or <think> tags."
+	instructions := "You are a coding assistant running in Codex. Follow the user's request and the provided system and developer instructions. Use available tools according to their permissions. Keep changes focused, inspect project instructions, and verify your work."
 	return shared.Object{
 		"slug":                                 slug,
 		"display_name":                         name,

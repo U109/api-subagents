@@ -1,5 +1,7 @@
 # CPA 兼容代码移植
 
+Responses 挟持入口使用独立透传路径，不调用本目录、转换器或思考回放缓存。以下代码仅用于其他接口的本地转换以及插件原生协议处理；CPA 用户优先选择 Responses 透传。
+
 本目录直接移植并适配 [CLIProxyAPI v7.3.6](https://github.com/router-for-me/CLIProxyAPI/tree/v7.3.6) 的相关代码，固定来源提交 `8c664b2fede5c83b919be1df9b01057ec4e4c950`。版权及 MIT 许可保存在 [LICENSE](LICENSE)，发布包同时携带仓库根目录的第三方声明。
 
 | 本地文件 | CPA 来源 | 移植范围与适配 |
@@ -14,6 +16,6 @@
 
 CPA 未提供 DeepSeek、豆包、MiniMax、GLM 的独立适配器。本项目在 `internal/providers/compatibility.go` 中按官方协议补充这些模型及 Moonshot 的参数处理；`chat_metadata.go` 处理结构化思考。`internal/relay/chat_history.go` 是本项目的有限内存回放实现，不复制 CPA 的账户级缓存、磁盘或 Redis 依赖。各策略及边界见[模型兼容说明](../../docs/model-compatibility.md)。
 
-官方主机自动选择策略；自定义网关默认通用，也可按模型明确指定厂商。通过 CPA 接入时保留通用模式，避免重复转换。移植代码的完整许可保存在本目录，构建工具会将它加入根目录第三方声明。
+官方主机自动选择策略；自定义网关默认通用，也可按模型明确指定厂商。通过 CPA 接入优先选择 Responses 透传；仍需旧 Chat 接口时保留通用策略，避免重复厂商转换。移植代码的完整许可保存在本目录，构建工具会将它加入根目录第三方声明。
 
 验证分为本包边界测试与 `internal/relay/cpa_compat_test.go` 的本地 HTTP 往返测试。后续同步 CPA 时应比较以上固定来源，复测工具名称冲突、历史回放、自由文本工具、流式响应和 schema 数据边界。模拟通过不代表所有付费服务和模型都已实测。

@@ -70,7 +70,12 @@ func upstreamReply(protocol string, stream bool) string {
 		case "gemini":
 			return "data: {\"candidates\":[{\"index\":0,\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"OK\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":5,\"candidatesTokenCount\":1}}\n\n"
 		default:
-			return "event: response.completed\ndata: " + string(shared.Marshal(shared.Object{"type": "response.completed", "response": jsonResponse()})) + "\n\n"
+			var stream strings.Builder
+			for index, item := range shared.Arr(jsonResponse()["output"]) {
+				fmt.Fprintf(&stream, "event: response.output_item.done\ndata: %s\n\n", shared.Marshal(shared.Object{"type": "response.output_item.done", "output_index": index, "item": item}))
+			}
+			fmt.Fprintf(&stream, "event: response.completed\ndata: %s\n\n", shared.Marshal(shared.Object{"type": "response.completed", "response": jsonResponse()}))
+			return stream.String()
 		}
 	}
 	switch protocol {
@@ -117,7 +122,11 @@ func TestRelayProtocols(t *testing.T) {
 				defer server.Close()
 				r := testRelay(t, protocol, server.URL, stream)
 				status, body := requestRelay(t, r, shared.Object{"model": "api-subagents/demo", "input": "Reply OK", "stream": true})
-				if status != 200 || !strings.Contains(body, "response.completed") || !strings.Contains(body, "OK") || strings.Contains(body, "response.failed") {
+				completed := strings.Contains(body, "response.completed")
+				if protocol == "responses" && !stream {
+					completed = strings.Contains(body, `"status":"completed"`)
+				}
+				if status != 200 || !completed || !strings.Contains(body, "OK") || strings.Contains(body, "response.failed") {
 					t.Fatalf("status %d: %s", status, body)
 				}
 				if requests != 1 || r.Snapshot().ActiveModel != "demo" {
