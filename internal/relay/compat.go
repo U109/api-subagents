@@ -26,11 +26,16 @@ func isTerminal(chunk []byte) bool {
 	return terminal
 }
 
-// normalizeUsage 补齐 Codex 严格解析的用量明细；未知统计记为零，不推算或改写实际计费数量。
+// normalizeUsage 补齐 Codex 严格解析的用量计数与明细；未知统计记为零，不推算或改写实际计费数量。
 func normalizeUsage(response shared.Object) {
 	usage := shared.Obj(response["usage"])
 	if len(usage) == 0 {
 		return
+	}
+	for _, key := range []string{"input_tokens", "output_tokens", "total_tokens"} {
+		if usage[key] == nil {
+			usage[key] = 0
+		}
 	}
 	input := shared.Obj(usage["input_tokens_details"])
 	output := shared.Obj(usage["output_tokens_details"])

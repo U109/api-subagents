@@ -168,7 +168,7 @@ func InstallPlugin(ctx context.Context, source fs.FS, opts InstallOptions) (Inst
 	if len(server) == 0 {
 		return InstallResult{}, errors.New("MCP 配置缺少服务定义。")
 	}
-	envs := []string{"API_SUBAGENTS_HOME"}
+	envs := []string{"API_SUBAGENTS_HOME", "API_SUBAGENTS_CODEX_BIN"}
 	existing, err := os.ReadFile(filepath.Join(target, ".mcp.json"))
 	if err == nil {
 		var prior shared.Object

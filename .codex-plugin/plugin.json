@@ -1,22 +1,24 @@
 {
   "name": "api-subagents",
-  "version": "0.3.10",
-  "description": "把明确的重复任务交给外部模型，减少 Codex 主模型的阅读和生成",
+  "version": "0.4.1",
+  "description": "把边界明确的任务交给外部模型，可返回修改建议或直接改文件、执行命令和测试",
   "author": {
     "name": "zzz"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "API Subagents",
-    "shortDescription": "外部模型处理重复工作，主模型只做必要验收",
-    "longDescription": "连接用户配置的模型 API，把批量注释、机械修改和定点调查交给外部模型；默认精简结果、按需读取详细内容，并由主 Agent 校验和应用建议。支持流式响应与可配置等待时间。",
+    "shortDescription": "外部模型提出修改建议，或通过独立 Codex worker 直接执行和测试",
+    "longDescription": "支持所有已配置连接及其已选模型，复用四类 API 协议。默认返回修改建议；显式选择执行模式后，可通过隔离的 Codex worker 直接修改工作区、执行命令和测试，无需切换主模型或开启挟持模式。模型需兼容工具调用，写入和联网均须授权；主 Agent 检查实际变更与执行结果。",
     "developerName": "zzz",
     "category": "Productivity",
     "capabilities": [
-      "Read"
+      "Read",
+      "Write"
     ],
     "defaultPrompt": [
-      "把当前任务中明确、重复的工作交给我允许的外部模型，减少主模型重复阅读和生成，并完成必要验收。"
+      "把当前任务中明确、重复的工作交给我允许的外部模型，减少主模型重复阅读和生成，并完成必要验收。",
+      "使用执行模式，让我指定的外部模型直接完成修改并运行测试，保留已有改动，不允许联网。"
     ],
     "brandColor": "#265EB5"
   },

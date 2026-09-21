@@ -12,6 +12,7 @@
 | internal/workspace | 受限读取、搜索、建议与父模型确认后的应用 |
 | internal/relay | Codex Responses 网关、CPA 转换、流式兼容 |
 | internal/codex | Codex TOML 备份、恢复、共享模型目录与本地别名解析 |
+| internal/codexworker | 执行型子代理：临时 CODEX_HOME、App Server RPC、权限核验、执行证据与进程回收 |
 | internal/plugin、internal/updates | 独立插件安装、GitHub 更新与校验 |
 | internal/platform、internal/shared | Windows 代理/进程差异与公共数据工具 |
 | internal/buildinfo、internal/testutil | 版本与隔离测试辅助 |
@@ -20,6 +21,10 @@
 | bundle | 构建时生成的插件 ZIP 嵌入点 |
 
 测试紧邻对应 Go 包。任务包的集成测试覆盖完整读文件、提出修改和应用流程。go.mod / go.sum 固定依赖，CPA 通过固定版本 SDK 引入，保留相应许可证。
+
+委派默认使用 `proposal` 后端；`execution_mode: codex` 改走 `internal/codexworker`，父任务正文通过 `turn/start` 明文交付。每个执行任务使用独立 App Server、私有 home 和仅接受已选模型的带令牌回环网关，复用 `internal/relay` 的四类协议适配，但不调用挟持模式的配置改写/恢复。真实上游凭据留在 Go 进程内。首次生成前核验 provider、model、cwd 和沙箱；服务端交互请求失败关闭，不自动审批。Windows 使用 kill-on-close Job Object，任务完成、取消和宿主退出会回收进程树。任务记录区分建议和直接执行，并记录有限的原生命令/补丁事件；执行模式不能走 `--apply` 二次应用。
+
+`CODEX_TEST_BIN` 同样可启用 `go test ./internal/codexworker -run TestCodexWorker -v -timeout 240s`：使用本地合成模型验证四类协议的回答、实际文件修改、命令和测试执行，以及只读权限和请求限额；不调用付费模型。协议模拟测试还覆盖模型/provider 不匹配、审批拒绝、无响应进程、取消和临时目录清理。运行身份和状态不进入发布包。
 
 前端按职责拆分：`shell-ui.js` 管理侧栏与弹窗，`select-ui.js` 管理下拉菜单和键盘操作，`notification-ui.js` 管理顶部提示，`config-ui.js` 维护连接草稿，`model-picker-ui.js` 统一管理模型搜索、勾选与默认值，配套样式位于 `model-picker.css`；`desktop-ui.js` 同步安装、更新与挟持状态，`bridge.js` 保留固定 Go 绑定。静态资源同时列入嵌入和浏览器访问白名单。
 

@@ -379,12 +379,16 @@ func ApplyProposals(taskID, workspace string, paths []string, storage string) (s
 		return nil, errors.New("无法读取任务记录。")
 	}
 	var task struct {
-		Status    string     `json:"status"`
-		Workspace string     `json:"workspace"`
-		Changes   []Proposal `json:"changes"`
+		ExecutionMode string     `json:"execution_mode"`
+		Status        string     `json:"status"`
+		Workspace     string     `json:"workspace"`
+		Changes       []Proposal `json:"changes"`
 	}
 	if json.Unmarshal(data, &task) != nil {
 		return nil, errors.New("任务记录格式无效。")
+	}
+	if task.ExecutionMode == "codex" {
+		return nil, errors.New("执行型子代理已直接操作工作区，不能再次应用为修改建议。")
 	}
 	w, err := OpenWorkspace(workspace)
 	if err != nil {

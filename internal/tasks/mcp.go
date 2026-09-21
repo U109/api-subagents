@@ -11,7 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const serverInstructions = "Save parent context: offload bounded routine work when it replaces substantial parent reading or editing. Avoid duplicate investigations and needless delegation of trivial tasks. Honor model restrictions. Prefer compact results. Wait with the 600000ms default unless independent work is available; then delegate with wait_ms: 0 and do that work first. A running result is not failure: wait on the same task, never resubmit or restart it merely because a wait timed out. Avoid short status polling and unchanged progress narration. Review affected changes and run focused checks once; apply reviewed proposals via the returned local command. Workers never apply changes."
+const serverInstructions = "Save parent context: offload bounded work without duplicate investigations. Honor model and external-data restrictions. Prefer compact results and the 600000ms default wait; use wait_ms: 0 only for independent work. A running result is not failure: wait on the same task, never resubmit because a wait timed out. Proposal mode never writes: review and apply returned proposals. Codex mode runs commands and can directly edit files with access: workspace-write; use it only within the user's and parent's authorized permissions. Never enable network_access without authorization. Do not reapply execution-worker changes. Inspect actual diffs and command exit codes, including after cancellation or failure."
 
 // Input 声明 MCP 参数并指定必填项，其他字段保持可选且不接受未知参数。
 func Input(properties shared.Object, required ...string) shared.Object {
@@ -28,10 +28,10 @@ func MCPTools() []shared.Tool {
 	wait := shared.Object{"type": "integer", "minimum": 0, "maximum": maxWaitMS, "default": defaultWaitMS}
 	return []shared.Tool{
 		{Name: "list_models", Description: "List workers and purposes without keys. Reuse during the task; honor user model restrictions.", Schema: Input(shared.Object{})},
-		{Name: "delegate_task", Description: "Offload a bounded routine task to a configured API worker. Defaults to waiting up to 10 minutes, returning early on completion. Use wait_ms: 0 when independent work is available. Sends task/files to its provider; parent reviews and applies proposals.", Schema: Input(shared.Object{"model": str, "task": str, "workspace": shared.Object{"type": "string", "description": "Absolute project directory"}, "continuation_id": str, "max_steps": shared.Object{"type": "integer", "minimum": 1, "maximum": 30, "default": 8}, "wait_ms": wait, "detail": detail}, "model", "task", "workspace")},
+		{Name: "delegate_task", Description: "Delegate to any configured connection. Default proposal mode only proposes edits; codex mode uses an isolated Codex worker to run commands and, with explicit workspace-write access, edit files directly. Sends task/files to the selected provider. Waits up to 10 minutes; use wait_ms: 0 for independent work.", Schema: Input(shared.Object{"model": shared.Object{"type": "string", "description": "Configured connection name from list_models"}, "model_id": shared.Object{"type": "string", "description": "Optional model from this connection's availableModels; omitted uses its default"}, "execution_mode": shared.Object{"type": "string", "enum": []string{"proposal", "codex"}, "default": "proposal"}, "access": shared.Object{"type": "string", "enum": []string{"read-only", "workspace-write"}, "default": "read-only"}, "network_access": shared.Object{"type": "boolean", "default": false, "description": "Codex command network access, only with workspace-write and explicit user authorization; never bypass parent restrictions"}, "task": str, "workspace": shared.Object{"type": "string", "description": "Absolute project directory; direct workers share it, no automatic worktree or rollback"}, "continuation_id": shared.Object{"type": "string", "description": "Proposal mode only"}, "max_steps": shared.Object{"type": "integer", "minimum": 1, "maximum": 30, "default": 8, "description": "Proposal tool-loop rounds or codex model-request limit"}, "wait_ms": wait, "detail": detail}, "model", "task", "workspace")},
 		{Name: "task_status", Description: "Read task results once when needed, not for polling active tasks; use wait_task instead. Use full only for omitted content. Redacted proposals cannot be applied verbatim.", Schema: Input(shared.Object{"task_id": str, "detail": detail}, "task_id")},
 		{Name: "wait_task", Description: "Wait up to 10 minutes by default; returns immediately on completion. Prefer the default over short polling. Running means unfinished: keep the same task_id, do not resubmit.", Schema: Input(shared.Object{"task_id": str, "timeout_ms": wait, "detail": detail}, "task_id")},
-		{Name: "cancel_task", Description: "Cancel a queued or running worker task.", Schema: Input(shared.Object{"task_id": str}, "task_id")},
+		{Name: "cancel_task", Description: "Cancel a queued or running worker. Codex workers may have already modified files: cancellation does not roll back changes or guarantee upstream billing stops.", Schema: Input(shared.Object{"task_id": str}, "task_id")},
 		{Name: "configuration_help", Description: "Show where settings are stored and how to open configuration.", Schema: Input(shared.Object{})},
 	}
 }
@@ -42,7 +42,7 @@ func NewMCPServer(manager *Manager) *mcp.Server {
 	for _, tool := range MCPTools() {
 		name := tool.Name
 		readOnly := name != "delegate_task" && name != "cancel_task"
-		destructive, openWorld := false, name == "delegate_task"
+		destructive, openWorld := name == "delegate_task", name == "delegate_task"
 		server.AddTool(&mcp.Tool{Name: name, Description: tool.Description, InputSchema: tool.Schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: readOnly, DestructiveHint: &destructive, OpenWorldHint: &openWorld}}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var args shared.Object
 			if len(req.Params.Arguments) == 0 {

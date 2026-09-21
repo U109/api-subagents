@@ -38,18 +38,21 @@ type State struct {
 	Requests      uint64 `json:"requests"`
 }
 type Relay struct {
-	Store       *configstore.ConfigStore
-	Codex       codexconfig.CodexConfig
-	Client      *http.Client
-	OnChange    func()
-	mu          sync.RWMutex
-	operation   sync.Mutex
-	state       State
-	token, host string
-	server      *http.Server
-	cancel      context.CancelFunc
-	slots       chan struct{}
-	chatHistory chatHistory
+	Store         *configstore.ConfigStore
+	Codex         codexconfig.CodexConfig
+	Client        *http.Client
+	OnChange      func()
+	mu            sync.RWMutex
+	operation     sync.Mutex
+	state         State
+	token, host   string
+	server        *http.Server
+	cancel        context.CancelFunc
+	slots         chan struct{}
+	chatHistory   chatHistory
+	workerConfig  *configstore.Config
+	requestLimit  int
+	limitExceeded bool
 }
 
 // New 创建默认关闭的网关，模型密钥只在请求时从本机配置解析。
@@ -200,7 +203,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if req.Method == "GET" && req.URL.Path == "/v1/models" {
-		config, err := r.Store.Read()
+		config, err := r.requestConfig()
 		if err != nil {
 			replyError(w, 500, err.Error())
 			return
@@ -243,7 +246,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		replyError(w, 400, "模型标识必须是字符串。")
 		return
 	}
-	config, err := r.Store.Read()
+	config, err := r.requestConfig()
 	if err != nil {
 		replyError(w, 500, err.Error())
 		return
@@ -258,6 +261,12 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	r.mu.Lock()
+	if r.requestLimit > 0 && r.state.Requests >= uint64(r.requestLimit) {
+		r.limitExceeded = true
+		r.mu.Unlock()
+		replyError(w, 429, "执行型子代理已达到模型请求上限。")
+		return
+	}
 	r.state.ActiveModel = connection
 	r.state.ActiveModelID = profile.Model
 	r.state.Requests++
