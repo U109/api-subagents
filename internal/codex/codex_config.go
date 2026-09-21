@@ -266,7 +266,7 @@ func catalogModel(slug, name, description, effort string, priority, contextWindo
 	if effort != "" {
 		defaultEffort = effort
 	}
-	instructions := "You are a coding assistant running in Codex. Follow the user's request and the provided system and developer instructions. Use available tools according to their permissions. Keep changes focused, inspect project instructions, and verify your work."
+	instructions := codingInstructions
 	return shared.Object{
 		"slug":                                 slug,
 		"display_name":                         name,

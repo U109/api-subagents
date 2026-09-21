@@ -1,6 +1,6 @@
 {
   "name": "api-subagents",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "把边界明确的任务交给外部模型，可返回修改建议或直接改文件、执行命令和测试",
   "author": {
     "name": "zzz"

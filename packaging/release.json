@@ -2,7 +2,7 @@
   "owner": "U109",
   "repo": "api-subagents",
   "private": false,
-  "version": "0.4.8",
+  "version": "0.4.9",
   "pluginMinAppVersion": "0.3.3",
   "goVersion": "1.27.1"
 }
