@@ -19,7 +19,7 @@ func fixturePayload() fstest.MapFS {
 		files[path] = &fstest.MapFile{Data: []byte("fixture")}
 	}
 	files[".codex-plugin/plugin.json"] = &fstest.MapFile{Data: []byte(`{"name":"api-subagents","version":"0.3.0"}`)}
-	files[".mcp.json"] = &fstest.MapFile{Data: []byte(`{"mcpServers":{"api-subagents":{"command":"./bin/api-subagents-worker.exe","args":[]}}}`)}
+	files[".mcp.json"] = &fstest.MapFile{Data: []byte(`{"mcpServers":{"api-subagents":{"command":"./bin/api-subagents-worker.exe","args":[],"tool_timeout_sec":660}}}`)}
 	files["bin/api-subagents-worker.exe"] = &fstest.MapFile{Data: []byte("MZ synthetic worker")}
 	return files
 }
@@ -31,7 +31,7 @@ func TestPluginIsolation(t *testing.T) {
 	marketPath := filepath.Join(root, ".agents", "plugins", "marketplace.json")
 	shared.AtomicWrite(marketPath, []byte(`{"name":"my-market","plugins":[{"name":"other","source":{"source":"local","path":"./plugins/other"}}]}`), 0600)
 	target := filepath.Join(root, "plugins", "api-subagents")
-	shared.AtomicWrite(filepath.Join(target, ".mcp.json"), []byte(`{"mcpServers":{"api-subagents":{"command":"old","env_vars":["CUSTOM_MODEL_KEY","BAD-NAME"],"env":{"OLD_KEY":"synthetic-secret"}}}}`), 0600)
+	shared.AtomicWrite(filepath.Join(target, ".mcp.json"), []byte(`{"mcpServers":{"api-subagents":{"command":"old","tool_timeout_sec":35,"env_vars":["CUSTOM_MODEL_KEY","BAD-NAME"],"env":{"OLD_KEY":"synthetic-secret"}}}}`), 0600)
 	result, err := InstallPlugin(context.Background(), fixturePayload(), opts)
 	if err != nil || result.Installed || result.Marketplace != "my-market" {
 		t.Fatal(result, err)
@@ -40,6 +40,9 @@ func TestPluginIsolation(t *testing.T) {
 	var mcp shared.Object
 	json.Unmarshal(data, &mcp)
 	server := shared.Obj(shared.Obj(mcp["mcpServers"])["api-subagents"])
+	if shared.Int(server["tool_timeout_sec"]) != 660 {
+		t.Fatal("upgrade retained the old short host timeout")
+	}
 	path := shared.Str(server["command"])
 	if !shared.Inside(opts.DataRoot, path) || strings.Contains(string(data), "synthetic-secret") || !strings.Contains(string(data), "CUSTOM_MODEL_KEY") || strings.Contains(string(data), "BAD-NAME") {
 		t.Fatal("runtime or environment isolation failed")

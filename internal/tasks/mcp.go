@@ -11,7 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const serverInstructions = "Save parent context: offload bounded routine work when it replaces substantial parent reading or editing. Avoid duplicate investigations and needless delegation of trivial tasks. Honor model restrictions. Prefer compact results and long waits. Review affected changes and run focused checks once; apply reviewed proposals via the returned local command. Workers never apply changes."
+const serverInstructions = "Save parent context: offload bounded routine work when it replaces substantial parent reading or editing. Avoid duplicate investigations and needless delegation of trivial tasks. Honor model restrictions. Prefer compact results. Wait with the 600000ms default unless independent work is available; then delegate with wait_ms: 0 and do that work first. A running result is not failure: wait on the same task, never resubmit or restart it merely because a wait timed out. Avoid short status polling and unchanged progress narration. Review affected changes and run focused checks once; apply reviewed proposals via the returned local command. Workers never apply changes."
 
 // Input 声明 MCP 参数并指定必填项，其他字段保持可选且不接受未知参数。
 func Input(properties shared.Object, required ...string) shared.Object {
@@ -25,12 +25,12 @@ func Input(properties shared.Object, required ...string) shared.Object {
 func MCPTools() []shared.Tool {
 	str := shared.Object{"type": "string"}
 	detail := shared.Object{"type": "string", "enum": []string{"compact", "full"}, "default": "compact"}
-	wait := shared.Object{"type": "integer", "minimum": 0, "maximum": 25000, "default": 25000}
+	wait := shared.Object{"type": "integer", "minimum": 0, "maximum": maxWaitMS, "default": defaultWaitMS}
 	return []shared.Tool{
 		{Name: "list_models", Description: "List workers and purposes without keys. Reuse during the task; honor user model restrictions.", Schema: Input(shared.Object{})},
-		{Name: "delegate_task", Description: "Offload a bounded routine task to a configured API worker. Waits up to 25s; compact results by default. Sends task/files to its provider; parent reviews and applies proposals.", Schema: Input(shared.Object{"model": str, "task": str, "workspace": shared.Object{"type": "string", "description": "Absolute project directory"}, "continuation_id": str, "max_steps": shared.Object{"type": "integer", "minimum": 1, "maximum": 30, "default": 8}, "wait_ms": wait, "detail": detail}, "model", "task", "workspace")},
-		{Name: "task_status", Description: "Read compact task results. Use full only when omitted content is needed. Redacted proposals cannot be applied verbatim.", Schema: Input(shared.Object{"task_id": str, "detail": detail}, "task_id")},
-		{Name: "wait_task", Description: "Wait up to 25s; prefer over rapid polling. Running means unfinished.", Schema: Input(shared.Object{"task_id": str, "timeout_ms": wait, "detail": detail}, "task_id")},
+		{Name: "delegate_task", Description: "Offload a bounded routine task to a configured API worker. Defaults to waiting up to 10 minutes, returning early on completion. Use wait_ms: 0 when independent work is available. Sends task/files to its provider; parent reviews and applies proposals.", Schema: Input(shared.Object{"model": str, "task": str, "workspace": shared.Object{"type": "string", "description": "Absolute project directory"}, "continuation_id": str, "max_steps": shared.Object{"type": "integer", "minimum": 1, "maximum": 30, "default": 8}, "wait_ms": wait, "detail": detail}, "model", "task", "workspace")},
+		{Name: "task_status", Description: "Read task results once when needed, not for polling active tasks; use wait_task instead. Use full only for omitted content. Redacted proposals cannot be applied verbatim.", Schema: Input(shared.Object{"task_id": str, "detail": detail}, "task_id")},
+		{Name: "wait_task", Description: "Wait up to 10 minutes by default; returns immediately on completion. Prefer the default over short polling. Running means unfinished: keep the same task_id, do not resubmit.", Schema: Input(shared.Object{"task_id": str, "timeout_ms": wait, "detail": detail}, "task_id")},
 		{Name: "cancel_task", Description: "Cancel a queued or running worker task.", Schema: Input(shared.Object{"task_id": str}, "task_id")},
 		{Name: "configuration_help", Description: "Show where settings are stored and how to open configuration.", Schema: Input(shared.Object{})},
 	}
@@ -88,7 +88,7 @@ func (m *Manager) Invoke(ctx context.Context, name string, args shared.Object) (
 	case "configuration_help":
 		return shared.Object{"configFile": m.Store.Path, "instructions": "打开 API Subagents 桌面 App 或双击 Configure.cmd。保存连接后对新任务生效。测试连接会发送一条简短 API 请求。"}, nil
 	case "delegate_task":
-		wait, e := integerArg(args, "wait_ms", 25000, 0, 25000)
+		wait, e := integerArg(args, "wait_ms", defaultWaitMS, 0, maxWaitMS)
 		if e != nil {
 			return nil, e
 		}
@@ -108,7 +108,7 @@ func (m *Manager) Invoke(ctx context.Context, name string, args shared.Object) (
 	case "task_status":
 		value, err = m.Get(shared.Str(args["task_id"]))
 	case "wait_task":
-		wait, e := integerArg(args, "timeout_ms", 25000, 0, 25000)
+		wait, e := integerArg(args, "timeout_ms", defaultWaitMS, 0, maxWaitMS)
 		if e != nil {
 			return nil, e
 		}

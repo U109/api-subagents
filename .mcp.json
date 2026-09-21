@@ -5,7 +5,7 @@
       "args": [],
       "cwd": ".",
       "startup_timeout_sec": 20,
-      "tool_timeout_sec": 35,
+      "tool_timeout_sec": 660,
       "env_vars": [
         "API_SUBAGENTS_HOME"
       ]

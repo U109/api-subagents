@@ -56,6 +56,12 @@ type Manager struct {
 	closed         bool
 }
 
+// 等待窗口只限制单次工具调用，不改变后台任务时限；与插件宿主的 660 秒超时保留余量。
+const (
+	defaultWaitMS = 600000
+	maxWaitMS     = 600000
+)
+
 // NewManager 创建有界后台队列，不在构造时访问模型接口。
 func NewManager(store *configstore.ConfigStore, storage string, p *providers.Provider) *Manager {
 	if store == nil {
@@ -374,10 +380,13 @@ func (m *Manager) Get(id string) (shared.Object, error) {
 	return value, nil
 }
 
-// Wait 等待完成信号，结束等待不会取消后台任务，也不反复轮询磁盘。
+// Wait 最多阻塞十分钟，任务完成立即返回；超时或调用方取消只结束等待，不取消后台任务。
 func (m *Manager) Wait(ctx context.Context, id string, timeout int) (shared.Object, error) {
-	if timeout < 0 || timeout > 25000 {
-		return nil, errors.New("timeout_ms 必须为 0–25000。")
+	if timeout < 0 || timeout > maxWaitMS {
+		return nil, fmt.Errorf("timeout_ms 必须为 0–%d。", maxWaitMS)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	m.mu.Lock()
 	j := m.jobs[id]
@@ -410,7 +419,7 @@ func (m *Manager) Present(value shared.Object, detail string) (shared.Object, er
 	if value["status"] == "queued" || value["status"] == "running" || value["status"] == "cancelling" {
 		p := shared.Obj(value["progress"])
 		result["progress"] = shared.Object{"phase": p["phase"], "receivedBytes": shared.Int(p["receivedBytes"])}
-		result["nextWaitMs"] = 25000
+		result["nextWaitMs"] = defaultWaitMS
 		return result, nil
 	}
 	for _, key := range []string{"error", "errorCode", "storageWarning"} {
