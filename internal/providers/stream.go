@@ -123,7 +123,7 @@ func sortedKeys[T any](items map[int]T) []int {
 	return keys
 }
 
-// accept 合并协议事件并核对结束标记，保留思考签名；服务端错误仅返回固定描述。
+// accept 合并协议事件并核对结束标记，保留思考签名；服务端失败时尽量保留安全的上游错误原因。
 func (a *accumulator) accept(event, text string) error {
 	if a.done {
 		return nil
@@ -159,11 +159,13 @@ func (a *accumulator) accept(event, text string) error {
 		kind = event
 	}
 	if data["error"] != nil || kind == "error" || kind == "response.failed" {
-		return errors.New("模型流报告请求失败，请检查服务状态、模型和额度。")
+		message := responseErrorMessage(data)
+		return errors.New("模型流报告请求失败：" + message)
 	}
 	switch a.protocol {
 	case "responses":
-		if kind == "response.completed" || kind == "response.incomplete" {
+		// 部分 Responses 兼容网关把 completed 事件命名为 response.done；两者语义相同。
+		if kind == "response.completed" || kind == "response.incomplete" || kind == "response.done" {
 			a.result = shared.Obj(data["response"])
 			if _, ok := a.result["output"].([]any); !ok {
 				return errors.New("Responses 流缺少完整 output。")
@@ -298,4 +300,20 @@ func (a *accumulator) accept(event, text string) error {
 		}
 	}
 	return nil
+}
+
+// responseErrorMessage 从上游错误事件提取有限长度的非敏感说明，避免把整段响应或凭据写入任务记录。
+func responseErrorMessage(data shared.Object) string {
+	candidates := []any{
+		data["message"],
+		shared.Obj(data["error"])["message"],
+		shared.Obj(shared.Obj(data["response"])["error"])["message"],
+		shared.Obj(shared.Obj(data["response"])["error"])["code"],
+	}
+	for _, candidate := range candidates {
+		if value := strings.TrimSpace(shared.Str(candidate)); value != "" {
+			return shared.Clip(value, 500)
+		}
+	}
+	return "上游未提供具体原因，请检查服务状态、模型和额度。"
 }

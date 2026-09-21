@@ -180,11 +180,11 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 		if cause := context.Cause(ctx); cause != nil {
 			return nil, cause
 		}
-		return nil, errors.New("连接模型服务失败，请检查网络和 API 地址。")
+		return nil, fmt.Errorf("连接模型服务失败：%w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("模型 API 返回 HTTP %d，请检查地址、Key、模型和额度。", res.StatusCode)
+		return nil, fmt.Errorf("模型 API 返回 HTTP %d：%s", res.StatusCode, readUpstreamError(res.Body))
 	}
 	streaming := strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/event-stream")
 	acc := newAccumulator(profile.Protocol)
@@ -259,6 +259,25 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 	return result, nil
 }
 
+// readUpstreamError 只读取错误响应中的有限诊断字段，不把完整响应体写入日志或任务记录。
+func readUpstreamError(body io.Reader) string {
+	data, err := io.ReadAll(io.LimitReader(body, 32*1024))
+	if err != nil || len(data) == 0 {
+		return "上游未提供错误详情，请检查地址、Key、模型和额度。"
+	}
+	var value shared.Object
+	if json.Unmarshal(data, &value) == nil {
+		if message := responseErrorMessage(value); message != "" && !strings.HasPrefix(message, "上游未提供") {
+			return message
+		}
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "上游未提供错误详情，请检查地址、Key、模型和额度。"
+	}
+	return shared.Clip(text, 500)
+}
+
 // Turn 只在完整、未截断的响应通过校验后提交历史，工具参数交给受限文件层处理。
 func (p *Provider) Turn(ctx context.Context, profile configstore.Profile, history *[]any, system string, tools []shared.Tool, progress func(shared.Object)) (shared.Reply, error) {
 	endpoint, headers, body := RequestSpec(profile, *history, system, tools)
@@ -278,7 +297,7 @@ func (p *Provider) Turn(ctx context.Context, profile configstore.Profile, histor
 	switch profile.Protocol {
 	case "responses":
 		if data["error"] != nil || data["status"] == "failed" {
-			return reply, errors.New("Responses API 报告请求失败。")
+			return reply, errors.New("Responses API 报告请求失败：" + responseErrorMessage(data))
 		}
 		output, ok := data["output"].([]any)
 		if !ok {
