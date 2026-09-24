@@ -1,15 +1,15 @@
 {
   "name": "api-subagents",
-  "version": "0.4.3",
-  "description": "把边界明确的任务交给外部模型，可返回修改建议或直接改文件、执行命令和测试",
+  "version": "0.5.1",
+  "description": "委派外部模型完成明确任务，也可用已配置的图片模型在 Codex 对话中生成图片",
   "author": {
     "name": "zzz"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "API Subagents",
-    "shortDescription": "外部模型提出修改建议，或通过独立 Codex worker 直接执行和测试",
-    "longDescription": "支持所有已配置连接及其已选模型，复用四类 API 协议。默认返回修改建议；显式选择执行模式后，可通过隔离的 Codex worker 直接修改工作区、执行命令和测试，无需切换主模型或开启挟持模式。模型需兼容工具调用，写入和联网均须授权；主 Agent 检查实际变更与执行结果。",
+    "shortDescription": "委派外部模型处理任务，或用已选图片模型生成图片",
+    "longDescription": "支持已配置连接及其已选模型。默认委派仅返回修改建议；显式授权的执行模式可通过隔离 Codex worker 修改工作区、运行测试。新增独立生图工具：保持文字主模型，通过已保存的兼容连接请求单张图片，保存到指定工作区并按上游计费；需要明确的生图请求，不会因选中图片模型自动计费。",
     "developerName": "zzz",
     "category": "Productivity",
     "capabilities": [
