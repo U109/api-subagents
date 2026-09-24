@@ -48,24 +48,33 @@ func codexTestCommand(ctx context.Context, bin string, args ...string) *exec.Cmd
 	return cmd
 }
 
-// TestCodexPrimaryModel 验证没有登录凭据的真实 Codex 能通过四种协议获得回答，不访问付费 API。
+// TestCodexPrimaryModel 验证隔离 Codex 通过四种协议获得回答；允许 CLI 将 ultra 归一为 max，不访问付费 API。
 func TestCodexPrimaryModel(t *testing.T) {
 	bin := codexBinary(t)
-	for _, protocol := range []string{"compatible", "responses", "anthropic", "gemini"} {
-		t.Run(protocol, func(t *testing.T) {
+	for _, tc := range []struct{ protocol, effort string }{
+		{"compatible", "high"}, {"responses", "high"}, {"anthropic", "high"}, {"gemini", "high"},
+		{"compatible", "max"}, {"compatible", "ultra"}, {"responses", "max"}, {"responses", "ultra"},
+	} {
+		protocol, effort := tc.protocol, tc.effort
+		t.Run(protocol+"/"+effort, func(t *testing.T) {
 			stream := protocol != "anthropic"
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				var body shared.Object
 				json.NewDecoder(req.Body).Decode(&body)
+				// 部分 Codex 版本将 ultra 归一为 max；保留两者，但不能降到 xhigh 或更低。
+				validEffort := func(actual string) bool {
+					return actual == effort || effort == "ultra" && actual == "max"
+				}
 				switch protocol {
 				case "compatible":
-					if body["reasoning_effort"] != "high" {
+					if !validEffort(shared.Str(body["reasoning_effort"])) {
 						t.Error("Codex effort not forwarded", body["reasoning_effort"])
 					}
 				case "responses":
-					if shared.Obj(body["reasoning"])["effort"] != "high" {
+					if !validEffort(shared.Str(shared.Obj(body["reasoning"])["effort"])) {
 						t.Error("Codex effort not forwarded", body["reasoning"])
 					}
+					t.Logf("selected=%s, upstream reasoning=%s", effort, shared.Marshal(body["reasoning"]))
 				case "anthropic":
 					if shared.Obj(body["thinking"])["type"] != "enabled" {
 						t.Error("Claude thinking missing")
@@ -87,7 +96,7 @@ func TestCodexPrimaryModel(t *testing.T) {
 			defer cancel()
 			root := t.TempDir()
 			answer := filepath.Join(root, "answer.txt")
-			cmd := codexTestCommand(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", `model_reasoning_effort="high"`, "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
+			cmd := codexTestCommand(ctx, bin, "exec", "--ephemeral", "--skip-git-repo-check", "--json", "-s", "read-only", "-c", `model_reasoning_effort="`+effort+`"`, "-m", "api-subagents/demo", "-C", root, "-o", answer, "Reply OK without using tools.")
 			cmd.Env = codexTestEnv(r.Codex.Home)
 			cmd.WaitDelay = 2 * time.Second
 			cmd.Dir = root
@@ -103,7 +112,7 @@ func TestCodexPrimaryModel(t *testing.T) {
 	}
 }
 
-// TestCodexModelList 检查桌面使用的 app-server 模型列表会显示默认路由及单独连接。
+// TestCodexModelList 检查桌面使用的 app-server 模型列表会显示默认路由、单独连接及 max/ultra 档位。
 func TestCodexModelList(t *testing.T) {
 	bin := codexBinary(t)
 	r := testRelay(t, "compatible", "http://127.0.0.1:9", true)
@@ -156,8 +165,14 @@ func TestCodexModelList(t *testing.T) {
 		for _, item := range shared.Arr(shared.Obj(value["result"])["data"]) {
 			model := shared.Obj(item)
 			models[shared.Str(model["model"])] = true
-			if len(shared.Arr(model["supportedReasoningEfforts"])) < 5 {
-				t.Fatal("reasoning picker unavailable", model)
+			efforts := map[string]bool{}
+			for _, raw := range shared.Arr(model["supportedReasoningEfforts"]) {
+				efforts[shared.Str(shared.Obj(raw)["reasoningEffort"])] = true
+			}
+			for _, effort := range []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"} {
+				if !efforts[effort] {
+					t.Fatal("reasoning picker option missing", effort, model)
+				}
 			}
 			if model["defaultReasoningEffort"] != "low" {
 				t.Fatal("connection default missing from catalog", model)

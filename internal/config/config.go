@@ -112,7 +112,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		}
 		p.Model = strings.TrimSpace(p.Model)
 		if !ValidReasoningEffort(p.ReasoningEffort) {
-			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high 或 xhigh。")
+			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high、xhigh、max 或 ultra。")
 		}
 		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 || strings.IndexFunc(p.Model, unicode.IsControl) >= 0 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
@@ -163,7 +163,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 // ValidReasoningEffort 限定可保存的推理档位；空值保持旧配置行为，不向服务强加推理参数。
 func ValidReasoningEffort(effort string) bool {
 	switch effort {
-	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
 		return true
 	default:
 		return false

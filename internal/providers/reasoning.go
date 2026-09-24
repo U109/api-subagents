@@ -71,7 +71,7 @@ func ApplyReasoning(body shared.Object, p configstore.Profile, effort string) er
 	return nil
 }
 
-// reasoningBudget 沿用 CPA 的常见档位预算，供不接受文本等级的原生协议使用。
+// reasoningBudget 沿用 CPA 的常见档位预算；max/ultra 在预算式协议中沿用 xhigh 上限，再由调用方限制输出预算。
 func reasoningBudget(effort string) int {
-	return map[string]int{"none": 0, "minimal": 512, "low": 1024, "medium": 8192, "high": 24576, "xhigh": 32768}[effort]
+	return map[string]int{"none": 0, "minimal": 512, "low": 1024, "medium": 8192, "high": 24576, "xhigh": 32768, "max": 32768, "ultra": 32768}[effort]
 }

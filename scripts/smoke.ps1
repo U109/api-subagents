@@ -24,7 +24,7 @@ try {
     }
     if (-not (Test-Path -LiteralPath $report)) { throw 'The desktop did not produce its startup report.' }
     $result = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 7 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3 -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
+    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 9 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3 -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
     $restored = Get-Content -LiteralPath $codexConfig -Raw -Encoding UTF8
     if (-not $restored.Contains("model = 'original-smoke-model'") -or $restored.Contains('X-Api-Subagents-Token') -or (Test-Path -LiteralPath (Join-Path $env:API_SUBAGENTS_HOME 'codex-relay-backup.json'))) { throw 'Desktop close did not restore Codex configuration.' }
     if ([IO.File]::ReadAllText((Join-Path $env:API_SUBAGENTS_HOME 'models.json')) -ne $fixture) { throw 'Desktop close modified the saved model configuration.' }

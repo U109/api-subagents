@@ -36,9 +36,9 @@ let selected = null,
 const catalogs = new Map(),
   dirty = new Set();
 const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
-const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
+const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh', max: '最大 · max', ultra: '极限 · ultra'};
 const tabIcons = {connection: 'link', model: 'model', purpose: 'route', advanced: 'sliders'};
-const reasoningHints = {'': '由模型服务决定，不额外指定思考参数', none: '适用于支持关闭推理的模型，优先快速生成', minimal: '用尽量少的推理处理简单、明确的任务', low: '适合日常修改与简单排错，优先速度和较低用量', medium: '在响应速度与分析深度之间取得平衡', high: '适合复杂分析与代码审查，通常需要更多时间与用量', xhigh: '适合少量高难任务，可能显著增加等待时间和用量；日常操作建议 low 或 medium，需上游支持'};
+const reasoningHints = {'': '由模型服务决定，不额外指定思考参数', none: '适用于支持关闭推理的模型，优先快速生成', minimal: '用尽量少的推理处理简单、明确的任务', low: '适合日常修改与简单排错，优先速度和较低用量', medium: '在响应速度与分析深度之间取得平衡', high: '适合复杂分析与代码审查，通常需要更多时间与用量', xhigh: '适合少量高难任务，可能显著增加等待时间和用量；日常操作建议 low 或 medium，需上游支持', max: '仅用于明确支持 max 的上游，可能增加等待时间和用量；受限协议按最高支持档位折合', ultra: '仅用于明确支持 ultra 的上游，可能显著增加等待时间和用量；受限协议按最高支持档位折合'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;
@@ -156,7 +156,7 @@ function connectionHeading() {
   byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'}`;
 }
 
-/** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果 */
+/** 按档位表绘制全部点选项（含 max/ultra）；只更新思考参数，保留其他 Tab 的输入和筛选结果 */
 function renderReasoning() {
   const effort = config.models[selected].reasoningEffort || '';
   byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value, label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');

@@ -3,7 +3,7 @@ package cpacompat
 
 import "strings"
 
-// MapToClaudeEffort 将通用档位映射到 Claude 自适应思考；只有明确支持的模型才启用 max
+// MapToClaudeEffort 将通用档位映射到 Claude 自适应思考；xhigh/max/ultra 仅在明确支持时折合 max，否则使用 high。
 func MapToClaudeEffort(level string, supportsMax bool) (string, bool) {
 	level = strings.ToLower(strings.TrimSpace(level))
 	switch level {
@@ -13,7 +13,7 @@ func MapToClaudeEffort(level string, supportsMax bool) (string, bool) {
 		return "low", true
 	case "low", "medium", "high":
 		return level, true
-	case "xhigh", "max":
+	case "xhigh", "max", "ultra":
 		if supportsMax {
 			return "max", true
 		}
