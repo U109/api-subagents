@@ -120,6 +120,9 @@ func TestResponsesPassthroughStreamingCancellation(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("cancel did not reach upstream")
 	}
+	if got := awaitRequestResult(t, r); got.Outcome != "client_cancelled" {
+		t.Fatalf("cancellation reported as upstream failure: %+v", got)
+	}
 }
 
 // TestResponsesPassthroughReadFailure 验证半途网络错误表现为 HTTP 断流，不插入 response.failed 或重试。
@@ -149,6 +152,9 @@ func TestResponsesPassthroughReadFailure(t *testing.T) {
 	body, err := io.ReadAll(res.Body)
 	if err == nil || string(body) != ": partial\n\n" || count.Load() != 1 {
 		t.Fatal("broken stream hidden or rewritten", err, string(body), count.Load())
+	}
+	if got := awaitRequestResult(t, r); got.Outcome != "upstream_read_error" {
+		t.Fatalf("missing read error diagnostic: %+v", got)
 	}
 }
 

@@ -29,13 +29,14 @@ import (
 )
 
 type State struct {
-	Enabled       bool   `json:"enabled"`
-	Model         string `json:"model"`
-	ActiveModel   string `json:"activeModel"`
-	ActiveModelID string `json:"activeModelId,omitempty"`
-	Address       string `json:"address"`
-	Message       string `json:"message"`
-	Requests      uint64 `json:"requests"`
+	Enabled        bool            `json:"enabled"`
+	Model          string          `json:"model"`
+	ActiveModel    string          `json:"activeModel"`
+	ActiveModelID  string          `json:"activeModelId,omitempty"`
+	Address        string          `json:"address"`
+	Message        string          `json:"message"`
+	Requests       uint64          `json:"requests"`
+	RecentRequests []RequestResult `json:"recentRequests,omitempty"`
 }
 type Relay struct {
 	Store         *configstore.ConfigStore
@@ -53,6 +54,7 @@ type Relay struct {
 	workerConfig  *configstore.Config
 	requestLimit  int
 	limitExceeded bool
+	epoch         uint64
 }
 
 // New 创建默认关闭的网关，模型密钥只在请求时从本机配置解析。
@@ -61,7 +63,13 @@ func New(store *configstore.ConfigStore, codex codexconfig.CodexConfig) *Relay {
 }
 
 // Snapshot 返回不含 Key、令牌和 Codex 备份的状态，供左侧连接标识显示。
-func (r *Relay) Snapshot() State { r.mu.RLock(); defer r.mu.RUnlock(); return r.state }
+func (r *Relay) Snapshot() State {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	state := r.state
+	state.RecentRequests = append([]RequestResult(nil), r.state.RecentRequests...)
+	return state
+}
 
 // notify 发布网关状态变化，不对模型输出或请求内容做日志记录。
 func (r *Relay) notify() {
@@ -130,6 +138,7 @@ func (r *Relay) Enable(model string) error {
 	r.host = host
 	r.server = server
 	r.cancel = cancel
+	r.epoch++
 	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由"}
 	r.mu.Unlock()
 	go func() { _ = server.Serve(listener) }()
@@ -158,6 +167,7 @@ func (r *Relay) Disable() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
+	r.epoch++
 	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
@@ -261,6 +271,12 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	r.mu.Lock()
+	// 鉴权后读取配置期间可能关闭并重启网关，旧令牌请求不能计入新的启用周期。
+	if !r.state.Enabled || r.token != token {
+		r.mu.Unlock()
+		replyError(w, 503, "本次网关入口已关闭，请重新连接。")
+		return
+	}
 	if r.requestLimit > 0 && r.state.Requests >= uint64(r.requestLimit) {
 		r.limitExceeded = true
 		r.mu.Unlock()
@@ -271,10 +287,14 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.state.ActiveModelID = profile.Model
 	r.state.Requests++
 	r.state.Message = "Codex 请求已接入本地网关，当前模型：" + profile.Model
+	var trace *requestTrace
+	if profile.Protocol == "responses" {
+		trace = r.startTraceLocked(connection, profile)
+	}
 	r.mu.Unlock()
 	r.notify()
 	if profile.Protocol == "responses" {
-		r.forwardResponses(w, req, data, profile)
+		r.forwardResponses(w, req, data, profile, trace)
 		return
 	}
 	r.forward(w, req, input, profile)

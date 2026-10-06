@@ -9,7 +9,7 @@ import (
 	"github.com/U109/api-subagents/internal/shared"
 )
 
-// TestOfficialModelContexts 验证具体型号和明确别名的自动容量、手动优先及未知型号默认 256K。
+// TestOfficialModelContexts 验证自动容量不超过官方值及 256K、手动优先，并保留未修改的官方元数据。
 func TestOfficialModelContexts(t *testing.T) {
 	if DefaultContextWindow != 256000 {
 		t.Fatal("unknown model default must stay at 256K")
@@ -29,6 +29,7 @@ func TestOfficialModelContexts(t *testing.T) {
 		{"gemini-3.8-flash-private", DefaultContextWindow},
 	} {
 		p := Profile{}
+		tc.want = min(tc.want, DefaultContextWindow)
 		if got := p.ContextWindow(tc.model); got != tc.want {
 			t.Fatalf("%s: got %d, want %d", tc.model, got, tc.want)
 		}
@@ -49,7 +50,7 @@ func TestOfficialModelContexts(t *testing.T) {
 	}
 	copy := OfficialModelContexts()
 	delete(copy, "gpt-6-astra")
-	if (Profile{}).ContextWindow("gpt-6-astra") != 1050000 {
+	if (Profile{}).ContextWindow("gpt-6-astra") != DefaultContextWindow || OfficialModelContexts()["gpt-6-astra"].Tokens != 1050000 {
 		t.Fatal("UI metadata changed the shared defaults")
 	}
 }

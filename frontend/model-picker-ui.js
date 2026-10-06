@@ -339,21 +339,22 @@
     dialog.onclose = () => { if (dialog.returnValue !== 'added') root.querySelector('#add-manual-model').focus({preventScroll: true}); };
   }
 
-  /** 根据当前 ID 显示官方依据、手动覆盖及压缩阈值；未收录型号回退，不修改弹窗以外的草稿 */
+  /** 自动容量取官方值与 256K 的较小值；保留手动覆盖和未核实提示，不修改弹窗外的草稿。 */
   function updateContextHint(root, context) {
     const field = root.querySelector('#model-context-window');
     const model = root.querySelector('#edit-model-id').value.trim().toLowerCase();
     const preset = Object.hasOwn(context.contextDefaults || {}, model) ? context.contextDefaults[model] : null;
     const fallback = context.contextFallback || 256000;
     const automatic = field.value === '' && !field.validity.badInput;
-    const size = automatic ? (preset?.tokens || fallback) : Number(field.value);
+    const automaticSize = preset ? Math.min(preset.tokens, fallback) : fallback;
+    const size = automatic ? automaticSize : Number(field.value);
     const valid = Number.isInteger(size) && size >= 4096 && size <= 2000000;
-    field.placeholder = preset ? `自动 · ${preset.tokens.toLocaleString('zh-CN')} tokens` : `未识别 · 默认 ${fallback.toLocaleString('zh-CN')} tokens`;
+    field.placeholder = preset ? `自动 · ${automaticSize.toLocaleString('zh-CN')} tokens` : `待核实 · 暂用 ${fallback.toLocaleString('zh-CN')} tokens`;
     root.querySelector('#reset-model-context').disabled = automatic;
     const basis = preset ? `${model === preset.model ? '官方' : `按别名参考 ${preset.model} 官方`}${preset.inputOnly ? '输入上限' : '上下文'} ${preset.tokens.toLocaleString('zh-CN')} tokens（核对 ${preset.verifiedAt}）` : `尚无已核实的官方容量，自动模式使用 ${fallback.toLocaleString('zh-CN')} tokens，可按上游限制手动填写`;
     root.querySelector('#model-context-help').textContent = valid
-      ? `${automatic ? '自动' : '手动'}：${size.toLocaleString('zh-CN')} tokens，约 ${(Math.floor(size * 0.9)).toLocaleString('zh-CN')} tokens 自动压缩。${basis}。上游可能另有限制，保存后重启 Codex 生效`
-      : `填写 4096–2000000 的整数 tokens；留空使用已核实的官方容量，未知型号使用 ${fallback.toLocaleString('zh-CN')}`;
+      ? `${automatic ? '自动（官方容量与 256K 取较小值）' : '手动'}：${size.toLocaleString('zh-CN')} tokens，约 ${(Math.floor(size * 0.9)).toLocaleString('zh-CN')} tokens 自动压缩。${basis}。上游可能另有限制，保存后重启 Codex 生效`
+      : `填写 4096–2000000 的整数 tokens；留空按官方容量与 256K 取较小值，未知型号暂用 ${fallback.toLocaleString('zh-CN')}`;
   }
 
   /** 显示自动或自定义输出预算；仅 Responses 使用此项，未核实型号保持上游默认。 */

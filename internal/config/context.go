@@ -9,13 +9,13 @@ const DefaultContextWindow = 256000
 const MinContextWindow = 4096
 const MaxContextWindow = 2000000
 
-// ContextWindow 优先保留手动容量，其次按具体型号查官方规格；未核实的型号使用默认 256K。
+// ContextWindow 保留手动容量；自动容量取已核实规格和 256K 的较小值，未知型号暂用 256K。
 func (p Profile) ContextWindow(model string) int {
 	if size := p.ModelContextWindows[model]; size >= MinContextWindow && size <= MaxContextWindow {
 		return size
 	}
 	if preset, ok := officialModelContexts[strings.ToLower(strings.TrimSpace(model))]; ok {
-		return preset.Tokens
+		return min(preset.Tokens, DefaultContextWindow)
 	}
 	return DefaultContextWindow
 }

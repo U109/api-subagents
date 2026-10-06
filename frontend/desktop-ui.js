@@ -54,7 +54,7 @@
     }
     if (previous.plugin.phase === 'installing' && next.plugin.phase === 'installed') window.notices.show('plugin-update', '插件已安装，请在 Codex 新建对话');
     if (previous.relay?.enabled !== next.relay?.enabled && !['closing', 'ready'].includes(next.close?.phase)) window.notices.show('relay', next.relay?.enabled ? '挟持已开启，请重启 Codex' : '挟持已关闭，请重启 Codex', 'warning');
-    if (next.relay?.enabled && !previous.relay?.requests && next.relay.requests > 0) window.notices.show('relay', 'Codex 请求已接入本地网关');
+    if (next.relay?.enabled && !previous.relay?.requests && next.relay.requests > 0) window.notices.show('relay', 'Codex 请求已接入本地网关，生成结果请查看最近请求', 'info');
   }
 
   /** 将安装、下载及模型接入状态同步到侧栏、工具栏和管理弹窗 */
@@ -100,6 +100,7 @@
   /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接 */
   function renderRelay(relay) {
     if (!relay) return;
+    window.relayDiagnostics?.render(relay);
     node('relay-panel').hidden = false;
     node('relay-panel').classList.toggle('enabled', relay.enabled);
     node('relay-label').textContent = relay.enabled ? '已开启' : '未开启';

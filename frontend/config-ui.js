@@ -593,7 +593,7 @@ void action(async () => {
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: Number(byId('picker')?.dataset.selectedCount || 0)});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('#editor details').length, relayModelCount: Number(byId('picker')?.dataset.selectedCount || 0), diagnosticsReady: Boolean(window.relayDiagnostics && byId('relay-diagnostics-list')), themeAction: getComputedStyle(document.documentElement).getPropertyValue('--action').trim(), themeWarning: getComputedStyle(document.documentElement).getPropertyValue('--radix-amber-11').trim()});
 });
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {

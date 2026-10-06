@@ -4,8 +4,9 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>API Subagents · 模型配置</title>
   <link rel="stylesheet" href="/config.css"><link rel="stylesheet" href="/model-picker.css"><link rel="stylesheet" href="/desktop.css">
+  <link rel="stylesheet" href="/radix-palette.css"><link rel="stylesheet" href="/workbench-theme.css">
   <script src="/bridge.js" defer></script><script src="/shell-ui.js" defer></script><script src="/notification-ui.js" defer></script>
-  <script src="/select-ui.js" defer></script><script src="/model-picker-ui.js" defer></script><script src="/config-ui.js" defer></script><script src="/desktop-ui.js" defer></script>
+  <script src="/select-ui.js" defer></script><script src="/model-picker-ui.js" defer></script><script src="/relay-diagnostics-ui.js" defer></script><script src="/config-ui.js" defer></script><script src="/desktop-ui.js" defer></script>
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -61,6 +62,12 @@
           <div class="route-control"><button id="enable-relay" class="text-button" hidden>切换到此连接</button><span id="relay-label">未开启</span><button id="relay-switch" class="switch" role="switch" aria-checked="false" aria-label="挟持模式" disabled><span></span></button></div>
         </section>
       </div>
+      <details id="relay-diagnostics" class="relay-diagnostics" data-desktop-control hidden>
+        <summary>最近请求<span id="relay-diagnostics-summary" class="request-result-badge" role="status">尚无请求</span></summary>
+        <p class="request-diagnostics-caption">仅保留本次开启期间最近 20 次 Responses 请求的脱敏诊断，不保存提问、回答或 Key。接入网关不代表生成成功；断流不会自动重放。</p>
+        <p id="relay-diagnostics-empty" class="request-diagnostics-empty">使用 Codex 发起请求后，这里会显示结束状态及请求 ID。</p>
+        <ol id="relay-diagnostics-list" class="request-results" aria-label="最近请求记录"></ol>
+      </details>
       <section id="editor" aria-label="连接配置"></section>
     </div>
     <footer id="config-actions" class="action-bar" hidden><div class="save-guidance"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>修改将在保存后生效 · 测试可能产生少量 API 费用</span></div><div class="footer-actions"><button id="probe" class="secondary"><svg aria-hidden="true"><use href="#i-plug"/></svg>测试连接</button><button id="save" class="primary">保存配置<kbd>Ctrl S</kbd></button></div></footer>

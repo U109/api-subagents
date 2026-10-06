@@ -118,6 +118,13 @@ func notices() error {
 	}
 	text.WriteString("\n===== CLIProxyAPI v7.3.6 adapted source / internal/cpacompat =====\nSource: https://github.com/router-for-me/CLIProxyAPI/tree/8c664b2fede5c83b919be1df9b01057ec4e4c950\n\n")
 	text.Write(cpaLicense)
+	// 页面采用已确认原型的官方色阶，构建时同步收录许可证，避免生成 notices 时丢失前端署名。
+	paletteLicense, err := os.ReadFile("frontend/licenses/radix-colors.txt")
+	if err != nil {
+		return err
+	}
+	text.WriteString("\n===== Radix Colors / frontend/radix-palette.css =====\n")
+	text.Write(paletteLicense)
 	return os.WriteFile("THIRD-PARTY-NOTICES.txt", []byte(strings.TrimRight(text.String(), "\r\n")+"\n"), 0644)
 }
 

@@ -38,6 +38,13 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $release.version)) { throw 'Tag must match the release version.' }
       - name: Build standalone plugin and verify payload
         run: ./scripts/build.ps1 -Target plugin
+      - name: Verify diagnostic UI and prototype semantics
+        shell: pwsh
+        run: |
+          node --check frontend/relay-diagnostics-ui.js
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test frontend/relay-diagnostics-ui.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Test protocols, tasks, configuration, installation and updates
         shell: pwsh
         run: |

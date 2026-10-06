@@ -70,6 +70,11 @@ func (g *WorkerGateway) Usage() (int, bool) {
 
 // Close 撤销临时入口、取消上游请求并清除内存中的协议元数据；不调用配置恢复逻辑。
 func (g *WorkerGateway) Close() {
+	g.relay.mu.Lock()
+	g.relay.epoch++
+	g.relay.state.Enabled = false
+	g.relay.state.RecentRequests = nil
+	g.relay.mu.Unlock()
 	g.relay.cancel()
 	_ = g.relay.server.Close()
 	g.relay.chatHistory.clear()
