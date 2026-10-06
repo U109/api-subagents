@@ -158,7 +158,7 @@ func (r *Relay) Disable() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
-	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话继续发送前请选择原提供商支持的模型，不要保留挟持模型"}
+	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()

@@ -112,7 +112,7 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 	if err != nil {
 		return nil, err
 	}
-	if bytes.Contains(original, []byte("# BEGIN API SUBAGENTS")) || bytes.Contains(original, []byte(preservedPrefix)) {
+	if !bytes.Equal(original, stripConfigMarkers(original, []string{defaultsBegin, defaultsEnd, providerBegin, providerEnd}, true)) {
 		return nil, errors.New("发现上次挟持模式的配置，请先恢复后再开启。")
 	}
 	var parsed shared.Object
@@ -162,11 +162,23 @@ func managedBlock(data []byte, start, end string) (int, int, error) {
 	return begin, begin + tail + len(end) + 1, nil
 }
 
-// RestoreCodexConfig 完全未变时逐字节恢复；其他配置被编辑时只还原受控字段，保留用户的新修改。
+// RestoreCodexConfig 先按三方配置值确定安全的恢复结果，再尽量复用原布局；注释标记不再决定所有权。
 func RestoreCodexConfig(current []byte, backup codexBackup) ([]byte, error) {
 	if bytes.Equal(current, backup.Written) {
 		return backup.Original, nil
 	}
+	merged, err := restoreManagedValues(current, backup)
+	if err != nil {
+		return nil, err
+	}
+	if marked, err := restoreMarkedConfig(current, backup); err == nil && sameConfig(marked, merged) {
+		return marked, nil
+	}
+	return merged, nil
+}
+
+// restoreMarkedConfig 仅用于保留旧布局；调用者必须与三方合并结果核对，不能直接信任当前文件的恢复注释。
+func restoreMarkedConfig(current []byte, backup codexBackup) ([]byte, error) {
 	rest := append([]byte{}, current...)
 	for _, pair := range [][2]string{{providerBegin, providerEnd}, {defaultsBegin, defaultsEnd}} {
 		start, end, err := managedBlock(rest, pair[0], pair[1])
@@ -336,7 +348,7 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	return nil
 }
 
-// Restore 恢复原默认设置，并为旧对话保留无凭据的停用提供商；外部编辑冲突时保留备份。
+// Restore 恢复原默认设置，并为旧对话保留复用 Codex 登录的提供商；外部编辑冲突时保留备份。
 func (c CodexConfig) Restore() error {
 	data, err := os.ReadFile(c.backupPath())
 	if os.IsNotExist(err) {
@@ -353,23 +365,23 @@ func (c CodexConfig) Restore() error {
 	if err != nil {
 		return errors.New("无法读取当前 Codex 配置，备份已保留。")
 	}
-	if bytes.Equal(current, backup.Original) {
-		repaired, repairErr := withInactiveProvider(current)
-		if repairErr != nil {
-			return repairErr
-		}
-		if err = shared.AtomicWrite(c.configPath(), repaired, 0600); err != nil {
-			return err
-		}
-		return os.Remove(c.backupPath())
+	restored := current
+	if !bytes.Equal(current, backup.Original) {
+		restored, err = RestoreCodexConfig(current, backup)
 	}
-	restored, err := RestoreCodexConfig(current, backup)
 	if err != nil {
 		return err
 	}
 	restored, err = withInactiveProvider(restored)
 	if err != nil {
 		return err
+	}
+	if !bytes.Equal(current, backup.Written) {
+		// 外部改动后的恢复额外留下快照；修复成功也能找回本次写入前的配置和原始备份。
+		snapshot := shared.Marshal(shared.Object{"current": current, "backup": json.RawMessage(data)})
+		if err = shared.AtomicWrite(filepath.Join(c.DataRoot, "codex-recovery", shared.UUID()+".json"), snapshot, 0600); err != nil {
+			return errors.New("无法保存 Codex 恢复快照，当前配置和原始备份未修改。")
+		}
 	}
 	latest, readErr := os.ReadFile(c.configPath())
 	if readErr != nil || !bytes.Equal(latest, current) {

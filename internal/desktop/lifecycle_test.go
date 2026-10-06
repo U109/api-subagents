@@ -50,11 +50,11 @@ func closeTestApp(t *testing.T, endpoint string) *App {
 	return a
 }
 
-// assertCloseRestored 确认原默认模型恢复、令牌与备份清除，并保留旧对话所需的停用提供商。
+// assertCloseRestored 确认原默认模型恢复、令牌与备份清除，旧对话可复用 Codex 登录而不再指向本地网关。
 func assertCloseRestored(t *testing.T, a *App) {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(a.relay.Codex.Home, "config.toml"))
-	if err != nil || !bytes.Contains(data, []byte("model='original-model'")) || bytes.Contains(data, []byte("X-Api-Subagents-Token")) || !bytes.Contains(data, []byte("127.0.0.1:0/v1")) {
+	if err != nil || !bytes.Contains(data, []byte("model='original-model'")) || bytes.Contains(data, []byte("X-Api-Subagents-Token")) || bytes.Contains(data, []byte("127.0.0.1:0/v1")) || !bytes.Contains(data, []byte("requires_openai_auth = true")) {
 		t.Fatal("Codex defaults or inactive conversation provider not restored")
 	}
 	if _, err := os.Stat(filepath.Join(a.relay.Codex.DataRoot, "codex-relay-backup.json")); !os.IsNotExist(err) {
@@ -188,6 +188,27 @@ func TestCloseRestoreConflict(t *testing.T) {
 	}
 	if err := os.WriteFile(path, written, 0600); err != nil || !a.prepareClose(false) {
 		t.Fatal("close could not retry after conflict resolved", err)
+	}
+	assertCloseRestored(t, a)
+}
+
+// TestCloseWithDamagedMarkers 标记损坏但真实配置值未冲突时正常恢复并退出，不让用户手工修改配置。
+func TestCloseWithDamagedMarkers(t *testing.T) {
+	a := closeTestApp(t, "http://127.0.0.1:9")
+	if err := a.relay.Enable("demo"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(a.relay.Codex.Home, "config.toml")
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := bytes.Replace(written, []byte("# END API SUBAGENTS PROVIDER"), []byte("# BEGIN API SUBAGENTS PROVIDER"), 1)
+	if err := os.WriteFile(path, changed, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !a.prepareClose(false) {
+		t.Fatal("harmless marker edit blocked closing", a.closeSnapshot().Message)
 	}
 	assertCloseRestored(t, a)
 }

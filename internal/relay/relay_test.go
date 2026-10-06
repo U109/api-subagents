@@ -220,7 +220,7 @@ func TestRelayStopsAndRecovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	restored, _ := os.ReadFile(path)
-	if strings.Contains(string(restored), "X-Api-Subagents-Token") || !strings.Contains(string(restored), "manual_change=true") || !strings.Contains(string(restored), "127.0.0.1:0/v1") {
+	if strings.Contains(string(restored), "X-Api-Subagents-Token") || !strings.Contains(string(restored), "manual_change=true") || strings.Contains(string(restored), "127.0.0.1:0/v1") || !strings.Contains(string(restored), "requires_openai_auth = true") {
 		t.Fatal("settings not restored")
 	}
 	if r.Snapshot().Enabled {
