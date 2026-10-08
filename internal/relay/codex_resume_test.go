@@ -123,19 +123,31 @@ func TestCodexProviderReload(t *testing.T) {
 	})
 }
 
-// TestCodexInactiveThread 用真实桌面协议重开已停用提供商的历史对话，再开启后能继续；所有生成仅访问本机。
+// TestCodexInactiveThread 用隔离 Codex 重开历史对话、改用模拟账号模型，再开启网关继续；所有生成仅访问本机。
 func TestCodexInactiveThread(t *testing.T) {
 	bin := codexBinary(t)
 	var requests atomic.Int32
+	var accountRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		requests.Add(1)
 		var request shared.Object
 		json.NewDecoder(req.Body).Decode(&request)
+		protocol := "compatible"
+		if strings.HasSuffix(req.URL.Path, "/responses") {
+			protocol = "responses"
+			accountRequests.Add(1)
+			if req.Header.Get("Authorization") != "Bearer synthetic-account-test-key" {
+				t.Error("Codex auth was not used for historical provider")
+			}
+			if request["model"] != "mock-model" {
+				t.Error("account model was not selected", request["model"])
+			}
+		}
 		if request["reasoning_effort"] != nil {
 			t.Error("unspecified effort must preserve service default", request["reasoning_effort"])
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		io.WriteString(w, upstreamReply("compatible", true))
+		io.WriteString(w, upstreamReply(protocol, true))
 	}))
 	defer server.Close()
 	r := testRelay(t, "compatible", server.URL, true)
@@ -174,15 +186,44 @@ func TestCodexInactiveThread(t *testing.T) {
 			t.Fatal("opening history made a generation request")
 		}
 	})
-	if err := r.Enable("demo"); err != nil {
-		t.Fatal(err)
+	// 只把合成 Key 写入隔离 CODEX_HOME，模拟从网关切回 Codex 自己的登录凭据。
+	login := codexTestCommand(ctx, bin, "-c", "cli_auth_credentials_store=\"file\"", "login", "--with-api-key")
+	login.Env = codexTestEnv(r.Codex.Home)
+	login.Stdin = strings.NewReader("synthetic-account-test-key\n")
+	if output, err := login.CombinedOutput(); err != nil {
+		t.Fatalf("synthetic Codex login failed: %v\n%s", err, output)
 	}
-	cmd = codexTestCommand(ctx, bin, "exec", "resume", "--skip-git-repo-check", "--json", id, "Reply OK again without tools.")
+	// 只在隔离测试进程中覆盖账号提供商地址，绝不向真实付费接口发送请求。
+	providerArgs := []string{"-c", "model_provider=\"api_subagents\"", "-c", "model_providers.api_subagents.base_url=" + string(shared.Marshal(server.URL+"/v1"))}
+	t.Run("desktop-resume-with-codex-auth", func(t *testing.T) {
+		client := startCodexRPC(t, bin, r.Codex.Home, root, providerArgs...)
+		resumed := client.call(t, "thread/resume", shared.Object{"threadId": id, "modelProvider": "api_subagents", "model": "mock-model"})
+		if shared.Str(shared.Obj(resumed["thread"])["id"]) != id {
+			t.Fatal("old conversation was not resumed with its provider", resumed)
+		}
+		turn := client.call(t, "turn/start", shared.Object{"threadId": id, "model": "mock-model", "input": []any{shared.Object{"type": "text", "text": "Reply OK without tools.", "text_elements": []any{}}}})
+		client.waitTurn(t, shared.Str(shared.Obj(turn["turn"])["id"]))
+		if accountRequests.Load() != 1 {
+			t.Fatal("resumed desktop conversation did not reach Codex login route")
+		}
+	})
+	cmd = codexTestCommand(ctx, bin, append(append([]string{}, providerArgs...), "exec", "resume", "--skip-git-repo-check", "--json", "-m", "mock-model", id, "Reply OK with the account model without tools.")...)
 	cmd.Env = codexTestEnv(r.Codex.Home)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = root
 	output, err = cmd.CombinedOutput()
-	if err != nil || requests.Load() != 2 {
+	if err != nil || accountRequests.Load() != 2 || requests.Load() != 3 {
+		t.Fatalf("old conversation did not switch to Codex auth: %v, requests=%d, account=%d\n%s", err, requests.Load(), accountRequests.Load(), output)
+	}
+	if err := r.Enable("demo"); err != nil {
+		t.Fatal(err)
+	}
+	cmd = codexTestCommand(ctx, bin, "exec", "resume", "--skip-git-repo-check", "--json", "-m", "api-subagents/demo", id, "Reply OK again without tools.")
+	cmd.Env = codexTestEnv(r.Codex.Home)
+	cmd.WaitDelay = 2 * time.Second
+	cmd.Dir = root
+	output, err = cmd.CombinedOutput()
+	if err != nil || requests.Load() != 4 {
 		t.Fatalf("continue after enabling: %v, requests=%d\n%s", err, requests.Load(), output)
 	}
 }
@@ -194,11 +235,11 @@ type codexRPC struct {
 	notifications []shared.Object
 }
 
-// startCodexRPC 启动隔离的真实 app-server；子测试结束立即关闭，避免持有会话数据库或沿用旧配置。
-func startCodexRPC(t *testing.T, bin, home, root string) *codexRPC {
+// startCodexRPC 启动隔离的真实 app-server，可给本机模拟接口附加配置；子测试结束立即关闭以释放会话数据库。
+func startCodexRPC(t *testing.T, bin, home, root string, configArgs ...string) *codexRPC {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	cmd := codexTestCommand(ctx, bin, "app-server", "--listen", "stdio://")
+	cmd := codexTestCommand(ctx, bin, append(append([]string{}, configArgs...), "app-server", "--listen", "stdio://")...)
 	cmd.Env = codexTestEnv(home)
 	cmd.Dir = root
 	stdin, err := cmd.StdinPipe()

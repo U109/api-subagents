@@ -49,14 +49,11 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	return entries
 }
 
-// ResolveCatalogModel 解析当前配置中的本地别名；旧对话的真实模型 ID 只允许匹配已配置模型。
+// ResolveCatalogModel 解析本地别名；旧对话的真实模型名跟随 App 当前连接，不再尝试使用旧上游模型或凭据。
 // 连接名仅解码一次；返回请求独享的副本，切换模型不会修改默认模型、地址或 Key。
 func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (string, configstore.Profile, error) {
 	connection, suffix := defaultName, ""
-	if alias != "" && alias != relayModel {
-		if !strings.HasPrefix(alias, relayModel+"/") {
-			return resolveOriginalModel(config, defaultName, alias)
-		}
+	if strings.HasPrefix(alias, relayModel+"/") {
 		var hasSuffix bool
 		connection, suffix, hasSuffix = strings.Cut(strings.TrimPrefix(alias, relayModel+"/"), "/")
 		if hasSuffix && suffix == "" {
@@ -91,33 +88,4 @@ func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (
 	}
 	resolved.Model = model
 	return connection, resolved, nil
-}
-
-// resolveOriginalModel 让原自定义提供商的旧对话继续使用已配置模型；优先当前连接，其余重名拒绝猜测凭据。
-func resolveOriginalModel(config configstore.Config, defaultName, model string) (string, configstore.Profile, error) {
-	connection := ""
-	for name, profile := range config.Models {
-		matched := profile.Model == model
-		for _, candidate := range profile.RelayModels {
-			matched = matched || candidate == model
-		}
-		if !matched {
-			continue
-		}
-		if name == defaultName {
-			connection = name
-			break
-		}
-		if connection != "" {
-			connection = "\x00"
-		} else {
-			connection = name
-		}
-	}
-	if connection == "" || connection == "\x00" {
-		return "", configstore.Profile{}, errors.New("请在 Codex 中选择具体的挟持模型；原模型未配置或对应多个连接")
-	}
-	profile, err := configstore.ResolveProfile(config, connection)
-	profile.Model = model
-	return connection, profile, err
 }

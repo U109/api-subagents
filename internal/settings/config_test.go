@@ -17,8 +17,8 @@ import (
 	"github.com/U109/api-subagents/internal/testutil"
 )
 
-// TestOfficialContextsMetadata 验证桌面和浏览器共用的配置响应包含官方依据，但不会将默认表写入用户配置。
-func TestOfficialContextsMetadata(t *testing.T) {
+// TestNoAutomaticContextsMetadata 验证配置响应不再向界面提供按型号自动识别的容量资料，读取不修改用户配置。
+func TestNoAutomaticContextsMetadata(t *testing.T) {
 	store, _ := testutil.Config(t, "responses", "http://127.0.0.1:9/v1")
 	before, err := os.ReadFile(store.Path)
 	if err != nil {
@@ -28,9 +28,8 @@ func TestOfficialContextsMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	presets, ok := result["modelContextDefaults"].(map[string]configstore.ContextPreset)
-	if !ok || presets["gpt-6-astra"].Tokens != 1050000 || presets["gemini-3.8-flash-high"].Source == "" {
-		t.Fatal("official context metadata missing")
+	if result["modelContextDefaults"] != nil || result["modelContextFallback"] != nil {
+		t.Fatal("automatic context metadata must not be sent to the editor")
 	}
 	after, err := os.ReadFile(store.Path)
 	if err != nil || string(after) != string(before) || strings.Contains(string(shared.Marshal(result["config"])), "modelContextDefaults") {

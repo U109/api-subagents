@@ -48,6 +48,9 @@ type App struct {
 	closeState     closeState
 	busy           atomic.Int32
 	smoke          string
+	probeMu        sync.Mutex
+	probes         map[string]context.CancelFunc
+	probeCancelled map[string]bool
 }
 
 // newApp 复用本机配置目录，初始化轻量 Go 服务；构造期间不会调用模型或更新接口。
@@ -125,7 +128,24 @@ func (a *App) API(route, body string) (shared.Object, error) {
 		return nil, err
 	}
 	defer a.busy.Add(-1)
-	value, err := a.service.Handle(a.ctx, route, []byte(body))
+	requestContext := a.ctx
+	if route == "/api/probe" {
+		var request struct {
+			RequestID string `json:"requestId"`
+		}
+		if json.Unmarshal([]byte(body), &request) != nil {
+			return nil, errors.New("请求 JSON 无效")
+		}
+		if request.RequestID != "" {
+			ctx, finish, err := a.startProbeContext(request.RequestID)
+			if err != nil {
+				return nil, err
+			}
+			defer finish()
+			requestContext = ctx
+		}
+	}
+	value, err := a.service.Handle(requestContext, route, []byte(body))
 	if err == nil && body != "" && (route == "/api/config" || route == "/api/config/copy" || route == "/api/config/remove") {
 		if refreshErr := a.relay.RefreshCatalog(); refreshErr != nil {
 			value["warning"] = refreshErr.Error()

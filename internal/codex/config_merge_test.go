@@ -109,9 +109,9 @@ func TestRestoreConflictReportsField(t *testing.T) {
 	original := []byte("model='old'\n")
 	written, _ := PatchCodexConfig(original, "C:/catalog.json", 12345, "synthetic-token")
 	for _, tc := range []struct{ old, value, field string }{
-		{"12345/v1", "55555/v1", "base_url"},
+		{`base_url = "http://127.0.0.1:12345/v1"`, `base_url = "http://127.0.0.1:55555/v1"`, "base_url"},
 		{`wire_api = "responses"`, `wire_api = "changed"`, "wire_api"},
-		{"synthetic-token", "new-private-token", "http_headers"},
+		{`"X-Api-Subagents-Token" = "synthetic-token"`, `"X-Api-Subagents-Token" = "new-private-token"`, "http_headers"},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
 			current := bytes.Replace(written, []byte(tc.old), []byte(tc.value), 1)

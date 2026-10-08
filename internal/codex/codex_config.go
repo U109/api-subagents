@@ -105,8 +105,13 @@ func RootKeySpans(data []byte, keys map[string]bool) ([][2]int, error) {
 	return spans, nil
 }
 
-// PatchCodexConfig 接管模型、目录及原自定义提供商；旧对话的提供商身份保持可用，关闭时恢复完整原配置。
+// PatchCodexConfig 接管模型、目录及全部已配置的提供商和内置 OpenAI，关闭时恢复完整原配置。
 func PatchCodexConfig(original []byte, catalog string, port int, token string) ([]byte, error) {
+	return patchCodexConfig(original, catalog, port, token, nil)
+}
+
+// patchCodexConfig 额外补齐历史对话中的旧身份；仅生成可恢复的临时配置，不修改会话元数据。
+func patchCodexConfig(original []byte, catalog string, port int, token string, historical []string) ([]byte, error) {
 	var err error
 	original, err = withoutInactiveProvider(original)
 	if err != nil {
@@ -122,11 +127,11 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 	if shared.Obj(parsed["model_providers"])[providerID] != nil {
 		return nil, errors.New("Codex 已有同名自定义提供商，未覆盖。")
 	}
-	original, previousProvider, err := preservePreviousProvider(original, parsed)
+	original, previousProviders, err := preservePreviousProviders(original, parsed, historical)
 	if err != nil {
 		return nil, err
 	}
-	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true})
+	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true, "openai_base_url": true})
 	if err != nil {
 		return nil, err
 	}
@@ -136,9 +141,9 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 		saved := preservedPrefix + base64.StdEncoding.EncodeToString(original[span[0]:span[1]]) + "\n"
 		rest = append(append(append([]byte{}, rest[:span[0]]...), []byte(saved)...), rest[span[1]:]...)
 	}
-	prefix := fmt.Sprintf("%s\nmodel = %q\nmodel_provider = %q\nmodel_catalog_json = %s\n%s\n", defaultsBegin, relayModel, providerID, string(shared.Marshal(filepath.ToSlash(catalog))), defaultsEnd)
+	prefix := fmt.Sprintf("%s\nmodel = %q\nmodel_provider = %q\nmodel_catalog_json = %s\nopenai_base_url = %q\n%s\n", defaultsBegin, relayModel, providerID, string(shared.Marshal(filepath.ToSlash(catalog))), fmt.Sprintf("http://127.0.0.1:%d/v1/builtin/%s", port, token), defaultsEnd)
 	suffix := "\n" + providerBegin + "\n" + localProviderConfig(providerID, port, token)
-	if previousProvider != "" {
+	for _, previousProvider := range previousProviders {
 		suffix += "\n" + localProviderConfig(fmt.Sprintf("%q", previousProvider), port, token)
 	}
 	suffix += providerEnd + "\n"
@@ -244,7 +249,7 @@ func restoreSelectedModel(current, written []byte, backup codexBackup) ([]byte, 
 	if !modelOK || !providerOK || now["model_catalog_json"] != old["model_catalog_json"] {
 		return nil, conflict
 	}
-	spans, err := RootKeySpans(current, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true})
+	spans, err := RootKeySpans(current, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "openai_base_url": true})
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +330,11 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	if err != nil && !os.IsNotExist(err) {
 		return errors.New("无法读取 Codex 配置。")
 	}
-	written, err := PatchCodexConfig(original, c.catalogPath(), port, token)
+	historical, err := c.historyProviderIDs()
+	if err != nil {
+		return err
+	}
+	written, err := patchCodexConfig(original, c.catalogPath(), port, token, historical)
 	if err != nil {
 		return err
 	}

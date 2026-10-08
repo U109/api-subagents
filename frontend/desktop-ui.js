@@ -97,11 +97,11 @@
     else window.notices.clear('exit');
   }
 
-  /** 开关表示整个挟持模式；另一个连接被选中时提供明确的切换动作，绿色圆点标记实际请求连接 */
+  /** 无连接且未开启时隐藏主对话入口；开关表示整个挟持模式，绿色圆点标记实际请求连接。 */
   function renderRelay(relay) {
     if (!relay) return;
     window.relayDiagnostics?.render(relay);
-    node('relay-panel').hidden = false;
+    node('relay-panel').hidden = !relay.enabled && !window.modelEditor?.selectedName();
     node('relay-panel').classList.toggle('enabled', relay.enabled);
     node('relay-label').textContent = relay.enabled ? '已开启' : '未开启';
     node('relay-state').textContent = relay.message;

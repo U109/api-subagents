@@ -183,6 +183,11 @@ func restoreManagedValues(current []byte, backup codexBackup) ([]byte, error) {
 		return nil, errors.New("Codex 配置备份格式无效，未修改当前配置。")
 	}
 	nowProviders, oldProviders, sourceProviders := shared.Obj(now["model_providers"]), shared.Obj(written["model_providers"]), shared.Obj(original["model_providers"])
+	if !reflect.DeepEqual(written["openai_base_url"], original["openai_base_url"]) &&
+		!reflect.DeepEqual(now["openai_base_url"], written["openai_base_url"]) &&
+		!reflect.DeepEqual(now["openai_base_url"], original["openai_base_url"]) {
+		return nil, configConflict("openai_base_url")
+	}
 	owned := []string{}
 	for id, value := range oldProviders {
 		if !reflect.DeepEqual(value, sourceProviders[id]) {
@@ -199,7 +204,7 @@ func restoreManagedValues(current []byte, backup codexBackup) ([]byte, error) {
 		return nil, errors.New("Codex 当前 model_provider 指向不存在的提供商；配置和备份已保留。")
 	}
 	restoreKeys := map[string]bool{}
-	for _, key := range []string{"model", "model_provider", "model_catalog_json", "model_context_window", "model_auto_compact_token_limit"} {
+	for _, key := range []string{"model", "model_provider", "model_catalog_json", "model_context_window", "model_auto_compact_token_limit", "openai_base_url"} {
 		if (key == "model" || key == "model_provider") && !managedSelection {
 			continue
 		}

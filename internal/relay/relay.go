@@ -91,7 +91,7 @@ func (r *Relay) Recover() error {
 	return err
 }
 
-// Enable 验证已保存连接，先启动受鉴权保护的回环服务，再备份并接管 Codex 的模型设置。
+// Enable 验证已保存连接，备份并接管全部旧提供商入口；已启用时切换旧模型名及跟随 App 请求的默认连接。
 func (r *Relay) Enable(model string) error {
 	r.operation.Lock()
 	defer r.operation.Unlock()
@@ -112,7 +112,7 @@ func (r *Relay) Enable(model string) error {
 		r.state.Model = model
 		r.state.ActiveModel = ""
 		r.state.ActiveModelID = ""
-		r.state.Message = "已切换默认连接；Codex 选择“跟随 App 选择”即可使用"
+		r.state.Message = "已切换默认连接；旧模型名和“跟随 App 选择”均使用当前连接"
 		r.mu.Unlock()
 		r.notify()
 		return nil
@@ -200,14 +200,27 @@ func (r *Relay) RefreshCatalog() error {
 }
 
 // ServeHTTP 限定回环 Host 和固定路径，拒绝浏览器跨站访问及未持有本地随机令牌的请求。
+// 自定义入口使用令牌头，内置 OpenAI 使用带随机令牌的本地路径；不会转发 Codex 原登录凭据。
 // 首次收到有效模型请求时确认本地路由已接入；该状态不代表上游已经生成成功。
 func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.RLock()
 	state, host, token := r.state, r.host, r.token
 	r.mu.RUnlock()
 	w.Header().Set("Cache-Control", "no-store")
-	if req.Host != host || req.Header.Get("Origin") != "" || subtle.ConstantTimeCompare([]byte(req.Header.Get("X-Api-Subagents-Token")), []byte(token)) != 1 {
+	provided := req.Header.Get("X-Api-Subagents-Token")
+	if rest, builtin := strings.CutPrefix(req.URL.Path, "/v1/builtin/"); builtin {
+		var suffix string
+		provided, suffix, _ = strings.Cut(rest, "/")
+		req = req.Clone(req.Context())
+		req.URL.Path = "/v1/" + suffix
+		req.URL.RawPath = ""
+	}
+	if req.Host != host || req.Header.Get("Origin") != "" || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
 		replyError(w, 403, "本地网关拒绝未授权请求。")
+		return
+	}
+	if strings.EqualFold(req.Header.Get("Upgrade"), "websocket") {
+		replyError(w, http.StatusUpgradeRequired, "本地网关使用 HTTP/SSE。")
 		return
 	}
 	if !state.Enabled {

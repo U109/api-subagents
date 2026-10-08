@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// doResponsesWithRecovery 只恢复上游明确返回的 502/503 拒绝，不把连接错误或成功响应后的断流当作可重放请求。
-// 最多追加三次尝试；请求正文、模型、认证及协议头保持一致，最后一次响应原样返回，等待与尝试共享调用方上下文。
-func (r *Relay) doResponsesWithRecovery(upstream *http.Request, allowRetry bool) (*http.Response, error) {
+// doResponsesWithRecovery 在尚未交付内容时恢复 502/503，或由前导检查确认安全的流失败；未收到 HTTP 响应的连接错误仍不重放。
+// 两类错误共用最多三次恢复；正文、模型和身份保持不变，最终响应原样返回，取消与原截止时间覆盖等待和全部尝试。
+func (r *Relay) doResponsesWithRecovery(upstream *http.Request, allowRetry bool, inspectPrelude func(*http.Response) bool) (*http.Response, error) {
 	wait := r.responsesRetryWait
 	if wait == nil {
 		wait = waitResponsesRetry
@@ -29,8 +29,19 @@ func (r *Relay) doResponsesWithRecovery(upstream *http.Request, allowRetry bool)
 			request.Body = body
 		}
 		res, err := r.Client.Do(request)
-		if err != nil || !allowRetry || upstream.GetBody == nil || (res.StatusCode != http.StatusBadGateway && res.StatusCode != http.StatusServiceUnavailable) {
+		if err != nil || !allowRetry || upstream.GetBody == nil {
 			return res, err
+		}
+		recoverable := res.StatusCode == http.StatusBadGateway || res.StatusCode == http.StatusServiceUnavailable
+		if !recoverable && inspectPrelude != nil {
+			recoverable = inspectPrelude(res)
+		}
+		if err := upstream.Context().Err(); err != nil {
+			res.Body.Close()
+			return nil, err
+		}
+		if !recoverable {
+			return res, nil
 		}
 		delay, retry := responsesRetryDelay(res.Header.Get("Retry-After"), attempt, time.Now())
 		if !retry {
@@ -40,12 +51,11 @@ func (r *Relay) doResponsesWithRecovery(upstream *http.Request, allowRetry bool)
 		if deadline, ok := upstream.Context().Deadline(); ok && time.Until(deadline) <= delay {
 			return res, nil
 		}
+		// 原响应已不再交付，先关闭流再退避，避免失败流占用连接或继续读取上游内容。
+		res.Body.Close()
 		if err := wait(upstream.Context(), delay); err != nil {
-			res.Body.Close()
 			return nil, err
 		}
-		// 保留响应至退避成功，取消时关闭；不为复用连接而无限读取错误正文。
-		res.Body.Close()
 	}
 }
 

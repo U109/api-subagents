@@ -42,7 +42,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if err != nil {
 			return nil, err
 		}
-		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}, nil
+		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelOutputDefaults": configstore.OfficialModelOutputs()}, nil
 	}
 	var input struct {
 		Config json.RawMessage `json:"config"`
@@ -56,7 +56,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if err != nil {
 			return nil, err
 		}
-		single, err := selectedConfig(input.Config, input.Name, previous.MaxConcurrent)
+		single, err := selectedConfig(input.Config, input.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		}
 		delete(c.Models, input.Name)
 	case "/api/config/copy":
-		single, err := selectedConfig(input.Config, input.Name, c.MaxConcurrent)
+		single, err := selectedConfig(input.Config, input.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	if err = s.Store.Save(c); err != nil {
 		return nil, err
 	}
-	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}
+	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelOutputDefaults": configstore.OfficialModelOutputs()}
 	if copiedName != "" {
 		result["name"] = copiedName
 	}
@@ -135,14 +135,14 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 }
 
 // selectedConfig 只取当前连接草稿，其他未完成的模型不影响测试、目录查询或复制。
-func selectedConfig(data []byte, name string, concurrent int) ([]byte, error) {
+func selectedConfig(data []byte, name string) ([]byte, error) {
 	var input struct {
 		Models map[string]json.RawMessage `json:"models"`
 	}
 	if json.Unmarshal(data, &input) != nil || input.Models[name] == nil {
 		return nil, errors.New("该模型配置不存在，请刷新后重试。")
 	}
-	return shared.Marshal(shared.Object{"version": 1, "maxConcurrent": concurrent, "models": map[string]json.RawMessage{name: input.Models[name]}}), nil
+	return shared.Marshal(shared.Object{"version": 1, "models": map[string]json.RawMessage{name: input.Models[name]}}), nil
 }
 
 type SetupServer struct {

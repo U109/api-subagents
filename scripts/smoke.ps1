@@ -24,8 +24,9 @@ try {
     }
     if (-not (Test-Path -LiteralPath $report)) { throw 'The desktop did not produce its startup report.' }
     $result = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (-not $result.diagnosticsReady -or $result.themeAction -ne '#7c756e' -or -not $result.themeWarning) { throw 'Request diagnostics or prototype theme did not load in WebView2.' }
-    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 9 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3 -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
+    if (-not $result.diagnosticsReady -or $result.themeAction -ne '#7c756e' -or -not $result.themeWarning) { throw 'Request diagnostics or workbench theme did not load in WebView2.' }
+    # 正式页面已有服务默认与八个显式思考档位，思考等级、任务分工、高级设置共三个折叠区；不放宽配置恢复断言。
+    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 9 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 3 -or $result.relayModelCount -ne 3 -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
     $restored = Get-Content -LiteralPath $codexConfig -Raw -Encoding UTF8
     if (-not $restored.Contains("model = 'original-smoke-model'") -or $restored.Contains('X-Api-Subagents-Token') -or (Test-Path -LiteralPath (Join-Path $env:API_SUBAGENTS_HOME 'codex-relay-backup.json'))) { throw 'Desktop close did not restore Codex configuration.' }
     if ([IO.File]::ReadAllText((Join-Path $env:API_SUBAGENTS_HOME 'models.json')) -ne $fixture) { throw 'Desktop close modified the saved model configuration.' }

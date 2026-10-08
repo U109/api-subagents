@@ -205,7 +205,7 @@ func TestResponsesRecoveryStopsBeforeReplay(t *testing.T) {
 			if tc.noBodyCopy {
 				req.GetBody = nil
 			}
-			res, err := r.doResponsesWithRecovery(req, true)
+			res, err := r.doResponsesWithRecovery(req, true, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +223,7 @@ func TestResponsesTransportErrorNeverReplays(t *testing.T) {
 	want := errors.New("synthetic connection reset")
 	count := 0
 	r := &Relay{Client: &http.Client{Transport: responsesRoundTripFunc(func(*http.Request) (*http.Response, error) { count++; return nil, want })}}
-	res, err := r.doResponsesWithRecovery(responsesTestRequest(t, context.Background()), true)
+	res, err := r.doResponsesWithRecovery(responsesTestRequest(t, context.Background()), true, nil)
 	if res != nil || !errors.Is(err, want) || count != 1 {
 		t.Fatal("ambiguous transport error replayed", count, err)
 	}
@@ -251,7 +251,7 @@ func TestResponsesCancellationDuringRecovery(t *testing.T) {
 			}
 			request := responsesTestRequest(t, ctx)
 			done := make(chan error, 1)
-			go func() { _, err := r.doResponsesWithRecovery(request, true); done <- err }()
+			go func() { _, err := r.doResponsesWithRecovery(request, true, nil); done <- err }()
 			select {
 			case <-waiting:
 			case <-time.After(3 * time.Second):

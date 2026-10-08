@@ -185,17 +185,17 @@ func TestHijackCatalogMappings(t *testing.T) {
 	}
 }
 
-// TestHijackSelectionGuards 未配置、已删除和畸形别名不得覆盖上游模型；旧连接别名和跟随 App 保持可用。
+// TestHijackSelectionGuards 已删除和畸形本地别名仍拒绝转发；真实旧模型名、旧连接别名和跟随 App 保持可用。
 func TestHijackSelectionGuards(t *testing.T) {
 	c := configstore.EmptyConfig()
 	c.Models["demo"] = configstore.Profile{Model: "default", RelayModels: []string{"alternate"}, APIKey: "synthetic-key"}
-	for _, alias := range []string{"", relayModel, relayModel + "/demo", RelayModelAlias("demo", "default"), RelayModelAlias("demo", "alternate")} {
+	for _, alias := range []string{"", "other", relayModel, relayModel + "/demo", RelayModelAlias("demo", "default"), RelayModelAlias("demo", "alternate")} {
 		name, _, err := ResolveCatalogModel(c, "demo", alias)
 		if err != nil || name != "demo" {
 			t.Fatal("supported alias rejected", alias, err)
 		}
 	}
-	for _, alias := range []string{"other", relayModel + "/", relayModel + "/demo/", relayModel + "/demo/alternate", relayModel + "/demo/../other", RelayModelAlias("missing", "alternate"), RelayModelAlias("demo", "removed")} {
+	for _, alias := range []string{relayModel + "/", relayModel + "/demo/", relayModel + "/demo/alternate", relayModel + "/demo/../other", RelayModelAlias("missing", "alternate"), RelayModelAlias("demo", "removed")} {
 		if _, _, err := ResolveCatalogModel(c, "demo", alias); err == nil {
 			t.Fatal("unknown alias accepted", alias)
 		}

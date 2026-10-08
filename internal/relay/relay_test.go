@@ -165,7 +165,7 @@ func TestRelayGuards(t *testing.T) {
 	if count != 0 {
 		t.Fatal("unauthenticated request reached provider")
 	}
-	status, body := requestRelay(t, r, shared.Object{"model": "unknown", "input": "x"})
+	status, body := requestRelay(t, r, shared.Object{"model": "api-subagents/missing", "input": "x"})
 	if status != 400 || count != 0 {
 		t.Fatal(status, body)
 	}

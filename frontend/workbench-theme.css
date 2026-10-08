@@ -62,3 +62,45 @@ input[aria-invalid='true'], .select-trigger[aria-invalid='true'] { border-color:
 @media (prefers-reduced-motion: reduce) {
   .relay-diagnostics *, .notice { animation: none !important; transition: none !important; }
 }
+
+/* 连接工作台新增的测试结果、通知记录和目录容量状态。 */
+/* 与交互原型共用 Radix Sand / Bronze 色阶。保留项目主按钮色；提醒为 Amber，错误不用红色。 */
+:root {
+  --paper:#fff; --ink:var(--radix-sand-12); --muted:var(--radix-sand-11);
+  --line:var(--radix-sand-6); --surface:var(--radix-sand-2); --selected:var(--radix-bronze-3);
+  --accent:var(--radix-bronze-9); --action:#7c756e; --action-hover:#6b645e;
+  --danger:var(--radix-amber-11); --success:var(--radix-green-11);
+}
+body,main,.workspace { background:var(--radix-sand-2); }
+.sidebar { background:var(--radix-sand-3); border-color:var(--radix-sand-6); }
+.journey-section,.action-bar,.model-picker,dialog { background:var(--paper); border-color:var(--radix-sand-6); }
+.model-select[aria-current=true],.model-select:hover { background:var(--radix-bronze-3); }
+.profile-avatar,.connection-avatar,.dialog-symbol { color:var(--radix-bronze-11); background:var(--radix-bronze-3); }
+.primary { background:var(--action); border-color:var(--action); color:var(--paper); }
+.primary:hover { background:var(--action-hover); border-color:var(--action-hover); }
+.secondary,.toolbar-button { background:var(--paper); border-color:var(--radix-sand-7); color:var(--radix-sand-11); }
+.secondary:hover,.toolbar-button:hover { background:var(--radix-sand-3); }
+.effort-option[aria-checked=true] { color:var(--radix-bronze-11); background:var(--radix-bronze-3); border-color:var(--radix-bronze-7); }
+.notice.info .notice-icon,.notice.warning .notice-icon,.notice.error .notice-icon { color:var(--radix-amber-11); background:var(--radix-amber-3); }
+.notice.info,.notice.warning,.notice.error { border-color:var(--radix-amber-6); }
+.notice.success .notice-icon { color:var(--radix-green-11); background:var(--radix-green-3); }
+.notice.success { border-color:var(--radix-green-6); }
+.menu-danger,.danger,.model-remove-button,.manual-model-error,[role=alert] { color:var(--radix-amber-11); }
+.primary.danger { background:var(--action); border-color:var(--action); color:var(--paper); }
+.menu-danger,.model-remove-button { color:var(--radix-sand-11); }
+.menu-danger:hover,.model-remove-button:hover { background:var(--radix-sand-4); color:var(--radix-sand-12); }
+.probe-result { color:var(--radix-amber-11); font-size:12px; margin:0 auto 12px; max-width:940px; }
+.probe-result:empty { display:none; }
+.probe-result[data-tone=success] { color:var(--radix-green-11); }
+#notification-count { background:var(--radix-amber-3); color:var(--radix-amber-11); padding:1px 6px; border-radius:5px; font-size:11px; }
+#notifications-dialog { width:min(540px,calc(100vw - 32px)); max-height:calc(100dvh - 36px); overflow:auto; }
+.notification-record { padding:12px 0; border-bottom:1px solid var(--radix-sand-6); display:flex; align-items:flex-start; gap:12px; }
+.notification-record p { margin:0; flex:1; overflow-wrap:anywhere; font-size:12px; }
+.notification-record.error,.notification-record.warning,.notification-record.info { color:var(--radix-amber-11); }
+.notification-record.success { color:var(--radix-green-11); }
+.notification-record button { flex-shrink:0; font-size:11px; }
+.top-actions { display:flex; gap:8px; }
+#notification-history:empty { display:none; }
+.model-context-summary { font-size:11px; color:var(--radix-sand-11); margin:4px 0 0; }
+.context-pending { color:var(--radix-amber-11); }
+@media(max-width:720px){.footer-actions{flex-wrap:wrap;justify-content:flex-end}.action-bar{gap:8px}.top-actions{padding-right:12px}.toolbar-button{font-size:11px}}

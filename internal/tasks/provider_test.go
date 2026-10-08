@@ -368,7 +368,7 @@ func TestRequestTimeouts(t *testing.T) {
 	}
 }
 
-// TestTaskCancellationAndCapacity 并发提交不会越过活动任务上限，取消队列不发送付费请求。
+// TestTaskCancellationAndCapacity 旧并发设置不再限制启动；活动任务仍有安全上限，取消会结束请求。
 func TestTaskCancellationAndCapacity(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,9 +378,12 @@ func TestTaskCancellationAndCapacity(t *testing.T) {
 	}))
 	defer server.Close()
 	store, _ := testutil.Config(t, "compatible", server.URL)
+	// 旧配置里的并发数字由反序列化忽略，不应限制同时进入服务端的任务。
 	config, _ := store.Read()
-	config.MaxConcurrent = 1
-	store.Save(config)
+	legacy := shared.Obj(map[string]any{"version": 1, "maxConcurrent": 1, "models": config.Models})
+	if err := os.WriteFile(store.Path, shared.Marshal(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
 	m := NewManager(store, t.TempDir(), nil)
 	defer m.Close()
 	root := t.TempDir()
@@ -403,16 +406,25 @@ func TestTaskCancellationAndCapacity(t *testing.T) {
 	if accepted.Load() != 24 {
 		t.Fatal(accepted.Load())
 	}
+	if requests.Load() <= 1 {
+		// 网络请求在后台启动，等待多个任务进入服务端后再检验不受旧设置约束。
+		deadline := time.After(2 * time.Second)
+		for requests.Load() <= 1 {
+			select {
+			case <-deadline:
+				t.Fatal("legacy concurrency setting still limits running tasks")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
 	for id := range ids {
 		value, _ := m.Get(id)
 		if value["status"] == "queued" {
-			m.Cancel(id)
+			t.Fatal("accepted task unexpectedly remained queued")
 		}
+		m.Cancel(id)
 	}
 	m.Close()
-	if requests.Load() > 1 {
-		t.Fatal("cancelled queue sent network requests")
-	}
 }
 
 // TestTaskDeadlineAndStorageFailure 总时限可以停止持续心跳，结果无法保存时仍完成等待并保留错误。

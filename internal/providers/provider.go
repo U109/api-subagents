@@ -530,6 +530,9 @@ func (p *Provider) ListModels(ctx context.Context, profile configstore.Profile) 
 				name = id
 			}
 			models[id] = shared.Object{"id": id, "name": shared.Clip(name, 160)}
+			if capacity := declaredModelContext(entry); capacity > 0 {
+				models[id]["contextWindow"] = capacity
+			}
 			if len(models) >= 1000 {
 				truncated = true
 				break

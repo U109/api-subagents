@@ -130,6 +130,51 @@ func TestResponsesRecoveryCancellationAtGateway(t *testing.T) {
 	}
 }
 
+// TestResponsesGatewayCloseAbortsActiveStream 验证正文已交付后关闭网关会中止 HTTP 流，不将取消包装为正常 EOF，也不自动重放。
+func TestResponsesGatewayCloseAbortsActiveStream(t *testing.T) {
+	const payload = "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"synthetic partial\"}\n\n"
+	var calls atomic.Int32
+	stopped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, payload)
+		w.(http.Flusher).Flush()
+		<-req.Context().Done()
+		close(stopped)
+	}))
+	defer server.Close()
+	r := testRelay(t, "responses", server.URL, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.Snapshot().Address+"/responses", strings.NewReader(`{"model":"api-subagents","stream":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Api-Subagents-Token", r.token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	first := make([]byte, len(payload))
+	if _, err := io.ReadFull(res.Body, first); err != nil || string(first) != payload {
+		t.Fatal("committed stream changed", string(first), err)
+	}
+	if err := r.Disable(); err != nil {
+		t.Fatal(err)
+	}
+	if rest, err := io.ReadAll(res.Body); err == nil || len(rest) != 0 || calls.Load() != 1 {
+		t.Fatal("gateway cancellation finished as success or replayed", string(rest), err, calls.Load())
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("gateway cancellation did not stop upstream")
+	}
+}
+
 // TestCodexResponsesTransientRecovery 验证真实 Codex CLI 在隔离 CODEX_HOME 中经历 503/502 后获得完整回答，所有模型请求只访问本机模拟服务。
 func TestCodexResponsesTransientRecovery(t *testing.T) {
 	bin := codexBinary(t)

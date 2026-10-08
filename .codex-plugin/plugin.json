@@ -1,6 +1,6 @@
 {
   "name": "api-subagents",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "委派外部模型完成明确任务，也可用已配置的图片模型在 Codex 对话中生成图片",
   "author": {
     "name": "zzz"

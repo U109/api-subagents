@@ -52,16 +52,15 @@ type job struct {
 }
 
 type Manager struct {
-	Store          *configstore.ConfigStore
-	Storage        string
-	Provider       *providers.Provider
-	Deadline       time.Duration
-	Executor       codexworker.Executor
-	mu             sync.Mutex
-	jobs           map[string]*job
-	order          []string
-	running, limit int
-	closed         bool
+	Store    *configstore.ConfigStore
+	Storage  string
+	Provider *providers.Provider
+	Deadline time.Duration
+	Executor codexworker.Executor
+	mu       sync.Mutex
+	jobs     map[string]*job
+	order    []string
+	closed   bool
 }
 
 // 等待窗口只限制单次工具调用，不改变后台任务时限；与插件宿主的 660 秒超时保留余量。
@@ -70,7 +69,7 @@ const (
 	maxWaitMS     = 600000
 )
 
-// NewManager 创建有界后台队列，不在构造时访问模型接口。
+// NewManager 创建后台任务管理器，不在构造时访问模型接口；只保留活动任务安全上限。
 func NewManager(store *configstore.ConfigStore, storage string, p *providers.Provider) *Manager {
 	if store == nil {
 		store = configstore.NewConfigStore("")
@@ -81,7 +80,7 @@ func NewManager(store *configstore.ConfigStore, storage string, p *providers.Pro
 	if p == nil {
 		p = providers.NewProvider()
 	}
-	return &Manager{Store: store, Storage: storage, Provider: p, Executor: &codexworker.Runner{Client: p.Client}, jobs: map[string]*job{}, limit: 3}
+	return &Manager{Store: store, Storage: storage, Provider: p, Executor: &codexworker.Runner{Client: p.Client}, jobs: map[string]*job{}}
 }
 
 // ListModels 读取最新连接及用途，只返回密钥是否就绪，不回传地址和凭据。
@@ -107,7 +106,7 @@ func (m *Manager) ListModels() ([]any, error) {
 	return result, nil
 }
 
-// Submit 校验完成后在同一把锁内入队，避免并发请求突破 24 个活动任务上限。
+// Submit 在同一把锁内校验活动任务上限并立即启动任务，避免并发请求突破 24 个活动任务的安全边界。
 func (m *Manager) Submit(req TaskRequest) (shared.Object, error) {
 	if strings.TrimSpace(req.Task) == "" || len([]rune(req.Task)) > 30000 {
 		return nil, errors.New("任务需要 1–30000 字符。")
@@ -175,28 +174,23 @@ func (m *Manager) Submit(req TaskRequest) (shared.Object, error) {
 	j := &job{id: shared.UUID(), model: req.Model, profile: p, ws: ws, history: history, request: req, maxSteps: req.MaxSteps, status: "queued", created: time.Now(), ctx: ctx, cancel: cancel, done: make(chan struct{}), progress: shared.Object{"phase": "queued"}, changes: []workfiles.Proposal{}}
 	m.jobs[j.id] = j
 	m.order = append(m.order, j.id)
-	m.limit = c.MaxConcurrent
 	accepted = true
 	m.pumpLocked()
 	return m.snapshotLocked(j), nil
 }
 
-// pumpLocked 在持有队列锁时分配运行槽位，网络和文件操作均在后台 goroutine 中执行。
+// pumpLocked 在持有锁时立即启动已接受的任务；网络和文件操作均在后台 goroutine 中执行。
 func (m *Manager) pumpLocked() {
 	if m.closed {
 		return
 	}
 	for _, id := range m.order {
 		j := m.jobs[id]
-		if m.running >= m.limit {
-			break
-		}
 		if j == nil || j.status != "queued" {
 			continue
 		}
 		j.status = "running"
 		j.started = time.Now()
-		m.running++
 		go m.run(j)
 	}
 }
@@ -284,10 +278,6 @@ func (m *Manager) run(j *job) {
 		failure = fmt.Errorf("达到 %d 轮上限，任务未完成，请缩小范围或提高 max_steps。", j.maxSteps)
 	}
 	m.finish(j, outcome, result, failure)
-	m.mu.Lock()
-	m.running--
-	m.pumpLocked()
-	m.mu.Unlock()
 }
 
 // finish 脱敏并保存完整结果，持久化结束后才发完成信号，避免过早提供应用命令。

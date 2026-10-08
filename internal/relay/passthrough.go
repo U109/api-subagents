@@ -17,8 +17,8 @@ import (
 )
 
 // forwardResponses 替换模型及凭据，仅在普通生成请求未给出额度时补模型预算；正文和返回流保持原样。
-// 桌面普通 Responses 请求仅在上游返回 502/503、尚未向客户端输出时有限重试；worker、compact、连接错误与已开始的流不重试。
-// SSE 只旁观终止状态，不改写正文、不合成完成事件、不保存思考历史；各次尝试共享原首包及总时限，取消会终止请求和退避。
+// 桌面普通 Responses 请求仅在 502/503 或未交付正文与工具的安全流前导失败时有限恢复；worker、compact、连接错误与已交付内容的流不重放。
+// SSE 只旁观终止状态，不改写正文、不合成完成事件、不保存思考历史；各次尝试共享原首包及总时限，取消会中止 HTTP 传输及退避，不能正常结束为成功响应。
 func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile, trace *requestTrace) {
 	defer trace.finish()
 	body, err := sjson.SetBytes(original, "model", profile.Model)
@@ -57,11 +57,17 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 	if profile.APIKey != "" {
 		upstream.Header.Set("Authorization", "Bearer "+profile.APIKey)
 	}
-	res, err := r.doResponsesWithRecovery(upstream, r.workerConfig == nil && req.URL.Path == "/v1/responses")
+	allowRetry := r.workerConfig == nil && req.URL.Path == "/v1/responses"
+	var inspectPrelude func(*http.Response) bool
+	if allowRetry && responsesPreludeEligible(body) {
+		inspectPrelude = func(res *http.Response) bool { return inspectResponsesPrelude(res, touch) }
+	}
+	res, err := r.doResponsesWithRecovery(upstream, allowRetry, inspectPrelude)
 	if err != nil {
 		trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_connect_error")
 		if req.Context().Err() != nil {
-			return
+			// 关闭网关会先取消处理上下文；直接返回可能让 HTTP 服务补发空的 200 响应。
+			panic(http.ErrAbortHandler)
 		}
 		status := http.StatusBadGateway
 		if ctx.Err() != nil {
@@ -109,6 +115,7 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 			switch {
 			case req.Context().Err() != nil || ctx.Err() != nil:
 				trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_read_error")
+				panic(http.ErrAbortHandler)
 			case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 				trace.result.Outcome = "http_auth_error"
 			case res.StatusCode < 200 || res.StatusCode >= 300:
@@ -124,9 +131,6 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 		}
 		if readErr != nil {
 			trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_read_error")
-			if req.Context().Err() != nil {
-				return
-			}
 			// 已发送的字节不能撤回；中止 HTTP 传输，让客户端识别断流，不往上游正文中插入本地错误事件。
 			panic(http.ErrAbortHandler)
 		}

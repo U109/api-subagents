@@ -25,19 +25,30 @@ const esc = (value) =>
     (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c],
   );
 // 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用
-let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
-let modelContextDefaults = Object.create(null);
-let modelContextFallback = 256000;
+let config = {version: 1, models: Object.create(null)};
 let modelOutputDefaults = Object.create(null);
 let selected = null,
   saved = new Set(),
-  busy = false,
-  activeTab = 'connection';
+  busy = false;
 const catalogs = new Map(),
   dirty = new Set();
-const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
+const savedSnapshots = window.configOperations.createSnapshots();
+const probeOperation = window.configOperations.createProbe({
+  api,
+  /** 桌面取消走固定 Go 绑定；浏览器模式仅使用请求自身的 AbortSignal。 */
+  cancelDesktop: window.desktopApp ? id => window.desktopApp.cancelProbe(id) : null,
+  /** 将真实测试状态同步到结果区和取消按钮，错误与取消不伪装为成功。 */
+  onState(phase, message) {
+    const running = ['running','cancelling'].includes(phase);
+    byId('cancel-probe').hidden = !running;
+    byId('cancel-probe').disabled = phase === 'cancelling';
+    byId('probe-result').textContent = message;
+    byId('probe-result').dataset.tone = phase === 'success' ? 'success' : 'notice';
+    window.notices.show('connection-test', message, phase === 'success' ? 'success' : phase === 'error' ? 'error' : 'info');
+  }
+});
+const tabs = {connection: '连接服务', model: '选择模型', purpose: '任务分工', advanced: '高级设置'};
 const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh', max: '最大 · max', ultra: '极限 · ultra'};
-const tabIcons = {connection: 'link', model: 'model', purpose: 'route', advanced: 'sliders'};
 const reasoningHints = {'': '由模型服务决定，不额外指定思考参数', none: '适用于支持关闭推理的模型，优先快速生成', minimal: '用尽量少的推理处理简单、明确的任务', low: '适合日常修改与简单排错，优先速度和较低用量', medium: '在响应速度与分析深度之间取得平衡', high: '适合复杂分析与代码审查，通常需要更多时间与用量', xhigh: '适合少量高难任务，可能显著增加等待时间和用量；日常操作建议 low 或 medium，需上游支持', max: '仅用于明确支持 max 的上游，可能增加等待时间和用量；受限协议按最高支持档位折合', ultra: '仅用于明确支持 ultra 的上游，可能显著增加等待时间和用量；受限协议按最高支持档位折合'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
@@ -50,13 +61,14 @@ function status(message, good = true) {
   window.notices.show('config', message, good ? (message.startsWith('正在') ? 'info' : 'success') : 'error');
 }
 /** 桌面版调用 Go 绑定，浏览器版使用会话令牌；两者共享配置校验与错误提示 */
-async function api(route, body) {
+async function api(route, body, options = {}) {
   if (window.desktopApp) {
     const data = await window.desktopApp.api(route, body);
     if (data.warning) window.notices.show('config-warning', data.warning, 'warning');
     return data;
   }
   const res = await fetch(route, {
+    signal: options.signal,
     method: body ? 'POST' : 'GET',
     headers: {authorization: 'Bearer ' + key, 'content-type': 'application/json'},
     ...(body ? {body: JSON.stringify(body)} : {}),
@@ -133,7 +145,7 @@ function openMenu(button) {
   byId('copy-model').focus();
 }
 
-/** 标记当前连接有待保存编辑，让改名和跨 Tab 编辑始终显示一致的保存状态 */
+/** 标记当前连接有待保存编辑，让改名和跨区块编辑始终显示一致的保存状态。 */
 function markChanged() {
   dirty.add(selected);
   byId('save-state').textContent = '待保存';
@@ -144,22 +156,26 @@ function markChanged() {
 /** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘 */
 function connectionHeading() {
   const p = selected === null ? null : config.models[selected];
-  byId('connection-toolbar').hidden = !p && !window.desktopApp;
-  byId('connection-heading').hidden = !p;
   byId('config-actions').hidden = !p;
   byId('save-state').textContent = p ? dirty.has(selected) ? '待保存' : p.savedName ? '已保存' : '新连接' : '尚未配置';
   byId('save-state').classList.toggle('dirty', Boolean(p && (dirty.has(selected) || !p.savedName)));
-  if (!p) return;
+  if (!p) {
+    byId('connection-title').textContent = '模型连接';
+    byId('connection-subtitle').textContent = '填写服务信息，选择模型，保存即可使用';
+    byId('profile-avatar').textContent = '＋';
+    return;
+  }
   byId('connection-title').textContent = selected;
   byId('connection-title').title = selected;
   byId('profile-avatar').textContent = (window.modelPickerUI.nameFor(p, p.model) || selected).slice(0, 1).toUpperCase();
-  byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'}`;
+  byId('connection-subtitle').textContent = `${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'} · ${p.protocol === 'responses' ? '透传' : '旧连接 · ' + (types[p.protocol] || p.protocol)}${p.stream === false ? ' · 旧非流式设置' : ' · 流式'}`;
 }
 
-/** 按档位表绘制全部点选项（含 max/ultra）；只更新思考参数，保留其他 Tab 的输入和筛选结果 */
+/** 按档位表绘制全部点选项（含 max/ultra）并更新摘要；只更新思考参数，保留其他输入和筛选结果。 */
 function renderReasoning() {
   const effort = config.models[selected].reasoningEffort || '';
   byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value, label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');
+  byId('reasoning-summary').textContent = `思考等级 · ${(reasoningLevels[effort] || reasoningLevels['']).split(' · ')[0]}`;
   byId('reasoning-description').textContent = reasoningHints[effort] || reasoningHints[''];
 }
 
@@ -176,20 +192,16 @@ function chooseReasoning(value, focus = false) {
 function commitName() {
   const input = byId('name');
   if (!input || rename(config.models[selected], input)) return true;
-  activateTab('connection');
+  revealSection('connection');
   input.focus();
   return false;
 }
 
-/** 仅切换面板可见性，不重建表单；模型筛选、密钥及尚未保存的输入都保持原样 */
-function activateTab(name) {
-  activeTab = name;
-  for (const id of Object.keys(tabs)) {
-    const active = id === name;
-    byId('tab-' + id).setAttribute('aria-selected', String(active));
-    byId('tab-' + id).tabIndex = active ? 0 : -1;
-    byId('panel-' + id).hidden = !active;
-  }
+/** 定位配置区块并展开可选内容；错误或快捷入口跳转时保留当前表单草稿。 */
+function revealSection(name) {
+  const panel = byId('panel-' + name);
+  if (panel instanceof HTMLDetailsElement) panel.open = true;
+  panel?.scrollIntoView({block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
 }
 /** 生成带标签与说明的单个输入框，输入值及占位符均先转义 */
 function field(id, label, value, placeholder = '', full = false, type = 'text', hint = '') {
@@ -235,14 +247,12 @@ function rename(profile, input) {
 function renderPicker() {
   window.modelPickerUI.render(byId('picker'), {
     profile: config.models[selected],
-    contextDefaults: modelContextDefaults,
-    contextFallback: modelContextFallback,
     outputDefaults: modelOutputDefaults,
     catalog: catalogs.get(selected),
     /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿 */
     isBusy: () => busy,
     /** 同步默认值和草稿标记，不重绘列表以保留搜索、焦点和滚动位置 */
-    onChange: () => { markChanged(); sidebar(); connectionHeading(); },
+    onChange: () => { window.configOperations.applyCatalogueContexts(config.models[selected],catalogs.get(selected)); markChanged(); sidebar(); connectionHeading(); },
     /** 通过已鉴权入口刷新目录；失败保留旧候选和全部已选模型 */
     onRefresh: () => action(async () => {
       const button = byId('pull-models');
@@ -251,6 +261,7 @@ function renderPicker() {
       try {
         const result = await api('/api/models', {config, name: selected});
         catalogs.set(selected, result);
+        if (window.configOperations.applyCatalogueContexts(config.models[selected], result)) markChanged();
         renderPicker();
         status(result.models.length ? `已获取 ${result.models.length} 个模型` : '未返回模型，可手动添加');
       } finally {
@@ -262,80 +273,49 @@ function renderPicker() {
   if (busy) setBusy(true);
 }
 
-/** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试 */
+/** 连续绘制配置流程；同一连接重绘时保留可选区块展开状态，底栏始终提供保存和测试。 */
 function render() {
   queueMicrotask(() => window.dispatchEvent(new Event('config:rendered')));
   sidebar();
   connectionHeading();
   const editor = byId('editor'),
     p = selected === null ? null : config.models[selected];
+  const sameProfile = editor.dataset.profile === selected;
+  const purposeOpen = sameProfile ? Boolean(byId('panel-purpose')?.open) : Boolean(p?.description);
+  const advancedOpen = sameProfile && Boolean(byId('panel-advanced')?.open);
+  const reasoningOpen = sameProfile ? (byId('reasoning-details')?.open ?? true) : true;
   if (!p) {
+    delete editor.dataset.profile;
     editor.innerHTML =
-      '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>支持 OpenAI、Claude、Gemini 和 CPA 等兼容服务<br>填入接口和 Key，直接从列表选择模型</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>拉取模型</span><i>→</i><span>交给 Codex</span></div></div>';
+      '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>填写支持 Responses 的服务地址与 Key，再从列表选择模型。<br>新连接默认透传并使用流式响应。</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>选择模型</span><i>→</i><span>保存使用</span></div></div>';
     byId('first').onclick = add;
     return;
   }
+  editor.dataset.profile = selected;
   editor.innerHTML = `
-    <div class="config-tabs tabs" role="tablist" aria-label="配置分类">${Object.entries(tabs)
-      .map(
-        ([id, label]) =>
-          `<button id="tab-${id}" role="tab" aria-selected="${id === activeTab}" aria-controls="panel-${id}" tabindex="${id === activeTab ? 0 : -1}" data-tab="${id}"><svg aria-hidden="true"><use href="#i-${tabIcons[id]}"/></svg>${label}</button>`,
-      )
-      .join('')}</div>
-    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0"><div class="grid">
-      ${field('name', '连接名称', selected, '例如 日常助手 / Gemini', false, 'text', '按你的习惯命名，支持中文、空格和符号')}
-      <div class="field"><label for="protocol">接口类型</label><select id="protocol">${Object.entries(
-        types,
-      )
-        .map(
-          ([value, label]) =>
-            `<option value="${value}" ${p.protocol === value ? 'selected' : ''}>${label}</option>`,
-        )
-        .join('')}</select><p id="protocol-help" class="hint">${p.protocol === 'responses' ? '挟持模式原样转发请求与响应，由上游负责模型兼容；上游须支持 /responses' : '挟持模式需要在本地转换协议；CPA 等支持 Responses 的网关建议选择透传'}</p></div>
-      ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1')}
-      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
-    </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div id="picker"></div>
-      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">此连接的默认等级 · Codex 中可单独切换</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p></div>
+    <div class="setup-sheet"><section id="panel-connection" class="journey-section" aria-labelledby="heading-connection"><div class="section-head"><div><h2 id="heading-connection">连接信息</h2><p>新连接默认 Responses 透传与流式响应</p></div></div><div class="section-body"><div class="grid connection-fields">
+      ${field('name', '连接名称', selected, '例如 日常助手', false, 'text', '')}
+      ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol] || urls.responses, false, 'url', '支持 /responses 的根地址；CPA 如 http://127.0.0.1:8317/v1')}
+      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : p.apiKeyEnv ? '沿用旧环境变量' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">${p.apiKeyEnv ? '旧连接仍从环境变量读取 Key；输入新 Key 后将改为本机保存' : p.hasKey ? '留空将保留已保存的 Key' : 'Key 仅保存在本机配置中'}</span></div></div>
+      ${p.protocol !== 'responses' ? `<p class="legacy-note full" role="note">旧连接仍按 ${esc(types[p.protocol] || p.protocol)} 工作；新建连接使用 Responses 透传。如上游已支持 /responses，可新建连接后迁移。</p>` : ''}
+    </div></div></section>
+    <section id="panel-model" class="journey-section" aria-labelledby="heading-model"><div class="section-head"><div><h2 id="heading-model">模型</h2><p>勾选模型；第一个自动成为默认</p></div></div><div class="section-body"><div id="picker"></div>
+      <details id="reasoning-details" class="reasoning-details" ${reasoningOpen ? 'open' : ''}><summary><span id="reasoning-summary">思考等级 · 服务默认</span><svg aria-hidden="true"><use href="#i-down"/></svg></summary><div class="reasoning-block"><span id="reasoning-label" class="quiet-meta">此连接的默认等级 · Codex 中可单独切换</span><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p><button type="button" class="text-button" id="restore-reasoning">恢复服务默认</button></div></details>
       <div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存配置后，重启 Codex 刷新模型列表；思考档位需模型支持</span></div>
-    </section>
-    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">
+    </div></section>
+    <details id="panel-purpose" class="journey-section optional-section" ${purposeOpen ? 'open' : ''}><summary><span><strong>任务分工</strong><small>可选 · 告诉 Codex 这个连接适合处理什么</small></span><svg aria-hidden="true"><use href="#i-down"/></svg></summary><div class="section-body">
       <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务</span></div>
-    </section>
-    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0"><div class="grid">
+    </div></details>
+    <details id="panel-advanced" class="journey-section optional-section" ${advancedOpen ? 'open' : ''}><summary><span><strong>高级设置</strong><small>可选 · 输出长度与超时</small></span><svg aria-hidden="true"><use href="#i-down"/></svg></summary><div class="section-body"><div class="grid">
         ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number', p.protocol === 'responses' ? '用于插件委派；透传请求的输出限制由 Codex 与上游决定' : '')}
-        ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8')}
-        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">${p.protocol === 'responses' ? '用于插件委派；挟持透传始终保留 Codex 请求的响应方式' : '流式接收可持续更新任务进度，服务仍有数据时继续等待'}</span></div>
         ${field('firstResponseTimeoutSeconds', '首个数据等待时间（秒）', p.firstResponseTimeoutSeconds ?? 180, '180', false, 'number', '10–600 秒，包含连接和等待服务开始返回数据的时间')}
         ${field('streamIdleTimeoutSeconds', '响应中断等待时间（秒）', p.streamIdleTimeoutSeconds ?? 120, '120', false, 'number', '10–600 秒，每次收到数据后重新计时')}
         ${field('taskTimeoutMinutes', '任务总时长上限（分钟）', p.taskTimeoutMinutes ?? 15, '15', false, 'number', '1–60 分钟，包含所有模型轮次与文件操作')}
-        ${field('apiKeyEnv', '从环境变量读取 Key（可选）', p.apiKeyEnv, '例如 MY_MODEL_API_KEY', true, 'text', '设置后优先使用环境变量；留空则使用上面保存的 Key')}
-      </div>
-    </section>`;
-  activateTab(activeTab);
-  document.querySelectorAll('[data-tab]').forEach((button) => {
-    button.onclick = () => {
-      if (!busy && commitName()) activateTab(button.dataset.tab);
-    };
-    button.onkeydown = (event) => {
-      const ids = Object.keys(tabs),
-        index = ids.indexOf(button.dataset.tab);
-      const next = {
-        ArrowRight: ids[(index + 1) % ids.length],
-        ArrowLeft: ids[(index + ids.length - 1) % ids.length],
-        Home: ids[0],
-        End: ids.at(-1),
-      }[event.key];
-      if (!next) return;
-      event.preventDefault();
-      if (busy || !commitName()) return;
-      activateTab(next);
-      byId('tab-' + next).focus();
-    };
-  });
+      </div></div></details></div>`;
   renderPicker();
   renderReasoning();
   byId('reasoning-options').onclick = event => { const button = event.target.closest('[data-effort]'); if (button) chooseReasoning(button.dataset.effort, true); };
+  byId('restore-reasoning').onclick = () => chooseReasoning('',true);
   byId('reasoning-options').onkeydown = event => {
     const levels = Object.keys(reasoningLevels), current = levels.indexOf(p.reasoningEffort || '');
     const next = {ArrowRight: (current + 1) % levels.length, ArrowLeft: (current + levels.length - 1) % levels.length, Home: 0, End: levels.length - 1}[event.key];
@@ -348,7 +328,6 @@ function render() {
     byId('apiKey').type = hidden ? 'text' : 'password';
     byId('toggle-key').setAttribute('aria-label', hidden ? '隐藏输入的 Key' : '显示输入的 Key');
   };
-  byId('key-env-link').onclick = () => { if (!busy && commitName()) { activateTab('advanced'); byId('apiKeyEnv').focus(); } };
   byId('name').onchange = (event) => rename(p, event.target);
   const numeric = [
     'maxTokens',
@@ -356,45 +335,26 @@ function render() {
     'streamIdleTimeoutSeconds',
     'taskTimeoutMinutes',
   ];
-  for (const prop of ['baseUrl', 'apiKey', 'description', 'apiKeyEnv', ...numeric]) {
+  for (const prop of ['baseUrl', 'apiKey', 'description', ...numeric]) {
     byId(prop).oninput = (event) => {
       p[prop] = numeric.includes(prop) ? Number(event.target.value) : event.target.value;
       markChanged();
-      if (prop === 'apiKey') byId('toggle-key').disabled = !event.target.value;
-      if (['baseUrl', 'apiKey', 'apiKeyEnv'].includes(prop)) {
+      if (prop === 'apiKey') {
+        byId('toggle-key').disabled = !event.target.value;
+        if (event.target.value && p.apiKeyEnv) {
+          p.apiKeyEnv = '';
+          byId('apiKey').closest('.field').querySelector('.hint').textContent = '输入的新 Key 将保存在本机配置中';
+        }
+      }
+      if (['baseUrl', 'apiKey'].includes(prop)) {
+        delete p.modelOfficialContexts;
         catalogs.delete(selected);
         renderPicker();
       }
     };
   }
-  byId('stream').onchange = (event) => {
-    p.stream = event.target.value === 'true';
-    markChanged();
-  };
-  byId('protocol').onchange = (event) => {
-    if (!commitName()) {
-      byId('protocol').value = p.protocol;
-      window.selectUI.refresh();
-      return;
-    }
-    const keepAddress = ['compatible', 'responses'].includes(p.protocol) && ['compatible', 'responses'].includes(event.target.value);
-    p.protocol = event.target.value;
-    if (!keepAddress) p.baseUrl = urls[p.protocol];
-    markChanged();
-    catalogs.delete(selected);
-    render();
-  };
-  byId('maxConcurrent').oninput = (event) => {
-    config.maxConcurrent = Number(event.target.value);
-    markChanged();
-  };
   byId('save').onclick = save;
-  byId('probe').onclick = () =>
-    action(async () => {
-      status('正在测试连接…');
-      await api('/api/probe', {config, name: selected});
-      status('连接测试成功');
-    });
+  byId('probe').onclick = () => action(() => probeOperation.run(config, selected));
   window.selectUI.enhance(editor);
 }
 /** 创建名称不重复的空白连接草稿；用户保存前不会影响已配置模型 */
@@ -404,14 +364,13 @@ function add() {
   let index = 1;
   while (Object.hasOwn(config.models, 'worker-' + index) || saved.has('worker-' + index)) index++;
   selected = 'worker-' + index;
-  activeTab = 'connection';
   config.models[selected] = {
     protocol: 'responses',
     baseUrl: urls.responses,
     apiKey: '',
     model: '',
     description: '',
-    apiKeyEnv: '',
+    stream: true,
     maxTokens: 4096,
   };
   render();
@@ -458,6 +417,7 @@ async function save() {
     const result = await api('/api/config', {config});
     config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
     saved = new Set(Object.keys(config.models));
+    savedSnapshots.remember(config);
     dirty.clear();
     render();
     status('配置已保存，重启 Codex 生效');
@@ -471,9 +431,9 @@ async function copyModel(name) {
       const result = await api('/api/config/copy', {config, name});
       config.models[result.name] = result.config.models[result.name];
       saved.add(result.name);
+      savedSnapshots.rememberOne(result.name, result.config.models[result.name]);
       if (catalogs.has(name)) catalogs.set(result.name, catalogs.get(name));
       selected = result.name;
-      activeTab = 'connection';
       render();
       status('连接已复制，可在连接信息中重命名');
       byId('name').focus();
@@ -492,6 +452,7 @@ async function removeModel(name) {
       if (original) await api('/api/config/remove', {name: original});
       delete config.models[name];
       saved.delete(original);
+      savedSnapshots.forget(original);
       dirty.delete(name);
       catalogs.delete(name);
       if (selected === name) {
@@ -552,13 +513,24 @@ removeDialog.onclose = () => {
   if (removeDialog.returnValue === 'remove' && name) void removeModel(name);
 };
 byId('add').onclick = add;
+byId('cancel-probe').onclick = () => { void probeOperation.cancel(); };
+byId('discard-current').onclick = () => { if (!busy && selected) byId('discard-dialog').showModal(); };
+byId('confirm-discard-current').onclick = () => {
+  if (busy || !selected) return;
+  try {
+    const previous = selected;
+    const restored = savedSnapshots.restore(config, selected);
+    config = restored.config; selected = restored.selected;
+    dirty.delete(previous); catalogs.delete(previous);
+    byId('discard-dialog').close(); render(); status('已放弃当前连接的修改，其他连接草稿保留');
+  } catch (error) { status(error.message, false); }
+};
+/** 浏览器关闭和桌面安装共用草稿判断，包含尚未失焦提交的连接名。 */
+function hasDrafts() {
+  return dirty.size > 0 || Object.values(config.models).some(profile => !profile.savedName) || Boolean(byId('name') && byId('name').value.trim() !== selected);
+}
 // 桌面版关闭或更新前保留未保存草稿；浏览器入口沿用原有行为
 if (window.desktopApp) {
-  /** 检查新增连接、改名和字段草稿，避免更新安装丢失用户输入 */
-  const hasDrafts = () =>
-    dirty.size > 0 ||
-    Object.values(config.models).some((profile) => !profile.savedName) ||
-    (byId('name') && byId('name').value.trim() !== selected);
   /** 输入和保存完成后同步原生关闭保护；仅传布尔值，不传配置和 Key */
   const syncDrafts = () => {
     void window.desktopApp.setDirty(Boolean(hasDrafts()));
@@ -581,15 +553,16 @@ if (window.desktopApp) {
     }
   });
   // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认
+} else {
+  window.addEventListener('beforeunload', event => { if (hasDrafts() || busy) { event.preventDefault(); event.returnValue = ''; } });
 }
 render();
 void action(async () => {
   const result = await api('/api/config');
-  modelContextDefaults = Object.assign(Object.create(null), result.modelContextDefaults);
-  modelContextFallback = result.modelContextFallback || 256000;
   modelOutputDefaults = result.modelOutputDefaults || Object.create(null);
   config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
   saved = new Set(Object.keys(config.models));
+  savedSnapshots.remember(config);
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();

@@ -5,6 +5,26 @@
   stack.setAttribute('popover', 'manual');
   stack.setAttribute('aria-label', '操作提示');
   const entries = new Map();
+  const history = new Map();
+
+  /** 渲染会话内通知历史，只使用文本节点，不保存配置对象或写入浏览器持久存储。 */
+  function renderHistory() {
+    const list = document.getElementById('notification-history');
+    if (!list) return;
+    list.replaceChildren();
+    const unread = [...history.values()].filter(item => !item.read).length;
+    document.getElementById('notification-count').textContent = String(unread);
+    document.getElementById('notifications-entry').setAttribute('aria-label', `通知，${unread} 条未读`);
+    document.getElementById('notification-empty').hidden = history.size > 0;
+    for (const [key, item] of [...history].reverse()) {
+      const row = document.createElement('div'); row.className = `notification-record ${item.kind}`;
+      const message = document.createElement('p'); message.textContent = item.message;
+      const button = document.createElement('button'); button.className = 'text-button'; button.textContent = '移除';
+      button.setAttribute('aria-label', `移除通知：${item.message}`);
+      button.addEventListener('click', () => { history.delete(key); renderHistory(); });
+      row.append(message, button); list.append(row);
+    }
+  }
 
   /** 统一提示文案的结尾样式，仅移除末尾中文句号，保留句间标点、英文句点和换行 */
   function formatMessage(message) {
@@ -36,6 +56,10 @@
     message = formatMessage(message);
     if (!message) return;
     if (!['success', 'info', 'warning', 'error'].includes(kind)) kind = 'info';
+    history.delete(key);
+    history.set(key, {message,kind,read:false});
+    while (history.size > 30) history.delete(history.keys().next().value);
+    renderHistory();
     if (entries.size >= 3) clear(entries.keys().next().value);
     const card = document.createElement('div');
     card.className = 'notice ' + kind;
@@ -65,4 +89,10 @@
 
   new MutationObserver(mount).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['open']});
   window.notices = {show, clear, formatMessage};
+  document.getElementById('notifications-entry').addEventListener('click', () => {
+    history.forEach(item => { item.read = true; }); renderHistory();
+    document.getElementById('notifications-dialog').showModal();
+  });
+  document.getElementById('notifications-clear').addEventListener('click', () => { history.clear(); renderHistory(); });
+  renderHistory();
 })();

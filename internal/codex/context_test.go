@@ -27,7 +27,7 @@ func TestCatalogContextWindows(t *testing.T) {
 	if err := json.Unmarshal(data, &catalog); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{relayModel: 256000, RelayModelAlias("demo", "gpt-6-astra"): 256000, RelayModelAlias("demo", "two"): 128000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow, RelayModelAlias("demo", "gemini-3.8-flash-high"): 256000, RelayModelAlias("demo", "minimax-m2.7"): 204800}
+	want := map[string]int{relayModel: configstore.DefaultContextWindow, RelayModelAlias("demo", "gpt-6-astra"): configstore.DefaultContextWindow, RelayModelAlias("demo", "two"): 128000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow, RelayModelAlias("demo", "gemini-3.8-flash-high"): configstore.DefaultContextWindow, RelayModelAlias("demo", "minimax-m2.7"): configstore.DefaultContextWindow}
 	if len(shared.Arr(catalog["models"])) != len(want) {
 		t.Fatal("missing catalog entries")
 	}

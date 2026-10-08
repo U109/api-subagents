@@ -2,11 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>API Subagents · 模型配置</title>
-  <link rel="stylesheet" href="/config.css"><link rel="stylesheet" href="/model-picker.css"><link rel="stylesheet" href="/desktop.css">
-  <link rel="stylesheet" href="/radix-palette.css"><link rel="stylesheet" href="/workbench-theme.css">
+  <title>API Subagents · 连接工作台</title>
+  <link rel="stylesheet" href="/config.css"><link rel="stylesheet" href="/model-picker.css"><link rel="stylesheet" href="/desktop.css"><link rel="stylesheet" href="/workbench.css"><link rel="stylesheet" href="/radix-palette.css"><link rel="stylesheet" href="/workbench-theme.css">
   <script src="/bridge.js" defer></script><script src="/shell-ui.js" defer></script><script src="/notification-ui.js" defer></script>
-  <script src="/select-ui.js" defer></script><script src="/model-picker-ui.js" defer></script><script src="/relay-diagnostics-ui.js" defer></script><script src="/config-ui.js" defer></script><script src="/desktop-ui.js" defer></script>
+  <script src="/select-ui.js" defer></script><script src="/model-picker-ui.js" defer></script><script src="/relay-diagnostics-ui.js" defer></script><script src="/config-operations.js" defer></script><script src="/config-ui.js" defer></script><script src="/desktop-ui.js" defer></script>
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -49,34 +48,34 @@
   <button id="sidebar-backdrop" class="sidebar-backdrop" data-shell aria-label="关闭侧栏" hidden></button>
   <button id="sidebar-toggle" class="sidebar-toggle" data-shell aria-controls="connection-sidebar" aria-expanded="true" aria-label="收起侧栏" title="收起侧栏"><svg class="toggle-chevron" aria-hidden="true"><use href="#i-chevron"/></svg><svg class="toggle-menu" aria-hidden="true"><use href="#i-menu"/></svg></button>
   <main>
-    <div class="top-actions desktop-only" aria-label="应用工具栏" hidden>
+    <div class="top-actions" aria-label="应用工具栏"><button id="notifications-entry" class="toolbar-button" data-shell aria-label="通知，0 条未读"><svg aria-hidden="true"><use href="#i-help"/></svg>通知<span id="notification-count">0</span></button>
       <button id="update-entry" class="toolbar-button desktop-only" data-shell hidden><svg aria-hidden="true"><use href="#i-refresh"/></svg><span id="update-label">检查更新</span><span id="update-dot" class="tiny-dot" hidden></span></button>
     </div>
     <div class="workspace">
-      <header class="page-header"><h1>模型配置</h1><div class="page-meta"><span id="model-count">0 个本机连接</span><span class="meta-divider">·</span><span id="save-state" class="save-status">正在读取…</span></div></header>
-      <div id="connection-toolbar" class="connection-toolbar">
-        <div id="connection-heading" class="title-group"><div id="profile-avatar" class="profile-avatar" aria-hidden="true">＋</div><div><strong id="connection-title">选择模型连接</strong><p id="connection-subtitle">从侧栏添加或选择一个连接</p></div></div>
-        <section id="relay-panel" class="route-bar" aria-label="挟持模式" data-desktop-control hidden>
-          <div class="route-label"><svg aria-hidden="true"><use href="#i-route"/></svg><div><strong>挟持模式</strong><p id="relay-state" role="status">开启后重启 Codex，使用期间保持 App 运行</p></div></div>
-          <div class="route-path"><span>Codex</span><svg aria-hidden="true"><use href="#i-arrow"/></svg><span id="relay-target" class="route-target">自带模型</span></div>
-          <div class="route-control"><button id="enable-relay" class="text-button" hidden>切换到此连接</button><span id="relay-label">未开启</span><button id="relay-switch" class="switch" role="switch" aria-checked="false" aria-label="挟持模式" disabled><span></span></button></div>
-        </section>
-      </div>
+      <header class="page-header"><div id="connection-heading" class="title-group"><div id="profile-avatar" class="profile-avatar" aria-hidden="true">＋</div><div><h1 id="connection-title">模型连接</h1><p id="connection-subtitle" class="page-intro">从侧栏添加或选择一个连接</p></div></div><div class="page-meta"><span id="save-state" class="save-status">正在读取…</span><span class="meta-divider">·</span><span id="model-count">0 个本机连接</span></div></header>
+      <p id="probe-result" class="probe-result" role="status"></p>
+      <section id="editor" aria-label="连接配置"></section>
+      <section id="relay-panel" class="route-bar" aria-label="主对话接入" data-desktop-control hidden>
+        <div class="route-label"><svg aria-hidden="true"><use href="#i-route"/></svg><div><strong>让此连接接管主对话</strong><p id="relay-state" role="status">先保存连接，再开启；重启 Codex 后生效，期间保持 App 运行</p></div></div>
+        <div class="route-path"><span>Codex</span><svg aria-hidden="true"><use href="#i-arrow"/></svg><span id="relay-target" class="route-target">自带模型</span></div>
+        <div class="route-control"><button id="enable-relay" class="text-button" hidden>切换到此连接</button><span id="relay-label">未开启</span><button id="relay-switch" class="switch" role="switch" aria-checked="false" aria-label="主对话接入" disabled><span></span></button></div>
+      </section>
       <details id="relay-diagnostics" class="relay-diagnostics" data-desktop-control hidden>
         <summary>最近请求<span id="relay-diagnostics-summary" class="request-result-badge" role="status">尚无请求</span></summary>
         <p class="request-diagnostics-caption">仅保留本次开启期间最近 20 次 Responses 请求的脱敏诊断，不保存提问、回答或 Key。接入网关不代表生成成功；断流不会自动重放。</p>
         <p id="relay-diagnostics-empty" class="request-diagnostics-empty">使用 Codex 发起请求后，这里会显示结束状态及请求 ID。</p>
         <ol id="relay-diagnostics-list" class="request-results" aria-label="最近请求记录"></ol>
       </details>
-      <section id="editor" aria-label="连接配置"></section>
     </div>
-    <footer id="config-actions" class="action-bar" hidden><div class="save-guidance"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>修改将在保存后生效 · 测试可能产生少量 API 费用</span></div><div class="footer-actions"><button id="probe" class="secondary"><svg aria-hidden="true"><use href="#i-plug"/></svg>测试连接</button><button id="save" class="primary">保存配置<kbd>Ctrl S</kbd></button></div></footer>
+    <footer id="config-actions" class="action-bar" hidden><div class="save-guidance"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>配置仅存本机 · 测试会发送请求，可能产生少量费用</span></div><div class="footer-actions"><button id="discard-current" class="text-button">放弃修改</button><button id="cancel-probe" class="secondary" data-shell hidden>取消测试</button><button id="probe" class="secondary"><svg aria-hidden="true"><use href="#i-plug"/></svg>测试连接</button><button id="save" class="primary">保存配置<kbd>Ctrl S</kbd></button></div></footer>
   </main>
 </div>
 <div id="model-menu" class="model-menu" popover="manual" role="menu" aria-label="连接操作">
   <button id="copy-model" role="menuitem" tabindex="-1"><svg aria-hidden="true"><use href="#i-copy"/></svg>复制</button>
   <button id="delete-model" role="menuitem" class="menu-danger" tabindex="-1"><svg aria-hidden="true"><use href="#i-trash"/></svg>删除</button>
 </div>
+<dialog id="notifications-dialog" aria-labelledby="notifications-title" data-desktop-control><button class="dialog-close icon-button" data-close aria-label="关闭通知">×</button><h2 id="notifications-title">通知记录</h2><p>仅保留本次会话最近 30 个通道的状态，关闭应用后清除。</p><div id="notification-history"></div><p id="notification-empty">暂无操作通知</p><div class="dialog-actions"><button id="notifications-clear" class="text-button">清空记录</button></div></dialog>
+<dialog id="discard-dialog" aria-labelledby="discard-title"><button class="dialog-close icon-button" data-close aria-label="继续编辑">×</button><h2 id="discard-title">放弃当前连接的修改？</h2><p>恢复到最后保存的配置，新建但未保存的连接会被移除。其他连接的草稿不变，不会删除已保存的 Key。</p><div class="dialog-actions"><button class="secondary" data-close>继续编辑</button><button id="confirm-discard-current" class="primary">放弃修改</button></div></dialog>
 <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description"><form method="dialog"><h2 id="remove-title">删除模型配置？</h2><p id="remove-description"></p><div class="dialog-actions"><button class="secondary" value="cancel" autofocus>取消</button><button class="primary danger" value="remove">确认删除</button></div></form></dialog>
 <dialog id="exit-dialog" aria-labelledby="exit-title" aria-describedby="exit-description" data-desktop-control><h2 id="exit-title">有未保存的修改</h2><p id="exit-description">关闭会放弃尚未保存的修改，并自动关闭挟持模式、恢复 Codex 配置</p><div class="dialog-actions"><button id="cancel-exit" class="secondary" autofocus>继续编辑</button><button id="confirm-exit" class="primary">放弃修改并退出</button></div></dialog>
 <dialog id="plugin-dialog" aria-labelledby="plugin-title" data-desktop-control><button class="dialog-close icon-button" data-close aria-label="关闭插件管理">×</button><span class="dialog-symbol"><svg aria-hidden="true"><use href="#i-plug"/></svg></span><h2 id="plugin-title">Codex 插件</h2><dl class="version-list"><div><dt>已安装版本</dt><dd id="plugin-version">正在读取…</dd></div><div><dt>App 附带版本</dt><dd id="plugin-bundled-version">—</dd></div><div id="plugin-available-row" hidden><dt>可更新版本</dt><dd id="plugin-available-version">—</dd></div></dl><p id="plugin-state" role="status">正在检查安装状态…</p><progress id="plugin-progress" max="100" value="0" aria-label="插件下载进度" hidden></progress><p class="dialog-hint">插件可独立更新，无需重装或重启 App。更新后，在 Codex 新建对话即可使用</p><div class="dialog-actions"><button id="check-plugin-update" class="secondary" disabled>检查插件更新</button><button id="install-plugin" class="primary" disabled>安装到 Codex</button></div></dialog>

@@ -85,18 +85,28 @@ test('prototype theme, production resources, and automatic context limit agree',
   const source = fs.readFileSync(path.join(__dirname, 'model-picker-ui.js'), 'utf8');
   const start = source.indexOf('function updateContextHint(');
   const end = source.indexOf('\n  /**', start);
-  const context = {};
+  const context = {window: {configOperations: require('./config-operations.js')}};
   vm.runInNewContext(source.slice(start, end) + '\nthis.update = updateContextHint;', context);
-  const fields = {'#model-context-window': {value: '', validity: {}}, '#edit-model-id': {value: 'mock'}, '#reset-model-context': {}, '#model-context-help': {}};
+  const fields = {'#model-context-window': {value: '500000', validity: {}}, '#edit-model-id': {value: 'mock'}, '#reset-model-context': {}, '#model-context-help': {}};
   const root = {querySelector: selector => fields[selector]};
-  for (const [tokens, expected] of [[1000000, '256,000'], [128000, '128,000']]) {
-    context.update(root, {contextDefaults: {mock: {tokens, model: 'mock', verifiedAt: 'fixture'}}});
-    assert.ok(fields['#model-context-help'].textContent.includes(expected));
+  for (const [tokens, expected] of [[1000000, 256000], [128000, 128000]]) {
+    context.update(root, {catalog: {models: [{id: 'mock', contextWindow: tokens}]}, profile: {}});
+    assert.equal(fields['#model-context-window'].value, String(expected));
+    assert.equal(fields['#model-context-window'].readOnly, true);
+    assert.equal(fields['#reset-model-context'].disabled, true);
+    assert.ok(fields['#model-context-help'].textContent.includes(expected.toLocaleString()));
   }
+  context.update(root, {profile: {modelOfficialContexts: {mock: 64000}}});
+  assert.equal(fields['#model-context-window'].value, '64000');
+  context.update(root, {profile: {}});
+  assert.equal(fields['#model-context-window'].value, '256000');
+  assert.equal(fields['#model-context-window'].readOnly, false);
   fields['#model-context-window'].value = '500000';
-  context.update(root, {contextDefaults: {}});
-  assert.match(fields['#model-context-help'].textContent, /手动：500,000/);
-  fields['#model-context-window'].value = '';
-  context.update(root, {contextDefaults: {}});
-  assert.match(fields['#model-context-window'].placeholder, /待核实/);
+  context.update(root, {profile: {}});
+  assert.match(fields['#model-context-help'].textContent, /已有手动配置 500,000/);
+  assert.equal(fields['#reset-model-context'].disabled, false);
+  fields['#model-context-window'].value = '256000';
+  context.update(root, {profile: {}});
+  assert.match(fields['#model-context-help'].textContent, /官方容量待确认/);
+  assert.equal(fields['#reset-model-context'].disabled, true);
 });

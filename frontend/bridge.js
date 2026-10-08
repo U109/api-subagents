@@ -22,6 +22,8 @@ if (window.go?.desktop?.App && window.runtime) {
     onState: (callback) => window.runtime.EventsOn('desktop:state', callback),
     /** 通过固定路由绑定访问 Go 配置服务，JSON 中的 Key 不会写入日志。 */
     api: (route, body) => app.API(route, body === undefined ? '' : JSON.stringify(body)),
+    /** 取消本次连接测试，随机请求号不会影响其他并行请求或配置保存。 */
+    cancelProbe: (requestID) => app.CancelProbe(requestID),
     /** 同步未保存状态，让原生窗口关闭和更新操作也能保护草稿。 */
     setDirty: (value) => app.SetDirty(value),
     /** 确认放弃草稿；Go 再次检查操作状态并恢复 Codex 后才退出。 */
