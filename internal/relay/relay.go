@@ -55,6 +55,8 @@ type Relay struct {
 	requestLimit  int
 	limitExceeded bool
 	epoch         uint64
+	// responsesRetryWait 仅供隔离测试替换退避；正式请求沿用可取消等待，worker 不自动重试。
+	responsesRetryWait func(context.Context, time.Duration) error
 }
 
 // New 创建默认关闭的网关，模型密钥只在请求时从本机配置解析。

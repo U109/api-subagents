@@ -17,7 +17,8 @@ import (
 )
 
 // forwardResponses 替换模型及凭据，仅在普通生成请求未给出额度时补模型预算；正文和返回流保持原样。
-// SSE 只旁观终止状态，不改写正文、不合成完成事件、不保存思考历史；取消和超时会终止上游，失败不重试。
+// 桌面普通 Responses 请求仅在上游返回 502/503、尚未向客户端输出时有限重试；worker、compact、连接错误与已开始的流不重试。
+// SSE 只旁观终止状态，不改写正文、不合成完成事件、不保存思考历史；各次尝试共享原首包及总时限，取消会终止请求和退避。
 func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile, trace *requestTrace) {
 	defer trace.finish()
 	body, err := sjson.SetBytes(original, "model", profile.Model)
@@ -56,7 +57,7 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 	if profile.APIKey != "" {
 		upstream.Header.Set("Authorization", "Bearer "+profile.APIKey)
 	}
-	res, err := r.Client.Do(upstream)
+	res, err := r.doResponsesWithRecovery(upstream, r.workerConfig == nil && req.URL.Path == "/v1/responses")
 	if err != nil {
 		trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_connect_error")
 		if req.Context().Err() != nil {

@@ -31,7 +31,7 @@ func awaitRequestResult(t *testing.T, r *Relay) RequestResult {
 	return RequestResult{}
 }
 
-// TestResponsesDiagnostics 验证诊断不改变状态码、响应字节和请求次数，也不记录原始正文或密钥。
+// TestResponsesDiagnostics 验证诊断不改变最终状态码或响应字节；502/503 按恢复上限计数，诊断不记录原始正文或密钥。
 func TestResponsesDiagnostics(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
@@ -60,9 +60,14 @@ func TestResponsesDiagnostics(t *testing.T) {
 			}))
 			defer server.Close()
 			r := testRelay(t, "responses", server.URL, true)
+			r.responsesRetryWait = func(ctx context.Context, _ time.Duration) error { return ctx.Err() }
 			status, body := requestRelay(t, r, shared.Object{"model": "api-subagents", "stream": tc.stream, "input": "private-prompt"})
 			got := awaitRequestResult(t, r)
-			if status != tc.status || body != tc.body || count.Load() != 1 {
+			wantCalls := int32(1)
+			if tc.status == http.StatusBadGateway || tc.status == http.StatusServiceUnavailable {
+				wantCalls = 4
+			}
+			if status != tc.status || body != tc.body || count.Load() != wantCalls {
 				t.Fatal("forwarding contract changed", status, body, count.Load())
 			}
 			if got.Outcome != tc.want || got.HTTPStatus != tc.status || got.UpstreamRequestID != "req-safe-123" || got.FirstByteMS < 0 || got.BytesReceived != int64(len(tc.body)) {
