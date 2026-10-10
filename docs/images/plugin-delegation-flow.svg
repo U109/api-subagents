@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="360" viewBox="0 0 1100 360" role="img" aria-labelledby="delegation-svg-title delegation-svg-desc">
+  <title id="delegation-svg-title">插件委派：主模型统筹，外部模型完成子任务</title>
+  <desc id="delegation-svg-desc">实线表示发出的请求，虚线表示返回的结果；图中不包含真实连接、模型配置或凭据。</desc>
+  <defs><marker id="delegation-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#526578" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+  <rect width="1100" height="360" rx="12" fill="#ffffff"/>
+  <g font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" fill="#263445">
+    <rect x="32" y="20" width="1036" height="48" rx="10" fill="#ffffff" stroke="#ffffff"/>
+    <rect x="50" y="100" width="240" height="124" rx="10" fill="#edf5ff" stroke="#a9c5e8"/>
+    <rect x="430" y="100" width="240" height="124" rx="10" fill="#f4f2ff" stroke="#c5bee4"/>
+    <rect x="810" y="100" width="240" height="124" rx="10" fill="#edf8f2" stroke="#afd4bb"/>
+    <rect x="32" y="262" width="1036" height="72" rx="10" fill="#f6f8fa" stroke="#d9e0e7"/>
+    <path d="M296 142 L424 142" stroke="#526578" stroke-width="1.8" fill="none" marker-end="url(#delegation-arrowhead)"/>
+    <path d="M424 182 L296 182" stroke="#526578" stroke-width="1.8" fill="none" stroke-dasharray="5 4" marker-end="url(#delegation-arrowhead)"/>
+    <path d="M676 142 L804 142" stroke="#526578" stroke-width="1.8" fill="none" marker-end="url(#delegation-arrowhead)"/>
+    <path d="M804 182 L676 182" stroke="#526578" stroke-width="1.8" fill="none" stroke-dasharray="5 4" marker-end="url(#delegation-arrowhead)"/>
+    <text x="550" y="53" text-anchor="middle" font-size="24" font-weight="600" fill="#263445">插件委派：主模型统筹，外部模型完成子任务</text>
+    <text x="170" y="144.5" text-anchor="middle" font-size="20" font-weight="600" fill="#263445">Codex 主模型</text>
+    <text x="170" y="169.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">拆分任务 · 选择连接</text>
+    <text x="170" y="194.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">审核 diff 与测试结果</text>
+    <text x="550" y="144.5" text-anchor="middle" font-size="20" font-weight="600" fill="#263445">API Subagents 插件</text>
+    <text x="550" y="169.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">独立 MCP worker</text>
+    <text x="550" y="194.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">读取配置 · 派发与等待</text>
+    <text x="930" y="144.5" text-anchor="middle" font-size="20" font-weight="600" fill="#263445">外部模型 API</text>
+    <text x="930" y="169.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">使用指定连接与模型</text>
+    <text x="930" y="194.5" text-anchor="middle" font-size="20" font-weight="400" fill="#263445">完成被委派的子任务</text>
+    <text x="550" y="293.5" text-anchor="middle" font-size="18" font-weight="400" fill="#263445">建议模式：受限读取 → 返回建议 → 主任务审核应用</text>
+    <text x="550" y="316" text-anchor="middle" font-size="18" font-weight="400" fill="#263445">执行模式：独立 Codex worker → 授权修改与测试 → 主任务验收</text>
+    <rect x="309.6" y="130" width="100.80000000000001" height="24" rx="3" fill="#ffffff"/>
+    <text x="360" y="148" text-anchor="middle" font-size="16" font-weight="400" fill="#526578">任务 / 权限</text>
+    <rect x="309.6" y="170" width="100.80000000000001" height="24" rx="3" fill="#ffffff"/>
+    <text x="360" y="188" text-anchor="middle" font-size="16" font-weight="400" fill="#526578">结果 / 证据</text>
+    <rect x="704" y="130" width="72" height="24" rx="3" fill="#ffffff"/>
+    <text x="740" y="148" text-anchor="middle" font-size="16" font-weight="400" fill="#526578">模型请求</text>
+    <rect x="704" y="170" width="72" height="24" rx="3" fill="#ffffff"/>
+    <text x="740" y="188" text-anchor="middle" font-size="16" font-weight="400" fill="#526578">模型响应</text>
+  </g>
+</svg>

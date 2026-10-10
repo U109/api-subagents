@@ -83,10 +83,13 @@ func TestRelayModelSwitching(t *testing.T) {
 		t.Fatal("catalog not refreshed", err)
 	}
 	items, models := shared.Arr(listed["data"]), shared.Arr(catalog["models"])
-	if res.StatusCode != 200 || len(items) != 7 || len(items) != len(models) {
+	if res.StatusCode != 200 || len(items) != 6 || len(items) != len(models) {
 		t.Fatal("model list differs from Codex catalog")
 	}
 	for i := range items {
+		if shared.Obj(items[i])["id"] == "api-subagents" {
+			t.Fatal("legacy default alias still advertised")
+		}
 		if shared.Obj(items[i])["id"] != shared.Obj(models[i])["slug"] {
 			t.Fatal("catalog order or aliases differ")
 		}

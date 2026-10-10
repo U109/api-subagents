@@ -6,18 +6,8 @@ if (key) {
 }
 /** 按固定 ID 获取当前渲染的表单节点 */
 const byId = (id) => document.getElementById(id);
-const types = {
-  responses: 'Responses 透传（推荐 CPA）',
-  compatible: 'Chat Completions（本地转换）',
-  anthropic: 'Claude 原生',
-  gemini: 'Gemini 原生',
-};
-const urls = {
-  compatible: 'http://127.0.0.1:8317/v1',
-  responses: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com/v1',
-  gemini: 'https://generativelanguage.googleapis.com/v1beta',
-};
+// 新连接默认使用 Responses；现有地址与协议不因切换控件而自动改写。
+const defaultEndpoint = 'https://api.openai.com/v1';
 /** 将配置文本转义后嵌入 HTML 属性或内容，防止模型名称等输入成为可执行标记 */
 const esc = (value) =>
   String(value ?? '').replace(
@@ -25,20 +15,37 @@ const esc = (value) =>
     (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c],
   );
 // 连接名是自由文本，无原型字典让 __proto__、constructor 等名称也能作为普通键使用
-let config = {version: 1, maxConcurrent: 3, models: Object.create(null)};
-let modelContextDefaults = Object.create(null);
-let modelContextFallback = 256000;
+let config = {version: 1, models: Object.create(null)};
 let modelOutputDefaults = Object.create(null);
 let selected = null,
   saved = new Set(),
-  busy = false,
-  activeTab = 'connection';
+  busy = false;
 const catalogs = new Map(),
   dirty = new Set();
-const tabs = {connection: '连接信息', model: '模型选择', purpose: '任务分工', advanced: '高级设置'};
-const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '极低 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh'};
-const tabIcons = {connection: 'link', model: 'model', purpose: 'route', advanced: 'sliders'};
-const reasoningHints = {'': '由模型服务决定，不额外指定思考参数', none: '适用于支持关闭推理的模型，优先快速生成', minimal: '用尽量少的推理处理简单、明确的任务', low: '适合日常修改与简单排错，优先速度和较低用量', medium: '在响应速度与分析深度之间取得平衡', high: '适合复杂分析与代码审查，通常需要更多时间与用量', xhigh: '适合少量高难任务，可能显著增加等待时间和用量；日常操作建议 low 或 medium，需上游支持'};
+const savedSnapshots = window.configOperations.createSnapshots();
+const probeOperation = window.configOperations.createProbe({
+  api,
+  /** 桌面取消走固定 Go 绑定；浏览器模式仅使用请求自身的 AbortSignal。 */
+  cancelDesktop: window.desktopApp ? id => window.desktopApp.cancelProbe(id) : null,
+  /** 将真实测试状态同步到结果区和取消按钮，错误与取消不伪装为成功。 */
+  onState(phase, message) {
+    const running = ['running','cancelling'].includes(phase);
+    const current = probeOwner === selected;
+    byId('probe').disabled = running || busy;
+    byId('cancel-probe').hidden = !running || !current;
+    byId('cancel-probe').disabled = phase === 'cancelling';
+    if (!current) return;
+    byId('probe-result').textContent = message;
+    byId('probe-result').dataset.tone = phase === 'success' ? 'success' : 'notice';
+    window.notices.show('connection-test', message, phase === 'success' ? 'success' : phase === 'error' ? 'error' : 'info');
+  }
+});
+const tabs = {connection:'连接信息',model:'模型选择',purpose:'任务分工',advanced:'高级设置'};
+let page = 'detail', activeTab = 'model', overviewQuery = '', connectionsCollapsed = false, catalogToken = 0, catalogRequests = 0, probeOwner = null;
+const catalogStatus = new Map();
+const credentialSources = new WeakMap();
+const purposeExamples = ['审查代码结构、逻辑边界与潜在问题，提出可验证的修改建议。','整理技术文档、使用说明与变更记录，保持术语一致和内容准确。','按明确规则执行批量修改，并检查结果与兼容性。'];
+const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '最少 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh', max: '最高 · max', ultra: '极高 · ultra'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;
@@ -50,13 +57,14 @@ function status(message, good = true) {
   window.notices.show('config', message, good ? (message.startsWith('正在') ? 'info' : 'success') : 'error');
 }
 /** 桌面版调用 Go 绑定，浏览器版使用会话令牌；两者共享配置校验与错误提示 */
-async function api(route, body) {
+async function api(route, body, options = {}) {
   if (window.desktopApp) {
     const data = await window.desktopApp.api(route, body);
     if (data.warning) window.notices.show('config-warning', data.warning, 'warning');
     return data;
   }
   const res = await fetch(route, {
+    signal: options.signal,
     method: body ? 'POST' : 'GET',
     headers: {authorization: 'Bearer ' + key, 'content-type': 'application/json'},
     ...(body ? {body: JSON.stringify(body)} : {}),
@@ -65,46 +73,21 @@ async function api(route, body) {
   if (!res.ok) throw Error(data.error || '请求失败');
   return data;
 }
-/** 根据当前草稿重建连接列表；切换前提交名称，每个连接只提供复制和删除菜单 */
+/** 根据真实连接草稿重建侧栏，选择与详情导航分开，折叠不丢失当前连接。 */
 function sidebar() {
   closeMenu();
   const entries = Object.entries(config.models);
-  byId('model-count').textContent = `${entries.length} 个连接`;
+  byId('model-count').textContent = entries.length;
   byId('sidebar-count').textContent = entries.length;
-  byId('models').innerHTML = entries.length
-    ? entries
-        .map(
-          ([name, p]) => `
-    <div class="model connection ${name === selected ? 'active' : ''}">
-      <button class="model-select" data-name="${esc(name)}" title="${esc(name)}" aria-label="${esc(name)}" ${name === selected ? 'aria-current="true"' : ''}>
-        <span class="connection-avatar" aria-hidden="true">${esc((window.modelPickerUI.nameFor(p, p.model) || name).slice(0, 1).toUpperCase())}</span><span class="model-copy"><strong><span class="model-name">${esc(name)}</span><span class="relay-badge connected-marker" hidden title="挟持中" aria-label="挟持中"></span></strong><small>${esc(window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型')}</small></span>
-      </button>
-      <button class="model-more" data-menu="${esc(name)}" aria-label="${esc(name)} 的更多操作" title="更多操作" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false"><span aria-hidden="true">⋯</span></button>
-    </div>`,
-        )
-        .join('')
-    : '<p class="sidebar-empty">添加连接后，在这里切换</p>';
-  document.querySelectorAll('[data-name]').forEach((button) => {
-    button.onclick = () => {
-      if (!busy && commitName()) {
-        selected = button.dataset.name;
-        status('');
-        render();
-        window.uiShell.closeSidebar();
-      }
-    };
-  });
-  document.querySelectorAll('[data-menu]').forEach((button) => {
+  byId('models').hidden = connectionsCollapsed;
+  byId('connections-toggle').setAttribute('aria-expanded',String(!connectionsCollapsed));
+  byId('models').innerHTML = entries.map(([name,p]) => `<div class="model"><button type="button" class="model-select" data-name="${esc(name)}" aria-current="${name === selected}" aria-label="${esc(name)}"><span class="connection-avatar tone-${window.workbenchViews.tone(name)}">${esc([...name][0]?.toUpperCase())}</span><span class="model-copy"><span class="model-name">${esc(name)}</span><small>${esc(window.modelPickerUI.nameFor(p,p.model) || '尚未选择模型')}</small></span></button><button type="button" class="model-menu-button" data-menu="${esc(name)}" aria-label="${esc(name)} 的更多操作" aria-haspopup="menu" aria-expanded="false">${window.workbenchViews.icon('more')}</button></div>`).join('');
+  byId('models').querySelectorAll('[data-name]').forEach(button => { button.onclick = () => selectConnection(button.dataset.name,true); });
+  byId('models').querySelectorAll('[data-menu]').forEach(button => {
     button.onclick = () => openMenu(button);
-    button.onkeydown = (event) => {
-      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-      event.preventDefault();
-      openMenu(button);
-      if (menuName) byId(event.key === 'ArrowUp' ? 'delete-model' : 'copy-model').focus();
-    };
+    button.onkeydown = event => { if (!['ArrowDown','ArrowUp'].includes(event.key)) return; event.preventDefault(); openMenu(button); if (menuName) byId(event.key === 'ArrowUp' ? 'delete-model' : 'copy-model').focus(); };
   });
 }
-
 /** 收起顶层菜单并复原展开状态；键盘退出时将焦点还给原入口 */
 function closeMenu(restoreFocus = false) {
   const anchor = menuAnchor;
@@ -115,54 +98,132 @@ function closeMenu(restoreFocus = false) {
   if (restoreFocus) anchor?.focus();
 }
 
-/** 在侧栏入口旁打开两项菜单；顶层弹出避免列表滚动裁切，并限制位置不超出窗口 */
+/** 菜单优先贴侧栏右边缘，窄屏上下回退并夹紧视口；不改变连接选择。 */
 function openMenu(button) {
   if (busy || !commitName()) return;
   const wasOpen = menuAnchor === button && menu.matches(':popover-open');
-  closeMenu();
-  if (wasOpen) return;
-  menuAnchor = button;
-  menuName = button.dataset.menu;
-  button.setAttribute('aria-expanded', 'true');
-  menu.showPopover();
-  const rect = button.getBoundingClientRect();
-  const gap = 8;
-  menu.style.left = `${Math.max(gap, Math.min(rect.right - menu.offsetWidth, innerWidth - menu.offsetWidth - gap))}px`;
-  const top = rect.bottom + 5;
-  menu.style.top = `${Math.max(gap, top + menu.offsetHeight <= innerHeight - gap ? top : rect.top - menu.offsetHeight - 5)}px`;
-  byId('copy-model').focus();
+  closeMenu(); if (wasOpen) return;
+  menuAnchor = button; menuName = button.dataset.menu;
+  byId('model-menu-name').textContent = menuName;
+  button.setAttribute('aria-expanded','true'); menu.setAttribute('aria-label',menuName + ' 的连接操作'); menu.showPopover();
+  const rect = button.getBoundingClientRect(), row = button.closest('.model').getBoundingClientRect();
+  const edge = byId('connection-sidebar').getBoundingClientRect().right, gap = 8;
+  const width = document.documentElement.clientWidth, height = document.documentElement.clientHeight;
+  const right = edge + gap + menu.offsetWidth <= width - gap;
+  const below = rect.bottom + gap + menu.offsetHeight <= height - gap;
+  const x = right ? edge + gap : rect.right - menu.offsetWidth;
+  const y = right ? row.top : below ? rect.bottom + gap : rect.top - menu.offsetHeight - gap;
+  menu.style.left = Math.max(gap,Math.min(x,width - menu.offsetWidth - gap)) + 'px';
+  menu.style.top = Math.max(gap,Math.min(y,height - menu.offsetHeight - gap)) + 'px';
+  menu.dataset.placement = right ? 'right' : below ? 'bottom' : 'top'; byId('copy-model').focus();
 }
-
-/** 标记当前连接有待保存编辑，让改名和跨 Tab 编辑始终显示一致的保存状态 */
+/** 标记当前连接有待保存编辑，让改名和跨区块编辑始终显示一致的保存状态。 */
 function markChanged() {
   dirty.add(selected);
   byId('save-state').textContent = '待保存';
   byId('save-state').classList.add('dirty');
+  byId('save-status-icon').setAttribute('href','#i-info');
+  byId('save-status-icon').closest('.save-guidance').classList.add('dirty');
   window.dispatchEvent(new Event('config:changed'));
 }
 
-/** 更新当前连接的标题和保存状态，保持静态外壳独立于表单重绘 */
-function connectionHeading() {
-  const p = selected === null ? null : config.models[selected];
-  byId('connection-toolbar').hidden = !p && !window.desktopApp;
-  byId('connection-heading').hidden = !p;
-  byId('config-actions').hidden = !p;
-  byId('save-state').textContent = p ? dirty.has(selected) ? '待保存' : p.savedName ? '已保存' : '新连接' : '尚未配置';
-  byId('save-state').classList.toggle('dirty', Boolean(p && (dirty.has(selected) || !p.savedName)));
-  if (!p) return;
-  byId('connection-title').textContent = selected;
-  byId('connection-title').title = selected;
-  byId('profile-avatar').textContent = (window.modelPickerUI.nameFor(p, p.model) || selected).slice(0, 1).toUpperCase();
-  byId('connection-subtitle').textContent = `${types[p.protocol] || p.protocol} · ${window.modelPickerUI.nameFor(p, p.model) || '尚未选择模型'}`;
+/** 只隐藏或展示正式页面，不重绘当前草稿；工具页不显示连接测试与保存底栏。 */
+function syncPages() {
+  byId('detail-page').hidden = page !== 'detail';
+  for (const name of ['overview','plugin','help']) byId(name + '-page').hidden = page !== name;
+  connectionHeading();
+  if (page === 'overview') renderOverview();
 }
 
-/** 绘制七档直接点选项；只更新思考参数，保留其他 Tab 的输入和筛选结果 */
+/** 用真实配置生成总览，选择只改变当前连接，管理和保存使用独立的按钮。 */
+function renderOverview() {
+  byId('overview-page').innerHTML = window.workbenchViews.overview(config.models,selected,dirty,overviewQuery);
+}
+
+/** 搜索只替换卡片列表，输入框及组合输入、光标和当前连接均保持不变。 */
+function filterOverview(query) {
+  overviewQuery = query;
+  const template = document.createElement('template');
+  template.innerHTML = window.workbenchViews.overview(config.models,selected,dirty,overviewQuery);
+  const grid = byId('overview-page').querySelector('.provider-grid'), next = template.content.querySelector('.provider-grid');
+  if (grid && next) grid.replaceWith(next);
+}
+
+/** 导航前提交当前名称，保留所有面板输入和不同连接的草稿；无连接时仍可访问工具页。 */
+function navigate(next) {
+  if (!['overview','detail','plugin','help'].includes(next) || busy || !commitName()) return;
+  page = next; syncPages(); window.uiShell.closeSidebar();
+  byId('workspace').scrollTop = 0;
+  window.dispatchEvent(new Event('config:rendered'));
+}
+
+/** 卡片选择留在总览，侧栏与管理入口进入详情；切换时使旧目录和测试反馈失效。 */
+function selectConnection(name, manage = false) {
+  if (!Object.hasOwn(config.models,name) || busy || !commitName()) return;
+  if (selected !== name) {
+    catalogToken++;
+    if (catalogStatus.get(selected)?.phase === 'loading') catalogStatus.delete(selected);
+    void probeOperation.cancel();
+    window.notices.clear('model-remove');
+    byId('probe-result').textContent = '';
+    selected = name;
+  } else if (!manage && page === 'overview') return;
+  if (manage) page = 'detail';
+  render(); window.uiShell.closeSidebar();
+}
+
+/** 按当前用途同步字数及标签匹配，不重建输入以免打断中文输入法和光标。 */
+function updatePurpose() {
+  const text = config.models[selected]?.description || '';
+  byId('purpose-count').textContent = `${text.length} / 300`;
+  byId('panel-purpose').querySelectorAll('[data-purpose]').forEach(button => {
+    const applied = purposeExamples[Number(button.dataset.purpose)] === text;
+    button.setAttribute('aria-pressed',String(applied));
+    button.querySelector('svg').outerHTML = window.workbenchViews.icon(applied ? 'check' : 'plus');
+  });
+}
+
+/** 显式测试选中的真实服务，仅用现有可取消操作；切换连接后不回显旧请求的结果。 */
+async function runProbe() {
+  if (busy || !commitName() || selected === null) return;
+  probeOwner = selected;
+  try { await probeOperation.run(config,selected); }
+  catch (error) { if (probeOwner === selected) status(error.message || '连接测试失败',false); }
+  finally { window.dispatchEvent(new Event('config:rendered')); }
+}
+
+/** 同步页面标题、当前连接和保存状态；总览与工具页不展示连接详情操作。 */
+function connectionHeading() {
+  const p = selected === null ? null : config.models[selected], detail = page === 'detail';
+  byId('config-actions').hidden = !detail || !p;
+  byId('connection-actions').hidden = !detail || !p;
+  byId('overview-add').hidden = page !== 'overview';
+  byId('profile-avatar').hidden = !detail || !p;
+  byId('connection-subtitle').hidden = !(detail && p) && page !== 'help';
+  byId('tool-badge').hidden = page !== 'help';
+  byId('help-current-connection').disabled = !p;
+  byId('connection-title').textContent = detail && p ? selected : ({overview:'模型连接',plugin:'插件管理',help:'使用帮助'})[page] || '模型连接';
+  byId('connection-title').title = byId('connection-title').textContent;
+  byId('breadcrumb-current').textContent = byId('connection-title').textContent;
+  if (p) {
+    byId('profile-avatar').textContent = [...selected][0]?.toUpperCase();
+    byId('profile-avatar').className = 'profile-avatar tone-' + window.workbenchViews.tone(selected);
+    byId('connection-subtitle').textContent = page === 'help' ? '同一批模型，两种使用方式。' : '管理连接凭据、模型与运行偏好';
+  }
+  if (page === 'help' && !p) byId('connection-subtitle').textContent = '同一批模型，两种使用方式。';
+  byId('save-state').textContent = p ? dirty.has(selected) ? '当前连接有未保存的修改' : p.savedName ? '当前连接已保存' : '新连接尚未保存' : '尚未配置';
+  byId('save-state').classList.toggle('dirty',Boolean(p && (dirty.has(selected) || !p.savedName)));
+  byId('save-status-icon').setAttribute('href',p && (dirty.has(selected) || !p.savedName) ? '#i-info' : '#i-check');
+  byId('save-status-icon').closest('.save-guidance').classList.toggle('dirty',Boolean(p && (dirty.has(selected) || !p.savedName)));
+  byId('tab-model-count').textContent = p ? window.modelPickerUI.selectedModels(p).length : 0;
+  for (const name of ['overview','plugin','help']) byId(name + '-entry').setAttribute('aria-current',page === name || name === 'overview' && detail ? 'page' : 'false');
+}
+/** 绘制九档思考等级和右侧当前值；服务默认只由第一档恢复，不重复底部说明。 */
 function renderReasoning() {
   const effort = config.models[selected].reasoningEffort || '';
-  byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value, label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');
-  byId('reasoning-description').textContent = reasoningHints[effort] || reasoningHints[''];
+  byId('reasoning-options').innerHTML = Object.entries(reasoningLevels).map(([value,label]) => `<button type="button" class="effort-option" role="radio" aria-checked="${effort === value}" tabindex="${effort === value ? 0 : -1}" data-effort="${value}"><strong>${label.split(' · ')[0]}</strong><small>${value || 'default'}</small></button>`).join('');
+  byId('reasoning-summary').textContent = (reasoningLevels[effort] || reasoningLevels['']).split(' · ')[0] + ' · ' + (effort || 'default');
 }
-
 /** 提交已知思考等级并同步草稿保护；键盘操作后将焦点恢复到重新绘制的选项 */
 function chooseReasoning(value, focus = false) {
   if (busy || !Object.hasOwn(reasoningLevels, value)) return;
@@ -176,26 +237,20 @@ function chooseReasoning(value, focus = false) {
 function commitName() {
   const input = byId('name');
   if (!input || rename(config.models[selected], input)) return true;
-  activateTab('connection');
+  revealSection('connection');
   input.focus();
   return false;
 }
 
-/** 仅切换面板可见性，不重建表单；模型筛选、密钥及尚未保存的输入都保持原样 */
-function activateTab(name) {
+/** 切换配置页签而不重建表单，校验失败时让对应输入和标签可见。 */
+function revealSection(name, focus = false) {
+  if (!Object.hasOwn(tabs,name)) return;
   activeTab = name;
   for (const id of Object.keys(tabs)) {
-    const active = id === name;
-    byId('tab-' + id).setAttribute('aria-selected', String(active));
-    byId('tab-' + id).tabIndex = active ? 0 : -1;
-    byId('panel-' + id).hidden = !active;
+    const button = byId('tab-' + id); button.setAttribute('aria-selected',String(id === name)); button.tabIndex = id === name ? 0 : -1;
+    if (byId('panel-' + id)) byId('panel-' + id).hidden = id !== name;
   }
-}
-/** 生成带标签与说明的单个输入框，输入值及占位符均先转义 */
-function field(id, label, value, placeholder = '', full = false, type = 'text', hint = '') {
-  return `<div class="field ${full ? 'full' : ''}"><label for="${id}">${label}</label>
-    <input id="${id}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="${type === 'password' ? 'new-password' : 'off'}">
-    ${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  if (focus) byId('tab-' + name).focus();
 }
 /** 按自由文本重命名连接，仅阻止空名称与重名；保留原密钥来源，就地更新以免吞掉点击 */
 function rename(profile, input) {
@@ -214,205 +269,125 @@ function rename(profile, input) {
   config.models = Object.assign(Object.create(null), Object.fromEntries(
     Object.entries(config.models).map(([id, value]) => [id === selected ? name : id, value]),
   ));
+  catalogToken++;
+  void probeOperation.cancel();
   if (catalogs.has(selected)) catalogs.set(name, catalogs.get(selected));
   catalogs.delete(selected);
+  const catalogueState = catalogStatus.get(selected);
+  if (catalogueState && catalogueState.phase !== 'loading') catalogStatus.set(name,catalogueState);
+  catalogStatus.delete(selected);
   dirty.delete(selected);
   selected = name;
   markChanged();
   // 就地更新名称，保留失焦时正在点击的表单和侧栏节点
   const button = byId('models').querySelector('[aria-current="true"]');
-  button.dataset.name = name;
-  button.querySelector('.model-name').textContent = name;
-  button.title = name;
-  button.setAttribute('aria-label', name);
-  const moreButton = button.nextElementSibling;
-  moreButton.dataset.menu = name;
-  moreButton.setAttribute('aria-label', `${name} 的更多操作`);
+  if (button) {
+    button.dataset.name = name;
+    button.querySelector('.model-name').textContent = name;
+    button.title = name;
+    button.setAttribute('aria-label', name);
+    const moreButton = button.nextElementSibling;
+    moreButton.dataset.menu = name;
+    moreButton.setAttribute('aria-label', `${name} 的更多操作`);
+  }
+  renderPicker();
   connectionHeading();
   return true;
 }
-/** 连接统一模型编辑器与配置草稿，目录刷新只读取服务列表，不测试模型或覆盖已选配置 */
+/** 对接真实模型目录，按连接对象和请求令牌拒绝迟到结果，目录刷新不测试模型。 */
 function renderPicker() {
+  const owner = config.models[selected], name = selected;
   window.modelPickerUI.render(byId('picker'), {
-    profile: config.models[selected],
-    contextDefaults: modelContextDefaults,
-    contextFallback: modelContextFallback,
-    outputDefaults: modelOutputDefaults,
-    catalog: catalogs.get(selected),
-    /** 读取统一请求锁，阻止保存和拉取期间修改模型草稿 */
-    isBusy: () => busy,
-    /** 同步默认值和草稿标记，不重绘列表以保留搜索、焦点和滚动位置 */
-    onChange: () => { markChanged(); sidebar(); connectionHeading(); },
-    /** 通过已鉴权入口刷新目录；失败保留旧候选和全部已选模型 */
-    onRefresh: () => action(async () => {
-      const button = byId('pull-models');
-      const label = button.innerHTML;
-      button.textContent = '正在获取…';
+    profile:owner,outputDefaults:modelOutputDefaults,catalog:catalogs.get(name),catalogStatus:catalogStatus.get(name),
+    /** 保存期间禁止模型编辑；目录读取不锁住连接导航。 */
+    isBusy:() => busy,
+    /** 撤销只允许仍选中的原连接对象，保存或切换后旧操作不再生效。 */
+    isCurrent:() => selected === name && config.models[name] === owner,
+    /** 更新真实草稿，保留模型编辑器的搜索、焦点与顺序。 */
+    onChange:() => { window.configOperations.applyCatalogueContexts(owner,catalogs.get(name)); dirty.add(name); markChanged(); sidebar(); connectionHeading(); },
+    /** 刷新只使用固定鉴权 API；切换连接、修改凭据或删除连接使旧响应失效。 */
+    onRefresh:async () => {
+      if (busy || catalogStatus.get(name)?.phase === 'loading' || !commitName()) return;
+      const token = ++catalogToken, requestName = selected;
+      catalogRequests++;
+      catalogStatus.set(requestName,{phase:'loading',message:'正在获取模型目录…'}); renderPicker();
       try {
-        const result = await api('/api/models', {config, name: selected});
-        catalogs.set(selected, result);
-        renderPicker();
-        status(result.models.length ? `已获取 ${result.models.length} 个模型` : '未返回模型，可手动添加');
+        const result = await api('/api/models',{config,name:requestName});
+        if (token !== catalogToken || selected !== requestName || config.models[requestName] !== owner) return;
+        catalogs.set(requestName,result); catalogStatus.set(requestName,{phase:'ready',message:result.models.length ? '已获取 ' + result.models.length + ' 个模型' : '服务未返回模型，可手动添加'});
+        if (window.configOperations.applyCatalogueContexts(owner,result)) markChanged();
+      } catch (error) {
+        if (token !== catalogToken || selected !== requestName || config.models[requestName] !== owner) return;
+        catalogStatus.set(requestName,{phase:'error',message:'目录读取失败，已保留候选与选择'}); status(error.message || '无法读取模型目录',false);
       } finally {
-        if (button.isConnected) button.innerHTML = label;
+        catalogRequests--;
+        if (token === catalogToken && selected === requestName && config.models[requestName] === owner) renderPicker();
+        window.dispatchEvent(new Event('config:rendered'));
       }
-    }),
+    }
   });
-  // 刷新回调可能在请求锁内重建节点，新控件也应锁定到请求结束
   if (busy) setBusy(true);
 }
-
-/** 一次绘制四个配置面板并保留当前 Tab；表单输入同步草稿，工具栏始终提供保存和测试 */
+/** 绘制四个独立页签并绑定真实草稿；页签切换只隐藏面板，保存、凭据和目录仍走固定服务。 */
 function render() {
-  queueMicrotask(() => window.dispatchEvent(new Event('config:rendered')));
-  sidebar();
-  connectionHeading();
-  const editor = byId('editor'),
-    p = selected === null ? null : config.models[selected];
-  if (!p) {
-    editor.innerHTML =
-      '<div class="empty"><div class="empty-icon" aria-hidden="true">＋</div><h2>连接你的第一个模型</h2><p>支持 OpenAI、Claude、Gemini 和 CPA 等兼容服务<br>填入接口和 Key，直接从列表选择模型</p><button class="primary" id="first">添加模型连接</button><div class="empty-steps"><span>填写连接</span><i>→</i><span>拉取模型</span><i>→</i><span>交给 Codex</span></div></div>';
-    byId('first').onclick = add;
-    return;
-  }
-  editor.innerHTML = `
-    <div class="config-tabs tabs" role="tablist" aria-label="配置分类">${Object.entries(tabs)
-      .map(
-        ([id, label]) =>
-          `<button id="tab-${id}" role="tab" aria-selected="${id === activeTab}" aria-controls="panel-${id}" tabindex="${id === activeTab ? 0 : -1}" data-tab="${id}"><svg aria-hidden="true"><use href="#i-${tabIcons[id]}"/></svg>${label}</button>`,
-      )
-      .join('')}</div>
-    <section id="panel-connection" class="card tab-panel" role="tabpanel" aria-labelledby="tab-connection" tabindex="0"><div class="grid">
-      ${field('name', '连接名称', selected, '例如 日常助手 / Gemini', false, 'text', '按你的习惯命名，支持中文、空格和符号')}
-      <div class="field"><label for="protocol">接口类型</label><select id="protocol">${Object.entries(
-        types,
-      )
-        .map(
-          ([value, label]) =>
-            `<option value="${value}" ${p.protocol === value ? 'selected' : ''}>${label}</option>`,
-        )
-        .join('')}</select><p id="protocol-help" class="hint">${p.protocol === 'responses' ? '挟持模式原样转发请求与响应，由上游负责模型兼容；上游须支持 /responses' : '挟持模式需要在本地转换协议；CPA 等支持 Responses 的网关建议选择透传'}</p></div>
-      ${field('baseUrl', 'API 地址', p.baseUrl, urls[p.protocol], true, 'url', '填写 API 根地址；CPA 常用 http://127.0.0.1:8317/v1')}
-      <div class="field full"><div class="field-label"><label for="apiKey">API Key</label><span class="key-saved">${p.hasKey ? '已保存' : '尚未保存'}</span></div><div class="input-wrap key-input"><input id="apiKey" type="password" value="${esc(p.apiKey)}" placeholder="${p.hasKey ? '已保存，留空保持原 Key' : '粘贴此服务的 API Key'}" autocomplete="new-password"><button id="toggle-key" class="icon-button" type="button" aria-label="显示输入的 Key" ${p.apiKey ? '' : 'disabled'}><svg aria-hidden="true"><use href="#i-eye"/></svg></button></div><div class="hint-row"><span class="hint">留空将保留已保存的 Key</span><button id="key-env-link" class="text-button">使用环境变量<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></div></div>
-    </div></section>
-    <section id="panel-model" class="card tab-panel" role="tabpanel" aria-labelledby="tab-model" tabindex="0"><div id="picker"></div>
-      <div class="reasoning-block"><div class="field-label"><label id="reasoning-label">思考等级</label><span class="quiet-meta">此连接的默认等级 · Codex 中可单独切换</span></div><div id="reasoning-options" class="reasoning-options" role="radiogroup" aria-labelledby="reasoning-label"></div><p id="reasoning-description" class="hint"></p></div>
-      <div class="default-note"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>保存配置后，重启 Codex 刷新模型列表；思考档位需模型支持</span></div>
-    </section>
-    <section id="panel-purpose" class="card tab-panel" role="tabpanel" aria-labelledby="tab-purpose" tabindex="0">
-      <div class="field"><label for="description">擅长与用途</label><textarea id="description" maxlength="300" placeholder="例如：分析后端逻辑与边界条件，适合排错和代码审查">${esc(p.description)}</textarea><span class="hint">日常对话只需描述目标，Codex 会参考这里的用途安排任务</span></div>
-    </section>
-    <section id="panel-advanced" class="card tab-panel" role="tabpanel" aria-labelledby="tab-advanced" tabindex="0"><div class="grid">
-        ${field('maxTokens', '最大输出长度', p.maxTokens ?? 4096, '4096', false, 'number', p.protocol === 'responses' ? '用于插件委派；透传请求的输出限制由 Codex 与上游决定' : '')}
-        ${field('maxConcurrent', '任务并发数', config.maxConcurrent, '3', false, 'number', '全局设置，所有连接共用，范围 1–8')}
-        <div class="field full"><label for="stream">响应方式</label><select id="stream"><option value="true" ${p.stream !== false ? 'selected' : ''}>流式响应（推荐）</option><option value="false" ${p.stream === false ? 'selected' : ''}>普通响应（兼容旧网关）</option></select><span class="hint">${p.protocol === 'responses' ? '用于插件委派；挟持透传始终保留 Codex 请求的响应方式' : '流式接收可持续更新任务进度，服务仍有数据时继续等待'}</span></div>
-        ${field('firstResponseTimeoutSeconds', '首个数据等待时间（秒）', p.firstResponseTimeoutSeconds ?? 180, '180', false, 'number', '10–600 秒，包含连接和等待服务开始返回数据的时间')}
-        ${field('streamIdleTimeoutSeconds', '响应中断等待时间（秒）', p.streamIdleTimeoutSeconds ?? 120, '120', false, 'number', '10–600 秒，每次收到数据后重新计时')}
-        ${field('taskTimeoutMinutes', '任务总时长上限（分钟）', p.taskTimeoutMinutes ?? 15, '15', false, 'number', '1–60 分钟，包含所有模型轮次与文件操作')}
-        ${field('apiKeyEnv', '从环境变量读取 Key（可选）', p.apiKeyEnv, '例如 MY_MODEL_API_KEY', true, 'text', '设置后优先使用环境变量；留空则使用上面保存的 Key')}
-      </div>
-    </section>`;
-  activateTab(activeTab);
-  document.querySelectorAll('[data-tab]').forEach((button) => {
-    button.onclick = () => {
-      if (!busy && commitName()) activateTab(button.dataset.tab);
-    };
-    button.onkeydown = (event) => {
-      const ids = Object.keys(tabs),
-        index = ids.indexOf(button.dataset.tab);
-      const next = {
-        ArrowRight: ids[(index + 1) % ids.length],
-        ArrowLeft: ids[(index + ids.length - 1) % ids.length],
-        Home: ids[0],
-        End: ids.at(-1),
-      }[event.key];
-      if (!next) return;
-      event.preventDefault();
-      if (busy || !commitName()) return;
-      activateTab(next);
-      byId('tab-' + next).focus();
-    };
-  });
-  renderPicker();
-  renderReasoning();
-  byId('reasoning-options').onclick = event => { const button = event.target.closest('[data-effort]'); if (button) chooseReasoning(button.dataset.effort, true); };
+  sidebar(); connectionHeading();
+  const editor = byId('editor'), p = selected === null ? null : config.models[selected];
+  byId('config-tabs').hidden = !p;
+  if (!p) { editor.innerHTML = '<div class="empty"><h2>还没有连接</h2><p>添加服务连接，选择模型后保存即可使用。</p><button class="primary" id="first">添加连接</button></div>'; byId('first').onclick = add; syncPages(); window.dispatchEvent(new Event('config:rendered')); return; }
+  editor.dataset.profile = selected;
+  if (!credentialSources.has(p)) credentialSources.set(p,p.apiKeyEnv || '');
+  editor.innerHTML = window.workbenchViews.settings(selected,p);
+  renderPicker(); renderReasoning(); revealSection(activeTab);
+  byId('reasoning-options').onclick = event => { const button = event.target.closest('[data-effort]'); if (button) chooseReasoning(button.dataset.effort,true); };
   byId('reasoning-options').onkeydown = event => {
     const levels = Object.keys(reasoningLevels), current = levels.indexOf(p.reasoningEffort || '');
-    const next = {ArrowRight: (current + 1) % levels.length, ArrowLeft: (current + levels.length - 1) % levels.length, Home: 0, End: levels.length - 1}[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    chooseReasoning(levels[next], true);
+    const next = {ArrowRight:(current + 1) % levels.length,ArrowLeft:(current + levels.length - 1) % levels.length,Home:0,End:levels.length - 1}[event.key];
+    if (next !== undefined) { event.preventDefault(); chooseReasoning(levels[next],true); }
   };
-  byId('toggle-key').onclick = () => {
-    const hidden = byId('apiKey').type === 'password';
-    byId('apiKey').type = hidden ? 'text' : 'password';
-    byId('toggle-key').setAttribute('aria-label', hidden ? '隐藏输入的 Key' : '显示输入的 Key');
-  };
-  byId('key-env-link').onclick = () => { if (!busy && commitName()) { activateTab('advanced'); byId('apiKeyEnv').focus(); } };
-  byId('name').onchange = (event) => rename(p, event.target);
-  const numeric = [
-    'maxTokens',
-    'firstResponseTimeoutSeconds',
-    'streamIdleTimeoutSeconds',
-    'taskTimeoutMinutes',
-  ];
-  for (const prop of ['baseUrl', 'apiKey', 'description', 'apiKeyEnv', ...numeric]) {
-    byId(prop).oninput = (event) => {
-      p[prop] = numeric.includes(prop) ? Number(event.target.value) : event.target.value;
-      markChanged();
-      if (prop === 'apiKey') byId('toggle-key').disabled = !event.target.value;
-      if (['baseUrl', 'apiKey', 'apiKeyEnv'].includes(prop)) {
-        catalogs.delete(selected);
-        renderPicker();
-      }
-    };
-  }
-  byId('stream').onchange = (event) => {
-    p.stream = event.target.value === 'true';
-    markChanged();
-  };
-  byId('protocol').onchange = (event) => {
-    if (!commitName()) {
-      byId('protocol').value = p.protocol;
-      window.selectUI.refresh();
-      return;
-    }
-    const keepAddress = ['compatible', 'responses'].includes(p.protocol) && ['compatible', 'responses'].includes(event.target.value);
+  byId('toggle-key').onclick = () => { const hidden = byId('apiKey').type === 'password'; byId('apiKey').type = hidden ? 'text' : 'password'; byId('toggle-key').setAttribute('aria-label',hidden ? '隐藏输入的 Key' : '显示输入的 Key'); };
+  byId('name').onchange = event => rename(p,event.target);
+  byId('name').oninput = markChanged;
+  byId('protocol').onchange = event => {
     p.protocol = event.target.value;
-    if (!keepAddress) p.baseUrl = urls[p.protocol];
-    markChanged();
-    catalogs.delete(selected);
-    render();
+    catalogToken++; catalogs.delete(selected); catalogStatus.delete(selected);
+    markChanged(); renderPicker();
   };
-  byId('maxConcurrent').oninput = (event) => {
-    config.maxConcurrent = Number(event.target.value);
-    markChanged();
+  const numeric = ['maxTokens','firstResponseTimeoutSeconds','streamIdleTimeoutSeconds','taskTimeoutMinutes'];
+  for (const prop of ['baseUrl','apiKey','description',...numeric]) byId(prop).oninput = event => {
+    p[prop] = numeric.includes(prop) ? Number(event.target.value) : event.target.value; markChanged();
+    if (prop === 'apiKey') { byId('toggle-key').disabled = !event.target.value; p.apiKeyEnv = event.target.value ? '' : credentialSources.get(p); }
+    if (['baseUrl','apiKey'].includes(prop)) { catalogToken++; delete p.modelOfficialContexts; catalogs.delete(selected); catalogStatus.delete(selected); renderPicker(); }
+    if (prop === 'description') updatePurpose();
   };
-  byId('save').onclick = save;
-  byId('probe').onclick = () =>
-    action(async () => {
-      status('正在测试连接…');
-      await api('/api/probe', {config, name: selected});
-      status('连接测试成功');
-    });
-  window.selectUI.enhance(editor);
+  byId('advanced-override').onclick = () => { p.advancedOverride = !window.workbenchViews.advancedEnabled(p); byId('advanced-fields').disabled = !p.advancedOverride; byId('advanced-override').setAttribute('aria-checked',String(p.advancedOverride)); byId('override-label').textContent = p.advancedOverride ? '已开启' : '未开启'; byId('override-label').classList.toggle('enabled',p.advancedOverride); markChanged(); };
+  byId('reset-advanced').onclick = () => { Object.assign(p,{advancedOverride:false,maxTokens:4096,stream:true,firstResponseTimeoutSeconds:180,streamIdleTimeoutSeconds:120,taskTimeoutMinutes:15}); markChanged(); render(); };
+  editor.querySelectorAll('[name="response-mode"]').forEach(input => { input.onchange = () => { p.stream = input.value === 'stream'; markChanged(); }; });
+  editor.querySelectorAll('[data-purpose]').forEach(button => { button.onclick = () => { p.description = purposeExamples[Number(button.dataset.purpose)]; byId('description').value = p.description; markChanged(); updatePurpose(); }; });
+  updatePurpose(); syncPages(); window.selectUI.enhance(editor);
+  byId('probe').disabled = busy || probeOperation.isRunning();
+  byId('cancel-probe').hidden = !probeOperation.isRunning() || probeOwner !== selected;
+  window.dispatchEvent(new Event('config:rendered'));
 }
 /** 创建名称不重复的空白连接草稿；用户保存前不会影响已配置模型 */
 function add() {
   if (busy || !commitName()) return;
-  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型', false);
+  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个连接', false);
   let index = 1;
   while (Object.hasOwn(config.models, 'worker-' + index) || saved.has('worker-' + index)) index++;
-  selected = 'worker-' + index;
-  activeTab = 'connection';
+  catalogToken++; void probeOperation.cancel(); window.notices.clear('model-remove');
+  page = 'detail'; activeTab = 'connection'; selected = 'worker-' + index;
   config.models[selected] = {
     protocol: 'responses',
-    baseUrl: urls.responses,
+    baseUrl: defaultEndpoint,
     apiKey: '',
     model: '',
     description: '',
-    apiKeyEnv: '',
+    stream: true,
     maxTokens: 4096,
+    advancedOverride: false,
+    firstResponseTimeoutSeconds: 180,
+    streamIdleTimeoutSeconds: 120,
+    taskTimeoutMinutes: 15,
   };
   render();
   status('');
@@ -435,6 +410,7 @@ function setBusy(value) {
       delete control.dataset.wasDisabled;
     }
   });
+  byId('probe').disabled = busy || probeOperation.isRunning();
   window.dispatchEvent(new Event('config:changed'));
 }
 /** 提交当前改名、锁定控件并捕获错误；定点删除或复制不提交其他连接的名称草稿 */
@@ -452,28 +428,39 @@ async function action(fn, {checkName = true} = {}) {
     window.dispatchEvent(new Event('config:rendered'));
   }
 }
-/** 保存全部草稿，并用服务端标准化且已隐藏密钥的响应刷新页面 */
-async function save() {
+/** 只保存指定连接并合并服务端脱敏结果，其他连接草稿和 Key 来源不会被覆盖。 */
+async function save(name = selected) {
+  const previousSelection = selected;
+  if (name === selected && !commitName()) return;
+  if (name === previousSelection) name = selected;
+  if (!Object.hasOwn(config.models,name)) return;
+  const previous = config.models[name];
   await action(async () => {
-    const result = await api('/api/config', {config});
-    config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
-    saved = new Set(Object.keys(config.models));
-    dirty.clear();
-    render();
-    status('配置已保存，重启 Codex 生效');
-  });
+    const result = await api('/api/config/save',{config,name});
+    const normalized = result.config.models[name];
+    if (!normalized) throw Error('保存结果缺少目标连接，请刷新后重试');
+    window.modelPickerUI.transferState(previous,normalized);
+    config.models[name] = normalized;
+    window.notices.clear('model-remove');
+    if (previous.savedName && previous.savedName !== name) { saved.delete(previous.savedName); savedSnapshots.forget(previous.savedName); }
+    saved.add(name); savedSnapshots.rememberOne(name,normalized); dirty.delete(name);
+    if (selected === name) render(); else { sidebar(); connectionHeading(); if (page === 'overview') renderOverview(); }
+    status('当前连接已保存');
+  },{checkName:false});
 }
 /** 将目标连接的当前草稿复制并单独保存；服务端保留密钥，其他连接的草稿不受影响 */
 async function copyModel(name) {
-  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个模型', false);
+  if (Object.keys(config.models).length >= 50) return status('最多配置 50 个连接', false);
   await action(
     async () => {
       const result = await api('/api/config/copy', {config, name});
       config.models[result.name] = result.config.models[result.name];
       saved.add(result.name);
+      savedSnapshots.rememberOne(result.name, result.config.models[result.name]);
       if (catalogs.has(name)) catalogs.set(result.name, catalogs.get(name));
+      catalogToken++; void probeOperation.cancel(); window.notices.clear('model-remove');
       selected = result.name;
-      activeTab = 'connection';
+      page = 'detail'; activeTab = 'connection';
       render();
       status('连接已复制，可在连接信息中重命名');
       byId('name').focus();
@@ -492,13 +479,15 @@ async function removeModel(name) {
       if (original) await api('/api/config/remove', {name: original});
       delete config.models[name];
       saved.delete(original);
+      savedSnapshots.forget(original);
       dirty.delete(name);
       catalogs.delete(name);
       if (selected === name) {
+        catalogToken++; void probeOperation.cancel(); window.notices.clear('model-remove');
         selected = Object.keys(config.models)[0] || null;
         render();
-      } else sidebar();
-      status('已删除模型配置');
+      } else { sidebar(); if (page === 'overview') renderOverview(); }
+      status('连接已删除');
     },
     {checkName: false},
   );
@@ -542,7 +531,7 @@ byId('delete-model').onclick = () => {
   pendingRemoval = menuName;
   closeMenu(true);
   if (!pendingRemoval) return;
-  byId('remove-description').textContent = `确定删除“${pendingRemoval}”的模型配置吗？确认后立即生效`;
+  byId('remove-description').textContent = `确定删除“${pendingRemoval}”的连接配置吗？确认后立即生效`;
   removeDialog.returnValue = '';
   removeDialog.showModal();
 };
@@ -552,13 +541,59 @@ removeDialog.onclose = () => {
   if (removeDialog.returnValue === 'remove' && name) void removeModel(name);
 };
 byId('add').onclick = add;
+byId('overview-add').onclick = add;
+byId('save').onclick = () => save();
+byId('probe').onclick = runProbe;
+byId('overview-entry').onclick = () => navigate('overview');
+byId('home-breadcrumb').onclick = () => navigate('overview');
+byId('plugin-entry').onclick = () => navigate('plugin');
+byId('help-entry').onclick = () => navigate('help');
+byId('connections-toggle').onclick = () => { connectionsCollapsed = !connectionsCollapsed; sidebar(); };
+byId('copy-current').onclick = () => { if (selected !== null) void copyModel(selected); };
+byId('delete-current').onclick = () => {
+  if (busy || selected === null || !commitName()) return;
+  pendingRemoval = selected;
+  byId('remove-description').textContent = `确定删除“${pendingRemoval}”的连接配置吗？确认后立即生效`;
+  removeDialog.returnValue = ''; removeDialog.showModal();
+};
+byId('overview-page').onclick = event => {
+  const button = event.target.closest('button'); if (!button) return;
+  if (button.hasAttribute('data-select-connection')) selectConnection(button.dataset.selectConnection);
+  else if (button.hasAttribute('data-manage-connection')) selectConnection(button.dataset.manageConnection,true);
+  else if (button.hasAttribute('data-save-connection')) void save(button.dataset.saveConnection);
+  else if (button.hasAttribute('data-add-connection')) add();
+};
+byId('overview-page').oninput = event => { if (event.target.id === 'connection-search') filterOverview(event.target.value); };
+byId('help-current-connection').onclick = () => navigate('detail');
+byId('help-plugin-entry').onclick = () => navigate('plugin');
+byId('plugin-help-entry').onclick = () => navigate('help');
+byId('config-tabs').onclick = event => {
+  const button = event.target.closest('[data-config-tab]'); if (button && !busy) revealSection(button.dataset.configTab,true);
+};
+byId('config-tabs').onkeydown = event => {
+  if (busy || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  const ids = Object.keys(tabs), index = ids.indexOf(activeTab);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? ids.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length;
+  event.preventDefault(); revealSection(ids[next],true);
+};
+byId('cancel-probe').onclick = () => { void probeOperation.cancel(); };
+byId('discard-current').onclick = () => { if (!busy && selected) byId('discard-dialog').showModal(); };
+byId('confirm-discard-current').onclick = () => {
+  if (busy || !selected) return;
+  try {
+    const previous = selected;
+    const restored = savedSnapshots.restore(config, selected);
+    config = restored.config; selected = restored.selected;
+    dirty.delete(previous); catalogs.delete(previous);
+    byId('discard-dialog').close(); render(); status('已放弃当前连接的修改，其他连接草稿保留');
+  } catch (error) { status(error.message, false); }
+};
+/** 浏览器关闭和桌面安装共用草稿判断，包含尚未失焦提交的连接名。 */
+function hasDrafts() {
+  return dirty.size > 0 || Object.values(config.models).some(profile => !profile.savedName) || Boolean(byId('name') && byId('name').value.trim() !== selected);
+}
 // 桌面版关闭或更新前保留未保存草稿；浏览器入口沿用原有行为
 if (window.desktopApp) {
-  /** 检查新增连接、改名和字段草稿，避免更新安装丢失用户输入 */
-  const hasDrafts = () =>
-    dirty.size > 0 ||
-    Object.values(config.models).some((profile) => !profile.savedName) ||
-    (byId('name') && byId('name').value.trim() !== selected);
   /** 输入和保存完成后同步原生关闭保护；仅传布尔值，不传配置和 Key */
   const syncDrafts = () => {
     void window.desktopApp.setDirty(Boolean(hasDrafts()));
@@ -567,35 +602,41 @@ if (window.desktopApp) {
   window.modelEditor = {
     /** 返回当前选中的连接名称，供桌面模式按钮选择已保存连接 */
     selectedName: () => selected,
-    /** 存在任何草稿或请求时先要求保存，避免开启后实际使用旧参数 */
-    ready: () => Boolean(selected && config.models[selected]?.savedName && !hasDrafts() && !busy),
+    /** 仅当前连接保存完成且没有请求时可接入；其他连接草稿仍由退出和安装保护。 */
+    ready: () => Boolean(selected && config.models[selected]?.savedName === selected && !dirty.has(selected) && !busy && !probeOperation.isRunning() && catalogRequests === 0 && (!byId('name') || byId('name').value.trim() === selected)),
+    /** 暴露草稿布尔状态给更新弹窗，不传配置、地址或密钥。 */
+    hasDrafts,
   };
   document.addEventListener('input', () => queueMicrotask(syncDrafts));
   document.addEventListener('change', () => queueMicrotask(syncDrafts));
   window.addEventListener('config:rendered', syncDrafts);
   window.addEventListener('config:changed', syncDrafts);
   window.addEventListener('desktop:before-update', (event) => {
-    if (hasDrafts() || busy) {
+    if (hasDrafts() || busy || probeOperation.isRunning() || catalogRequests > 0) {
       event.preventDefault();
       status('请先保存配置，等待操作完成', false);
     }
   });
   // 窗口退出统一由 Go 生命周期与页面草稿弹窗处理，避免放弃草稿后又弹出 WebView 原生确认
+} else {
+  window.addEventListener('beforeunload', event => { if (hasDrafts() || busy) { event.preventDefault(); event.returnValue = ''; } });
 }
 render();
 void action(async () => {
   const result = await api('/api/config');
-  modelContextDefaults = Object.assign(Object.create(null), result.modelContextDefaults);
-  modelContextFallback = result.modelContextFallback || 256000;
   modelOutputDefaults = result.modelOutputDefaults || Object.create(null);
   config = {...result.config, models: Object.assign(Object.create(null), result.config.models)};
   saved = new Set(Object.keys(config.models));
+  savedSnapshots.remember(config);
   selected = Object.keys(config.models)[0] || null;
   byId('path').textContent = result.path;
   render();
-  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: Object.keys(tabs).length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: Number(byId('picker')?.dataset.selectedCount || 0)});
+  if (window.go?.desktop?.App) window.go.desktop.App.FrontendReady({ok: true, configLoaded: true, tabs: document.querySelectorAll('[role="tab"]').length, reasoningOptions: document.querySelectorAll('[data-effort]').length, reasoningValue: byId('reasoning-options')?.querySelector('[aria-checked="true"]')?.dataset.effort ?? null, expanders: document.querySelectorAll('details').length, relayModelCount: Number(byId('picker')?.dataset.selectedCount || 0), updateBindings: ['CancelUpdate','SkipUpdate','SetUpdateAutoCheck','CancelPluginUpdate'].every(name => typeof window.go.desktop.App[name] === 'function')});
 });
 document.addEventListener('keydown', event => {
+  if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing && page === 'detail' && activeTab === 'model' && !document.querySelector('dialog[open]') && !event.target.closest('input,textarea,select,[contenteditable="true"]')) {
+    event.preventDefault(); byId('model-search')?.focus(); return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     event.preventDefault();
     if (selected && !document.querySelector('dialog[open]')) void save();

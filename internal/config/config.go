@@ -21,33 +21,34 @@ var Defaults = map[string]string{"compatible": "https://api.openai.com/v1", "res
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
-	Protocol            string                        `json:"protocol"`
-	Model               string                        `json:"model"`
-	BaseURL             string                        `json:"baseUrl"`
-	APIKey              string                        `json:"apiKey"`
-	APIKeyEnv           string                        `json:"apiKeyEnv"`
-	Description         string                        `json:"description"`
-	ReasoningEffort     string                        `json:"reasoningEffort,omitempty"`
-	RelayModels         []string                      `json:"relayModels,omitempty"`
-	ModelOrder          []string                      `json:"modelOrder,omitempty"`
-	ModelNames          map[string]string             `json:"modelNames,omitempty"`
-	ModelContextWindows map[string]int                `json:"modelContextWindows,omitempty"`
-	ModelCompatibility  map[string]string             `json:"modelCompatibility,omitempty"`
-	ModelImageInputs    map[string]bool               `json:"modelImageInputs,omitempty"`
-	ModelOutputs        map[string]ModelOutputSetting `json:"modelOutputs,omitempty"`
-	MaxTokens           int                           `json:"maxTokens"`
-	Stream              bool                          `json:"stream"`
-	FirstTimeout        int                           `json:"firstResponseTimeoutSeconds"`
-	IdleTimeout         int                           `json:"streamIdleTimeoutSeconds"`
-	TaskTimeout         int                           `json:"taskTimeoutMinutes"`
-	HasKey              bool                          `json:"hasKey,omitempty"`
-	SavedName           *string                       `json:"savedName,omitempty"`
+	Protocol              string                        `json:"protocol"`
+	Model                 string                        `json:"model"`
+	BaseURL               string                        `json:"baseUrl"`
+	APIKey                string                        `json:"apiKey"`
+	APIKeyEnv             string                        `json:"apiKeyEnv"`
+	Description           string                        `json:"description"`
+	ReasoningEffort       string                        `json:"reasoningEffort,omitempty"`
+	RelayModels           []string                      `json:"relayModels,omitempty"`
+	ModelOrder            []string                      `json:"modelOrder,omitempty"`
+	ModelNames            map[string]string             `json:"modelNames,omitempty"`
+	ModelContextWindows   map[string]int                `json:"modelContextWindows,omitempty"`
+	ModelOfficialContexts map[string]int                `json:"modelOfficialContexts,omitempty"`
+	ModelCompatibility    map[string]string             `json:"modelCompatibility,omitempty"`
+	ModelImageInputs      map[string]bool               `json:"modelImageInputs,omitempty"`
+	ModelOutputs          map[string]ModelOutputSetting `json:"modelOutputs,omitempty"`
+	MaxTokens             int                           `json:"maxTokens"`
+	AdvancedOverride      *bool                         `json:"advancedOverride,omitempty"`
+	Stream                bool                          `json:"stream"`
+	FirstTimeout          int                           `json:"firstResponseTimeoutSeconds"`
+	IdleTimeout           int                           `json:"streamIdleTimeoutSeconds"`
+	TaskTimeout           int                           `json:"taskTimeoutMinutes"`
+	HasKey                bool                          `json:"hasKey,omitempty"`
+	SavedName             *string                       `json:"savedName,omitempty"`
 }
 
 type Config struct {
-	Version       int                `json:"version"`
-	MaxConcurrent int                `json:"maxConcurrent"`
-	Models        map[string]Profile `json:"models"`
+	Version int                `json:"version"`
+	Models  map[string]Profile `json:"models"`
 }
 
 type ConfigStore struct {
@@ -76,25 +77,18 @@ func NewConfigStore(path string) *ConfigStore {
 }
 
 // EmptyConfig 返回首次使用时的空配置，不预置模型或密钥。
-func EmptyConfig() Config { return Config{Version: 1, MaxConcurrent: 3, Models: map[string]Profile{}} }
+func EmptyConfig() Config { return Config{Version: 1, Models: map[string]Profile{}} }
 
 // ValidateConfig 补齐旧版默认值并严格校验输入；目录查询可暂不要求模型 ID。
 func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 	var raw struct {
-		Version       int                        `json:"version"`
-		MaxConcurrent *int                       `json:"maxConcurrent"`
-		Models        map[string]json.RawMessage `json:"models"`
+		Version int                        `json:"version"`
+		Models  map[string]json.RawMessage `json:"models"`
 	}
 	if json.Unmarshal(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}), &raw) != nil || raw.Version != 1 || raw.Models == nil {
 		return Config{}, errors.New("配置需要 version: 1 和 models 对象。")
 	}
 	c := EmptyConfig()
-	if raw.MaxConcurrent != nil {
-		c.MaxConcurrent = *raw.MaxConcurrent
-	}
-	if c.MaxConcurrent < 1 || c.MaxConcurrent > 8 {
-		return c, errors.New("并发数必须为 1–8。")
-	}
 	if len(raw.Models) > 50 {
 		return c, errors.New("最多配置 50 个模型。")
 	}
@@ -112,7 +106,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		}
 		p.Model = strings.TrimSpace(p.Model)
 		if !ValidReasoningEffort(p.ReasoningEffort) {
-			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high 或 xhigh。")
+			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high、xhigh、max 或 ultra。")
 		}
 		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 || strings.IndexFunc(p.Model, unicode.IsControl) >= 0 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
@@ -128,6 +122,10 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
 		p.ModelContextWindows, err = normalizeModelContextWindows(p)
+		if err != nil {
+			return c, fmt.Errorf("%s: %w", name, err)
+		}
+		p.ModelOfficialContexts, err = normalizeModelOfficialContexts(p)
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
@@ -163,7 +161,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 // ValidReasoningEffort 限定可保存的推理档位；空值保持旧配置行为，不向服务强加推理参数。
 func ValidReasoningEffort(effort string) bool {
 	switch effort {
-	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
 		return true
 	default:
 		return false
@@ -205,6 +203,7 @@ func Editable(c Config) Config {
 		p.ModelOrder = append([]string(nil), p.ModelOrder...)
 		p.ModelNames = maps.Clone(p.ModelNames)
 		p.ModelContextWindows = maps.Clone(p.ModelContextWindows)
+		p.ModelOfficialContexts = maps.Clone(p.ModelOfficialContexts)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
 		p.ModelImageInputs = maps.Clone(p.ModelImageInputs)
 		p.ModelOutputs = maps.Clone(p.ModelOutputs)
@@ -229,7 +228,7 @@ func ResolveProfile(c Config, name string) (Profile, error) {
 			return p, errors.New("未找到配置的 Key 环境变量。")
 		}
 	}
-	return p, nil
+	return p.EffectiveParameters(), nil
 }
 
 // MergeKeys 沿用原连接的已保存密钥，修改地址或协议无需重填；显式输入的新 Key 优先。

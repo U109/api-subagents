@@ -17,7 +17,8 @@ import (
 )
 
 // forwardResponses 替换模型及凭据，仅在普通生成请求未给出额度时补模型预算；正文和返回流保持原样。
-// 不解析或改写 SSE，不合成完成事件，不缓存思考历史；客户端取消和超时会终止上游请求，失败不重试。
+// 桌面网关在普通 Responses 请求收到 502/503，或尚未交付正文与工具的安全流前导失败时有限恢复；worker、compact 与已交付内容的流不重放。
+// 仅观察安全请求的流前导事件并临时保留原始字节，不改写 SSE、不合成完成事件、不持久缓存思考历史；取消与原时限覆盖全部尝试。
 func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile) {
 	body, err := sjson.SetBytes(original, "model", profile.Model)
 	if err != nil {
@@ -52,7 +53,12 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 	if profile.APIKey != "" {
 		upstream.Header.Set("Authorization", "Bearer "+profile.APIKey)
 	}
-	res, err := r.Client.Do(upstream)
+	allowRetry := r.workerConfig == nil && req.URL.Path == "/v1/responses"
+	var inspectPrelude func(*http.Response) bool
+	if allowRetry && responsesPreludeEligible(body) {
+		inspectPrelude = func(res *http.Response) bool { return inspectResponsesPrelude(res, touch) }
+	}
+	res, err := r.doResponsesWithRecovery(upstream, allowRetry, inspectPrelude)
 	if err != nil {
 		if req.Context().Err() != nil {
 			return

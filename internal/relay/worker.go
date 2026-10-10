@@ -46,7 +46,7 @@ func StartWorkerGateway(ctx context.Context, profile configstore.Profile, maxReq
 	profile.APIKeyEnv = ""
 	profile.RelayModels = nil
 	profile.ModelOrder = nil
-	c := configstore.Config{Version: 1, MaxConcurrent: 1, Models: map[string]configstore.Profile{"worker": profile}}
+	c := configstore.Config{Version: 1, Models: map[string]configstore.Profile{"worker": profile}}
 	r := New(nil, codexconfig.CodexConfig{})
 	r.workerConfig, r.requestLimit = &c, maxRequests
 	if client != nil {

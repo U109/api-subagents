@@ -133,12 +133,12 @@ func thinkingToggle(effort string) shared.Object {
 	return shared.Object{"type": kind}
 }
 
-// lowHighMax 折合仅支持 low/high/max 的模型档位；DeepSeek 将 xhigh 按官方规则映射到 high。
+// lowHighMax 折合仅支持 low/high/max 的模型档位；xhigh/max/ultra 使用该策略允许的最高档。
 func lowHighMax(effort string, xhighIsMax bool) string {
 	if effort == "low" || effort == "minimal" {
 		return "low"
 	}
-	if effort == "xhigh" && xhighIsMax {
+	if (effort == "xhigh" || effort == "max" || effort == "ultra") && xhighIsMax {
 		return "max"
 	}
 	return "high"
@@ -157,9 +157,9 @@ func glmVersion(model string) (int, int) {
 	return major, minor
 }
 
-// geminiEffort 约束 Gemini 3 的型号档位；不能关闭的模型使用最低档，其他代际保留其原协议取值。
+// geminiEffort 将 xhigh/max/ultra 折合为 high，并约束 Gemini 3 不能关闭或不支持 medium 的型号档位。
 func geminiEffort(model, effort string) string {
-	if effort == "xhigh" {
+	if effort == "xhigh" || effort == "max" || effort == "ultra" {
 		effort = "high"
 	}
 	if strings.Contains(model, "gemini-3") {

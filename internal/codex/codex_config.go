@@ -105,14 +105,23 @@ func RootKeySpans(data []byte, keys map[string]bool) ([][2]int, error) {
 	return spans, nil
 }
 
-// PatchCodexConfig 接管模型、目录及原自定义提供商；旧对话的提供商身份保持可用，关闭时恢复完整原配置。
-func PatchCodexConfig(original []byte, catalog string, port int, token string) ([]byte, error) {
+// PatchCodexConfig 接管指定默认模型、目录及全部已配置的提供商和内置 OpenAI；废弃 Guardian 字段不写入也不恢复。
+func PatchCodexConfig(original []byte, catalog string, port int, token, defaultAlias string) ([]byte, error) {
+	return patchCodexConfig(original, catalog, port, token, defaultAlias, nil)
+}
+
+// patchCodexConfig 清理废弃 Guardian 字段并补齐历史对话旧身份；仅生成可恢复的临时配置，不修改会话元数据。
+func patchCodexConfig(original []byte, catalog string, port int, token, defaultAlias string, historical []string) ([]byte, error) {
 	var err error
+	original, err = withoutDeprecatedGuardianContext(original)
+	if err != nil {
+		return nil, err
+	}
 	original, err = withoutInactiveProvider(original)
 	if err != nil {
 		return nil, err
 	}
-	if bytes.Contains(original, []byte("# BEGIN API SUBAGENTS")) || bytes.Contains(original, []byte(preservedPrefix)) {
+	if !bytes.Equal(original, stripConfigMarkers(original, []string{defaultsBegin, defaultsEnd, providerBegin, providerEnd}, true)) {
 		return nil, errors.New("发现上次挟持模式的配置，请先恢复后再开启。")
 	}
 	var parsed shared.Object
@@ -122,11 +131,11 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 	if shared.Obj(parsed["model_providers"])[providerID] != nil {
 		return nil, errors.New("Codex 已有同名自定义提供商，未覆盖。")
 	}
-	original, previousProvider, err := preservePreviousProvider(original, parsed)
+	original, previousProviders, err := preservePreviousProviders(original, parsed, historical)
 	if err != nil {
 		return nil, err
 	}
-	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true})
+	spans, err := RootKeySpans(original, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "model_context_window": true, "model_auto_compact_token_limit": true, "openai_base_url": true})
 	if err != nil {
 		return nil, err
 	}
@@ -136,9 +145,9 @@ func PatchCodexConfig(original []byte, catalog string, port int, token string) (
 		saved := preservedPrefix + base64.StdEncoding.EncodeToString(original[span[0]:span[1]]) + "\n"
 		rest = append(append(append([]byte{}, rest[:span[0]]...), []byte(saved)...), rest[span[1]:]...)
 	}
-	prefix := fmt.Sprintf("%s\nmodel = %q\nmodel_provider = %q\nmodel_catalog_json = %s\n%s\n", defaultsBegin, relayModel, providerID, string(shared.Marshal(filepath.ToSlash(catalog))), defaultsEnd)
+	prefix := fmt.Sprintf("%s\nmodel = %q\nmodel_provider = %q\nmodel_catalog_json = %s\nopenai_base_url = %q\n%s\n", defaultsBegin, defaultAlias, providerID, string(shared.Marshal(filepath.ToSlash(catalog))), fmt.Sprintf("http://127.0.0.1:%d/v1/builtin/%s", port, token), defaultsEnd)
 	suffix := "\n" + providerBegin + "\n" + localProviderConfig(providerID, port, token)
-	if previousProvider != "" {
+	for _, previousProvider := range previousProviders {
 		suffix += "\n" + localProviderConfig(fmt.Sprintf("%q", previousProvider), port, token)
 	}
 	suffix += providerEnd + "\n"
@@ -162,11 +171,36 @@ func managedBlock(data []byte, start, end string) (int, int, error) {
 	return begin, begin + tail + len(end) + 1, nil
 }
 
-// RestoreCodexConfig 完全未变时逐字节恢复；其他配置被编辑时只还原受控字段，保留用户的新修改。
+// RestoreCodexConfig 先清理当前文件和旧备份的废弃 Guardian 字段，再三方合并并尽量复用原布局；原始备份不变。
 func RestoreCodexConfig(current []byte, backup codexBackup) ([]byte, error) {
+	var err error
+	current, err = withoutDeprecatedGuardianContext(current)
+	if err != nil {
+		return nil, err
+	}
+	backup.Original, err = withoutDeprecatedGuardianContext(backup.Original)
+	if err != nil {
+		return nil, err
+	}
+	backup.Written, err = withoutDeprecatedGuardianContext(backup.Written)
+	if err != nil {
+		return nil, err
+	}
 	if bytes.Equal(current, backup.Written) {
 		return backup.Original, nil
 	}
+	merged, err := restoreManagedValues(current, backup)
+	if err != nil {
+		return nil, err
+	}
+	if marked, err := restoreMarkedConfig(current, backup); err == nil && sameConfig(marked, merged) {
+		return marked, nil
+	}
+	return merged, nil
+}
+
+// restoreMarkedConfig 仅用于保留旧布局；调用者必须与三方合并结果核对，不能直接信任当前文件的恢复注释。
+func restoreMarkedConfig(current []byte, backup codexBackup) ([]byte, error) {
 	rest := append([]byte{}, current...)
 	for _, pair := range [][2]string{{providerBegin, providerEnd}, {defaultsBegin, defaultsEnd}} {
 		start, end, err := managedBlock(rest, pair[0], pair[1])
@@ -232,7 +266,7 @@ func restoreSelectedModel(current, written []byte, backup codexBackup) ([]byte, 
 	if !modelOK || !providerOK || now["model_catalog_json"] != old["model_catalog_json"] {
 		return nil, conflict
 	}
-	spans, err := RootKeySpans(current, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true})
+	spans, err := RootKeySpans(current, map[string]bool{"model": true, "model_provider": true, "model_catalog_json": true, "openai_base_url": true})
 	if err != nil {
 		return nil, err
 	}
@@ -303,8 +337,12 @@ func catalogModel(slug, name, description, effort string, priority, contextWindo
 	}
 }
 
-// Enable 先保存完整本机备份，再原子修改 Codex；并发编辑时拒绝覆盖。
+// Enable 使用已保存连接的星标模型作为默认选择；先保存完整本机备份，再原子修改 Codex，并发编辑时拒绝覆盖。
 func (c CodexConfig) Enable(config configstore.Config, model string, port int, token string) error {
+	profile, err := configstore.ResolveProfile(config, model)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(c.backupPath()); err == nil {
 		return errors.New("仍有未恢复的 Codex 配置备份，请先关闭或恢复挟持模式。")
 	}
@@ -313,7 +351,11 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	if err != nil && !os.IsNotExist(err) {
 		return errors.New("无法读取 Codex 配置。")
 	}
-	written, err := PatchCodexConfig(original, c.catalogPath(), port, token)
+	historical, err := c.historyProviderIDs()
+	if err != nil {
+		return err
+	}
+	written, err := patchCodexConfig(original, c.catalogPath(), port, token, RelayModelAlias(model, profile.Model), historical)
 	if err != nil {
 		return err
 	}
@@ -336,7 +378,7 @@ func (c CodexConfig) Enable(config configstore.Config, model string, port int, t
 	return nil
 }
 
-// Restore 恢复原默认设置，并为旧对话保留无凭据的停用提供商；外部编辑冲突时保留备份。
+// Restore 恢复原默认设置、清理废弃 Guardian 字段并保留旧对话的登录入口；外部编辑冲突时保留备份。
 func (c CodexConfig) Restore() error {
 	data, err := os.ReadFile(c.backupPath())
 	if os.IsNotExist(err) {
@@ -353,23 +395,25 @@ func (c CodexConfig) Restore() error {
 	if err != nil {
 		return errors.New("无法读取当前 Codex 配置，备份已保留。")
 	}
+	restored := current
 	if bytes.Equal(current, backup.Original) {
-		repaired, repairErr := withInactiveProvider(current)
-		if repairErr != nil {
-			return repairErr
-		}
-		if err = shared.AtomicWrite(c.configPath(), repaired, 0600); err != nil {
-			return err
-		}
-		return os.Remove(c.backupPath())
+		restored, err = withoutDeprecatedGuardianContext(current)
+	} else {
+		restored, err = RestoreCodexConfig(current, backup)
 	}
-	restored, err := RestoreCodexConfig(current, backup)
 	if err != nil {
 		return err
 	}
 	restored, err = withInactiveProvider(restored)
 	if err != nil {
 		return err
+	}
+	if !bytes.Equal(current, backup.Written) {
+		// 外部改动后的恢复额外留下快照；修复成功也能找回本次写入前的配置和原始备份。
+		snapshot := shared.Marshal(shared.Object{"current": current, "backup": json.RawMessage(data)})
+		if err = shared.AtomicWrite(filepath.Join(c.DataRoot, "codex-recovery", shared.UUID()+".json"), snapshot, 0600); err != nil {
+			return errors.New("无法保存 Codex 恢复快照，当前配置和原始备份未修改。")
+		}
 	}
 	latest, readErr := os.ReadFile(c.configPath())
 	if readErr != nil || !bytes.Equal(latest, current) {

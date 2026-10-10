@@ -11,7 +11,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-// TestCatalogContextWindows 验证同一连接内不同模型与跟随别名分别声明容量和压缩阈值。
+// TestCatalogContextWindows 验证目录只含具体模型，并分别声明容量和压缩阈值。
 func TestCatalogContextWindows(t *testing.T) {
 	c := configstore.EmptyConfig()
 	c.Models["demo"] = configstore.Profile{Model: "gpt-6-astra", RelayModels: []string{"two", "unknown", "gemini-3.8-flash-high", "minimax-m2.7"}, ModelContextWindows: map[string]int{"two": 128000}}
@@ -27,7 +27,7 @@ func TestCatalogContextWindows(t *testing.T) {
 	if err := json.Unmarshal(data, &catalog); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{relayModel: 1050000, RelayModelAlias("demo", "gpt-6-astra"): 1050000, RelayModelAlias("demo", "two"): 128000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow, RelayModelAlias("demo", "gemini-3.8-flash-high"): 1048576, RelayModelAlias("demo", "minimax-m2.7"): 204800}
+	want := map[string]int{RelayModelAlias("demo", "gpt-6-astra"): configstore.DefaultContextWindow, RelayModelAlias("demo", "two"): 128000, RelayModelAlias("demo", "unknown"): configstore.DefaultContextWindow, RelayModelAlias("demo", "gemini-3.8-flash-high"): configstore.DefaultContextWindow, RelayModelAlias("demo", "minimax-m2.7"): configstore.DefaultContextWindow}
 	if len(shared.Arr(catalog["models"])) != len(want) {
 		t.Fatal("missing catalog entries")
 	}
@@ -43,7 +43,7 @@ func TestCatalogContextWindows(t *testing.T) {
 // TestContextOverridesRestore 确保原全局容量不会压过模型目录，停用时连同外部修改一并安全还原。
 func TestContextOverridesRestore(t *testing.T) {
 	original := []byte("model = 'old'\nmodel_context_window = 8192 # custom\nmodel_auto_compact_token_limit = 6000\n[features]\nfoo = false\n")
-	written, err := PatchCodexConfig(original, "C:/models.json", 12345, "synthetic-token")
+	written, err := PatchCodexConfig(original, "C:/models.json", 12345, "synthetic-token", relayModel)
 	if err != nil {
 		t.Fatal(err)
 	}

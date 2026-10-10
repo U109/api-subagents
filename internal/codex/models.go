@@ -31,10 +31,12 @@ func RelayModelAlias(connection, model string) string {
 }
 
 // ModelEntries 为 Codex 和本地 /models 提供同一有序目录，使用自定义显示名称且保留稳定路由。
-// 默认模型与额外模型都使用固定模型别名；只有“跟随 App”追踪默认值，改默认不误切已选具体模型。
+// 当前连接的星标模型置顶作为 Codex 目录默认项，其余模型保持已保存顺序；旧默认别名仅用于历史兼容。
 func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
-	selected := config.Models[defaultName]
-	entries := []ModelEntry{{Slug: relayModel, Name: "跟随 App 选择", Description: "使用 API Subagents 当前选中的连接", ReasoningEffort: selected.ReasoningEffort, ContextWindow: selected.ContextWindow(selected.Model), SupportsImages: selected.SupportsImages(selected.Model)}}
+	entries := []ModelEntry{}
+	if selected, exists := config.Models[defaultName]; exists && selected.Model != "" {
+		entries = append(entries, modelEntry(defaultName, selected, selected.Model))
+	}
 	names := make([]string, 0, len(config.Models))
 	for name := range config.Models {
 		names = append(names, name)
@@ -43,34 +45,53 @@ func ModelEntries(config configstore.Config, defaultName string) []ModelEntry {
 	for _, name := range names {
 		profile := config.Models[name]
 		for _, model := range profile.OrderedModels() {
-			entries = append(entries, ModelEntry{Slug: RelayModelAlias(name, model), Name: name + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model), SupportsImages: profile.SupportsImages(model)})
+			if name == defaultName && model == profile.Model {
+				continue
+			}
+			entries = append(entries, modelEntry(name, profile, model))
 		}
 	}
 	return entries
 }
 
-// ResolveCatalogModel 解析当前配置中的本地别名；旧对话的真实模型 ID 只允许匹配已配置模型。
+// modelEntry 将一个具体模型转成无凭据的目录项，置顶默认项和普通项共用相同稳定别名、名称及容量规则。
+func modelEntry(connection string, profile configstore.Profile, model string) ModelEntry {
+	return ModelEntry{Slug: RelayModelAlias(connection, model), Name: connection + " · " + profile.ModelName(model), Description: profile.Description, ReasoningEffort: profile.ReasoningEffort, ContextWindow: profile.ContextWindow(model), SupportsImages: profile.SupportsImages(model)}
+}
+
+// ResolveCatalogModel 解析本地别名；旧对话的真实模型名跟随 App 当前连接，不再尝试使用旧上游模型或凭据。
 // 连接名仅解码一次；返回请求独享的副本，切换模型不会修改默认模型、地址或 Key。
 func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (string, configstore.Profile, error) {
+	connection, model, err := resolveCatalogSelection(config, defaultName, alias)
+	if err != nil {
+		return "", configstore.Profile{}, err
+	}
+	resolved, err := configstore.ResolveProfile(config, connection)
+	if err != nil {
+		return "", configstore.Profile{}, err
+	}
+	resolved.Model = model
+	return connection, resolved, nil
+}
+
+// resolveCatalogSelection 只验证目录别名及对应模型，不读取 Key 环境变量，避免将缺失凭据误判为模型已删除。
+func resolveCatalogSelection(config configstore.Config, defaultName, alias string) (string, string, error) {
 	connection, suffix := defaultName, ""
-	if alias != "" && alias != relayModel {
-		if !strings.HasPrefix(alias, relayModel+"/") {
-			return resolveOriginalModel(config, defaultName, alias)
-		}
+	if strings.HasPrefix(alias, relayModel+"/") {
 		var hasSuffix bool
 		connection, suffix, hasSuffix = strings.Cut(strings.TrimPrefix(alias, relayModel+"/"), "/")
 		if hasSuffix && suffix == "" {
-			return "", configstore.Profile{}, errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
+			return "", "", errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
 		}
 		var err error
 		connection, err = url.PathUnescape(connection)
 		if err != nil {
-			return "", configstore.Profile{}, errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
+			return "", "", errors.New("挟持模型标识无效，请重启 Codex 刷新模型列表。")
 		}
 	}
 	profile, exists := config.Models[connection]
 	if !exists {
-		return "", configstore.Profile{}, errors.New("该连接已移除，请重启 Codex 刷新模型列表。")
+		return "", "", errors.New("该连接已移除，请重启 Codex 刷新模型列表。")
 	}
 	model := profile.Model
 	if suffix != "" {
@@ -82,42 +103,8 @@ func ResolveCatalogModel(config configstore.Config, defaultName, alias string) (
 			}
 		}
 		if !matched {
-			return "", configstore.Profile{}, errors.New("该挟持模型已移除，请重启 Codex 刷新模型列表。")
+			return "", "", errors.New("该挟持模型已移除，请重启 Codex 刷新模型列表。")
 		}
 	}
-	resolved, err := configstore.ResolveProfile(config, connection)
-	if err != nil {
-		return "", configstore.Profile{}, err
-	}
-	resolved.Model = model
-	return connection, resolved, nil
-}
-
-// resolveOriginalModel 让原自定义提供商的旧对话继续使用已配置模型；优先当前连接，其余重名拒绝猜测凭据。
-func resolveOriginalModel(config configstore.Config, defaultName, model string) (string, configstore.Profile, error) {
-	connection := ""
-	for name, profile := range config.Models {
-		matched := profile.Model == model
-		for _, candidate := range profile.RelayModels {
-			matched = matched || candidate == model
-		}
-		if !matched {
-			continue
-		}
-		if name == defaultName {
-			connection = name
-			break
-		}
-		if connection != "" {
-			connection = "\x00"
-		} else {
-			connection = name
-		}
-	}
-	if connection == "" || connection == "\x00" {
-		return "", configstore.Profile{}, errors.New("请在 Codex 中选择具体的挟持模型；原模型未配置或对应多个连接")
-	}
-	profile, err := configstore.ResolveProfile(config, connection)
-	profile.Model = model
-	return connection, profile, err
+	return connection, model, nil
 }

@@ -17,7 +17,7 @@ import (
 func TestCodexRoundTrip(t *testing.T) {
 	for _, original := range []string{"", "# 我的配置\nmodel = 'original' # keep\nmodel_provider = \"existing\"\napproval_policy = 'never'\n[features]\nfoo = true\n", "\"model\" = '''old-model'''\nmodel_catalog_json = 'C:/models/catalog.json'\n[model_providers.custom]\nbase_url = 'https://example.invalid/v1'\n", "model = \"old\"\r\n# Windows\r\n[sandbox_workspace_write]\r\nnetwork_access = false\r\n"} {
 		t.Run(string(shared.Hash([]byte(original)))[:8], func(t *testing.T) {
-			patched, err := PatchCodexConfig([]byte(original), "C:/a path/models.json", 12345, "synthetic-local-token")
+			patched, err := PatchCodexConfig([]byte(original), "C:/a path/models.json", 12345, "synthetic-local-token", relayModel)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -36,7 +36,7 @@ func TestCodexRoundTrip(t *testing.T) {
 // TestCodexPreservesExternalChanges 托管期间其他字段被编辑时保留修改，托管字段冲突则保留备份而不覆盖。
 func TestCodexPreservesExternalChanges(t *testing.T) {
 	original := []byte("model = 'original'\n# retained\n[features]\nfoo = false\n")
-	patched, err := PatchCodexConfig(original, "C:/catalog.json", 12345, "token")
+	patched, err := PatchCodexConfig(original, "C:/catalog.json", 12345, "token", relayModel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestCodexPreservesExternalChanges(t *testing.T) {
 // TestCodexModelSwitchRestores 模型选择器写回连接别名后仍可正常关闭，并保留新添加的推理设置。
 func TestCodexModelSwitchRestores(t *testing.T) {
 	original := []byte("model='original'\n[features]\nfoo=true\n")
-	written, err := PatchCodexConfig(original, "C:/catalog.json", 12345, "token")
+	written, err := PatchCodexConfig(original, "C:/catalog.json", 12345, "token", relayModel)
 	if err != nil {
 		t.Fatal(err)
 	}

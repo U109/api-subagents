@@ -14,6 +14,14 @@ if (window.go?.desktop?.App && window.runtime) {
     checkUpdate: () => app.CheckUpdate(),
     /** 下载并校验已发现版本的安装包。 */
     downloadUpdate: () => app.DownloadUpdate(),
+    /** 中止正在检查或下载的应用更新，不中断安装，不影响模型请求。 */
+    cancelUpdate: () => app.CancelUpdate(),
+    /** 只保存打开更新弹窗时自动检查的偏好，不开启自动安装。 */
+    setUpdateAutoCheck: (enabled) => app.SetUpdateAutoCheck(enabled),
+    /** 跳过当前已验证的应用版本，新版本仍会展示。 */
+    skipUpdate: () => app.SkipUpdate(),
+    /** 取消插件检查或下载，插件本机安装仍由固定后台流程完成。 */
+    cancelPluginUpdate: () => app.CancelPluginUpdate(),
     /** 在保存草稿后显式启动更新安装。 */
     installUpdate: () => app.InstallUpdate(),
     /** 打开固定的 GitHub Releases 地址。 */
@@ -22,6 +30,8 @@ if (window.go?.desktop?.App && window.runtime) {
     onState: (callback) => window.runtime.EventsOn('desktop:state', callback),
     /** 通过固定路由绑定访问 Go 配置服务，JSON 中的 Key 不会写入日志。 */
     api: (route, body) => app.API(route, body === undefined ? '' : JSON.stringify(body)),
+    /** 取消本次连接测试，随机请求号不会影响其他并行请求或配置保存。 */
+    cancelProbe: (requestID) => app.CancelProbe(requestID),
     /** 同步未保存状态，让原生窗口关闭和更新操作也能保护草稿。 */
     setDirty: (value) => app.SetDirty(value),
     /** 确认放弃草稿；Go 再次检查操作状态并恢复 Codex 后才退出。 */

@@ -49,3 +49,50 @@ func TestReasoningNativeBoundaries(t *testing.T) {
 		t.Fatal("Gemini thinking or generation option lost")
 	}
 }
+
+// TestExtendedReasoningLevels 验证新增档位直接透传，且原生协议保持最高映射与输出预算边界。
+func TestExtendedReasoningLevels(t *testing.T) {
+	for _, effort := range []string{"max", "ultra"} {
+		for _, protocol := range []string{"responses", "compatible", "anthropic", "gemini"} {
+			t.Run(protocol+"/"+effort, func(t *testing.T) {
+				p := configstore.Profile{Protocol: protocol, Model: "mock"}
+				body := shared.Object{"max_tokens": 4096, "generationConfig": shared.Object{"maxOutputTokens": 4096}}
+				if err := ApplyReasoning(body, p, effort); err != nil {
+					t.Fatal(err)
+				}
+				switch protocol {
+				case "responses":
+					if shared.Obj(body["reasoning"])["effort"] != effort {
+						t.Fatal(body)
+					}
+				case "compatible":
+					if body["reasoning_effort"] != effort {
+						t.Fatal(body)
+					}
+				case "anthropic":
+					if shared.Int(shared.Obj(body["thinking"])["budget_tokens"]) != 4095 {
+						t.Fatal(body)
+					}
+					for _, model := range []string{"claude-opus-4-6", "claude-sonnet-4-6"} {
+						p.Model = model
+						want := "high"
+						if model == "claude-opus-4-6" {
+							want = "max"
+						}
+						if err := ApplyReasoning(body, p, effort); err != nil || shared.Obj(body["output_config"])["effort"] != want {
+							t.Fatal(body, err)
+						}
+					}
+				case "gemini":
+					if shared.Int(shared.Obj(shared.Obj(body["generationConfig"])["thinkingConfig"])["thinkingBudget"]) != 4096 {
+						t.Fatal(body)
+					}
+					p.Model = "gemini-3-pro"
+					if err := ApplyReasoning(body, p, effort); err != nil || shared.Obj(shared.Obj(body["generationConfig"])["thinkingConfig"])["thinkingLevel"] != "high" {
+						t.Fatal(body, err)
+					}
+				}
+			})
+		}
+	}
+}

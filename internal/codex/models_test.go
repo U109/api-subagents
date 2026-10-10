@@ -17,7 +17,7 @@ func TestConcreteModelSelectionSurvivesDefaultChange(t *testing.T) {
 	c := configstore.EmptyConfig()
 	c.Models["worker"] = configstore.Profile{Model: "first", RelayModels: []string{"second"}, APIKey: "synthetic", ModelContextWindows: map[string]int{"first": 128000, "second": 256000}}
 	before := ModelEntries(c, "worker")
-	selected := before[1].Slug
+	selected := before[0].Slug
 	p := c.Models["worker"]
 	p.Model = "second"
 	p.RelayModels = []string{"first"}
@@ -28,20 +28,20 @@ func TestConcreteModelSelectionSurvivesDefaultChange(t *testing.T) {
 	}
 	_, follow, err := ResolveCatalogModel(c, "worker", relayModel)
 	if err != nil || follow.Model != "second" {
-		t.Fatal("follow App did not track default")
+		t.Fatal("legacy default alias did not track default")
 	}
 	after := ModelEntries(c, "worker")
-	if after[2].Slug != selected {
+	if after[1].Slug != selected {
 		t.Fatal("moving model changed its alias")
 	}
 }
 
-// TestModelEntriesFollowSavedOrder 验证拖拽顺序控制 Codex 目录位置，但不会改变默认模型身份或稳定别名。
+// TestModelEntriesFollowSavedOrder 验证星标模型固定置顶，其余模型按拖拽顺序显示，排序不改变默认身份或稳定别名。
 func TestModelEntriesFollowSavedOrder(t *testing.T) {
 	c := configstore.EmptyConfig()
 	c.Models["worker"] = configstore.Profile{Model: "default", RelayModels: []string{"fast", "deep"}, ModelOrder: []string{"deep", "default", "fast"}}
 	entries := ModelEntries(c, "worker")
-	want := []string{relayModel, RelayModelAlias("worker", "deep"), RelayModelAlias("worker", "default"), RelayModelAlias("worker", "fast")}
+	want := []string{RelayModelAlias("worker", "default"), RelayModelAlias("worker", "deep"), RelayModelAlias("worker", "fast")}
 	if len(entries) != len(want) {
 		t.Fatalf("catalog length=%d, want %d", len(entries), len(want))
 	}
@@ -51,7 +51,7 @@ func TestModelEntriesFollowSavedOrder(t *testing.T) {
 		}
 	}
 	if _, profile, err := ResolveCatalogModel(c, "worker", relayModel); err != nil || profile.Model != "default" {
-		t.Fatal("sorting changed follow-App default", err)
+		t.Fatal("sorting changed legacy default routing", err)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestFreeTextConnectionRouting(t *testing.T) {
 		c.Models[name] = configstore.Profile{Model: "default", RelayModels: []string{"vendor/extra"}, APIKey: "synthetic-" + name}
 	}
 	entries := ModelEntries(c, "demo")
-	if len(entries) != 1+2*len(names) {
+	if len(entries) != 2*len(names) {
 		t.Fatal("free-text connection missing from catalog")
 	}
 	seen := map[string]bool{}
@@ -76,7 +76,7 @@ func TestFreeTextConnectionRouting(t *testing.T) {
 		if err != nil || profile.APIKey != "synthetic-"+name {
 			t.Fatal("catalog routed to wrong connection", err)
 		}
-		if entry.Slug != relayModel && entry.Name != name+" · "+profile.Model {
+		if entry.Slug == relayModel || entry.Name != name+" · "+profile.Model {
 			t.Fatal("catalog label and upstream model disagree")
 		}
 	}
@@ -106,7 +106,7 @@ func TestModelDisplayNames(t *testing.T) {
 	p.ModelNames = map[string]string{"vendor/default": "日常编码", "vendor/extra": "深入分析"}
 	c.Models["demo"] = p
 	after := ModelEntries(c, "demo")
-	if after[1].Name != "demo · 日常编码" || after[2].Name != "demo · 深入分析" {
+	if after[0].Name != "demo · 日常编码" || after[1].Name != "demo · 深入分析" {
 		t.Fatal("display names absent from catalog")
 	}
 	for index, entry := range after {
@@ -115,7 +115,7 @@ func TestModelDisplayNames(t *testing.T) {
 		}
 		_, resolved, err := ResolveCatalogModel(c, "demo", entry.Slug)
 		model := "vendor/default"
-		if index == 2 {
+		if index == 1 {
 			model = "vendor/extra"
 		}
 		if err != nil || resolved.Model != model || resolved.APIKey != "synthetic-key" {
@@ -135,7 +135,7 @@ func TestModelDisplayNames(t *testing.T) {
 			DisplayName string `json:"display_name"`
 		} `json:"models"`
 	}
-	if json.Unmarshal(data, &catalog) != nil || len(catalog.Models) != 3 || catalog.Models[2].DisplayName != "demo · 深入分析" {
+	if json.Unmarshal(data, &catalog) != nil || len(catalog.Models) != 2 || catalog.Models[1].DisplayName != "demo · 深入分析" {
 		t.Fatal("Codex catalog omitted model name")
 	}
 }
@@ -147,7 +147,7 @@ func TestHijackCatalogMappings(t *testing.T) {
 		c.Models[name] = configstore.Profile{Model: "default", RelayModels: []string{"vendor/模型", "other", "default", "other"}, APIKey: "synthetic-key-" + name, BaseURL: "https://private.invalid", ReasoningEffort: "low"}
 	}
 	entries := ModelEntries(c, "beta")
-	if len(entries) != 7 || entries[0].Slug != relayModel {
+	if len(entries) != 6 || entries[0].Slug != RelayModelAlias("beta", "default") {
 		t.Fatal("missing or duplicate catalog entries")
 	}
 	seen := map[string]bool{}
@@ -180,22 +180,22 @@ func TestHijackCatalogMappings(t *testing.T) {
 		t.Fatal("catalog privacy failure", err)
 	}
 	var parsed shared.Object
-	if json.Unmarshal(data, &parsed) != nil || len(shared.Arr(parsed["models"])) != 7 {
+	if json.Unmarshal(data, &parsed) != nil || len(shared.Arr(parsed["models"])) != 6 {
 		t.Fatal("catalog unusable")
 	}
 }
 
-// TestHijackSelectionGuards 未配置、已删除和畸形别名不得覆盖上游模型；旧连接别名和跟随 App 保持可用。
+// TestHijackSelectionGuards 已删除和畸形本地别名仍拒绝转发；真实旧模型名、旧连接别名和旧默认别名保持兼容。
 func TestHijackSelectionGuards(t *testing.T) {
 	c := configstore.EmptyConfig()
 	c.Models["demo"] = configstore.Profile{Model: "default", RelayModels: []string{"alternate"}, APIKey: "synthetic-key"}
-	for _, alias := range []string{"", relayModel, relayModel + "/demo", RelayModelAlias("demo", "default"), RelayModelAlias("demo", "alternate")} {
+	for _, alias := range []string{"", "other", relayModel, relayModel + "/demo", RelayModelAlias("demo", "default"), RelayModelAlias("demo", "alternate")} {
 		name, _, err := ResolveCatalogModel(c, "demo", alias)
 		if err != nil || name != "demo" {
 			t.Fatal("supported alias rejected", alias, err)
 		}
 	}
-	for _, alias := range []string{"other", relayModel + "/", relayModel + "/demo/", relayModel + "/demo/alternate", relayModel + "/demo/../other", RelayModelAlias("missing", "alternate"), RelayModelAlias("demo", "removed")} {
+	for _, alias := range []string{relayModel + "/", relayModel + "/demo/", relayModel + "/demo/alternate", relayModel + "/demo/../other", RelayModelAlias("missing", "alternate"), RelayModelAlias("demo", "removed")} {
 		if _, _, err := ResolveCatalogModel(c, "demo", alias); err == nil {
 			t.Fatal("unknown alias accepted", alias)
 		}
@@ -216,7 +216,7 @@ func TestHijackSelectionGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	current = []byte(strings.Replace(string(current), `model = "api-subagents"`, `model = "`+RelayModelAlias("demo", "alternate")+`"`, 1))
+	current = []byte(strings.Replace(string(current), `model = "`+RelayModelAlias("demo", "default")+`"`, `model = "`+RelayModelAlias("demo", "alternate")+`"`, 1))
 	if err := os.WriteFile(path, current, 0600); err != nil {
 		t.Fatal(err)
 	}

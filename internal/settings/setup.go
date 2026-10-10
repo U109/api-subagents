@@ -32,7 +32,7 @@ func NewConfigService(store *configstore.ConfigStore) *ConfigService {
 	return &ConfigService{Store: store, Provider: providers.NewProvider()}
 }
 
-// Handle 处理固定路由，网络测试不占写锁；复制和删除只修改选中连接。
+// Handle 处理固定路由，网络测试不占写锁；定点保存、复制和删除只修改目标连接，其他草稿不会写入。
 func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (shared.Object, error) {
 	if len(body) > 300000 {
 		return nil, errors.New("配置过大。")
@@ -42,7 +42,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if err != nil {
 			return nil, err
 		}
-		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}, nil
+		return shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelOutputDefaults": configstore.OfficialModelOutputs()}, nil
 	}
 	var input struct {
 		Config json.RawMessage `json:"config"`
@@ -56,7 +56,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if err != nil {
 			return nil, err
 		}
-		single, err := selectedConfig(input.Config, input.Name, previous.MaxConcurrent)
+		single, err := selectedConfig(input.Config, input.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		}
 		return s.Provider.Probe(ctx, p)
 	}
-	if route != "/api/config" && route != "/api/config/copy" && route != "/api/config/remove" {
+	if route != "/api/config" && route != "/api/config/save" && route != "/api/config/copy" && route != "/api/config/remove" {
 		return nil, errors.New("未找到操作。")
 	}
 	if !s.mu.TryLock() {
@@ -86,13 +86,31 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	}
 	copiedName := ""
 	switch route {
+	case "/api/config/save":
+		single, selectErr := selectedConfig(input.Config, input.Name)
+		if selectErr != nil {
+			return nil, selectErr
+		}
+		one, mergeErr := configstore.MergeKeys(single, c, true)
+		if mergeErr != nil {
+			return nil, mergeErr
+		}
+		profile := one.Models[input.Name]
+		if profile.SavedName == nil {
+			if _, exists := c.Models[input.Name]; exists {
+				return nil, errors.New("连接名称已被另一连接使用。")
+			}
+		} else if *profile.SavedName != input.Name {
+			delete(c.Models, *profile.SavedName)
+		}
+		c.Models[input.Name] = profile
 	case "/api/config/remove":
 		if _, ok := c.Models[input.Name]; !ok {
 			return nil, errors.New("该模型配置不存在，请刷新后重试。")
 		}
 		delete(c.Models, input.Name)
 	case "/api/config/copy":
-		single, err := selectedConfig(input.Config, input.Name, c.MaxConcurrent)
+		single, err := selectedConfig(input.Config, input.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -127,22 +145,22 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	if err = s.Store.Save(c); err != nil {
 		return nil, err
 	}
-	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelContextDefaults": configstore.OfficialModelContexts(), "modelContextFallback": configstore.DefaultContextWindow, "modelOutputDefaults": configstore.OfficialModelOutputs()}
+	result := shared.Object{"config": configstore.Editable(c), "path": s.Store.Path, "modelOutputDefaults": configstore.OfficialModelOutputs()}
 	if copiedName != "" {
 		result["name"] = copiedName
 	}
 	return result, nil
 }
 
-// selectedConfig 只取当前连接草稿，其他未完成的模型不影响测试、目录查询或复制。
-func selectedConfig(data []byte, name string, concurrent int) ([]byte, error) {
+// selectedConfig 只取当前连接草稿，其他未完成的模型不影响测试、目录查询、复制或定点保存。
+func selectedConfig(data []byte, name string) ([]byte, error) {
 	var input struct {
 		Models map[string]json.RawMessage `json:"models"`
 	}
 	if json.Unmarshal(data, &input) != nil || input.Models[name] == nil {
 		return nil, errors.New("该模型配置不存在，请刷新后重试。")
 	}
-	return shared.Marshal(shared.Object{"version": 1, "maxConcurrent": concurrent, "models": map[string]json.RawMessage{name: input.Models[name]}}), nil
+	return shared.Marshal(shared.Object{"version": 1, "models": map[string]json.RawMessage{name: input.Models[name]}}), nil
 }
 
 type SetupServer struct {
@@ -180,7 +198,7 @@ func StartSetup(service *ConfigService, assets fs.FS) (*SetupServer, error) {
 			if name == "" {
 				name = "index.html"
 			}
-			if shared.Contains([]string{"index.html", "config-ui.js", "config.css", "desktop-ui.js", "desktop.css", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"}, name) {
+			if shared.Contains([]string{"index.html", "config-ui.js", "config-operations.js", "config.css", "desktop-ui.js", "desktop.css", "approved-workbench.css", "workbench-views.js", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"}, name) {
 				data, err := fs.ReadFile(assets, name)
 				if err != nil {
 					http.NotFound(w, r)

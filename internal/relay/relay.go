@@ -53,6 +53,8 @@ type Relay struct {
 	workerConfig  *configstore.Config
 	requestLimit  int
 	limitExceeded bool
+	// responsesRetryWait 仅用于隔离测试注入等待；正式网关使用可取消的退避，worker 不自动重试。
+	responsesRetryWait func(context.Context, time.Duration) error
 }
 
 // New 创建默认关闭的网关，模型密钥只在请求时从本机配置解析。
@@ -81,7 +83,7 @@ func (r *Relay) Recover() error {
 	return err
 }
 
-// Enable 验证已保存连接，先启动受鉴权保护的回环服务，再备份并接管 Codex 的模型设置。
+// Enable 验证已保存连接，备份并接管全部旧提供商入口；已启用时同步该连接的星标默认模型和旧模型名路由。
 func (r *Relay) Enable(model string) error {
 	r.operation.Lock()
 	defer r.operation.Unlock()
@@ -95,14 +97,14 @@ func (r *Relay) Enable(model string) error {
 	r.mu.Lock()
 	if r.state.Enabled {
 		r.mu.Unlock()
-		if err = r.Codex.WriteCatalog(config, model); err != nil {
+		if err = r.Codex.RefreshCatalog(config, model, true); err != nil {
 			return err
 		}
 		r.mu.Lock()
 		r.state.Model = model
 		r.state.ActiveModel = ""
 		r.state.ActiveModelID = ""
-		r.state.Message = "已切换默认连接；Codex 选择“跟随 App 选择”即可使用"
+		r.state.Message = "已切换到当前连接的默认模型；旧对话请求使用当前连接"
 		r.mu.Unlock()
 		r.notify()
 		return nil
@@ -151,6 +153,11 @@ func (r *Relay) Enable(model string) error {
 func (r *Relay) Disable() error {
 	r.operation.Lock()
 	defer r.operation.Unlock()
+	return r.disableLocked()
+}
+
+// disableLocked 在持有操作锁时恢复配置和关闭网关，供停用及删除当前连接共用，避免与目录更新交错。
+func (r *Relay) disableLocked() error {
 	if err := r.Codex.Restore(); err != nil {
 		return err
 	}
@@ -158,7 +165,7 @@ func (r *Relay) Disable() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
-	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话继续发送前请选择原提供商支持的模型，不要保留挟持模型"}
+	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -171,8 +178,10 @@ func (r *Relay) Disable() error {
 	return nil
 }
 
-// RefreshCatalog 保存模型配置后更新可选列表，Codex 重启后读取；当前连接被删除时自动关闭并恢复。
+// RefreshCatalog 保存后同步具体模型目录和星标默认选择，保留手动选择；当前连接被删除时自动关闭并恢复。
 func (r *Relay) RefreshCatalog() error {
+	r.operation.Lock()
+	defer r.operation.Unlock()
 	state := r.Snapshot()
 	if !state.Enabled {
 		return nil
@@ -182,20 +191,33 @@ func (r *Relay) RefreshCatalog() error {
 		return err
 	}
 	if _, exists := config.Models[state.Model]; !exists {
-		return r.Disable()
+		return r.disableLocked()
 	}
-	return r.Codex.WriteCatalog(config, state.Model)
+	return r.Codex.RefreshCatalog(config, state.Model, false)
 }
 
 // ServeHTTP 限定回环 Host 和固定路径，拒绝浏览器跨站访问及未持有本地随机令牌的请求。
+// 自定义入口使用令牌头，内置 OpenAI 使用带随机令牌的本地路径；不会转发 Codex 原登录凭据。
 // 首次收到有效模型请求时确认本地路由已接入；该状态不代表上游已经生成成功。
 func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.RLock()
 	state, host, token := r.state, r.host, r.token
 	r.mu.RUnlock()
 	w.Header().Set("Cache-Control", "no-store")
-	if req.Host != host || req.Header.Get("Origin") != "" || subtle.ConstantTimeCompare([]byte(req.Header.Get("X-Api-Subagents-Token")), []byte(token)) != 1 {
+	provided := req.Header.Get("X-Api-Subagents-Token")
+	if rest, builtin := strings.CutPrefix(req.URL.Path, "/v1/builtin/"); builtin {
+		var suffix string
+		provided, suffix, _ = strings.Cut(rest, "/")
+		req = req.Clone(req.Context())
+		req.URL.Path = "/v1/" + suffix
+		req.URL.RawPath = ""
+	}
+	if req.Host != host || req.Header.Get("Origin") != "" || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
 		replyError(w, 403, "本地网关拒绝未授权请求。")
+		return
+	}
+	if strings.EqualFold(req.Header.Get("Upgrade"), "websocket") {
+		replyError(w, http.StatusUpgradeRequired, "本地网关使用 HTTP/SSE。")
 		return
 	}
 	if !state.Enabled {

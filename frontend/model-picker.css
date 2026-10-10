@@ -9,7 +9,7 @@
 .model-search-wrap > svg { position: absolute; top: 11px; left: 12px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
 .model-search-wrap input { height: 38px; padding: 8px 34px 8px 36px; font-size: 14px; }
 .model-search-wrap input::-webkit-search-cancel-button { display: none; }
-.model-search-wrap .icon-button { position: absolute; right: 4px; top: 4px; width: 28px; font-size: 20px; }
+.model-search-wrap .icon-button { position: absolute; right: 4px; top: 4px; width: 28px; font-size: 16px; }
 .model-filters { display: flex; flex-shrink: 0; gap: 3px; padding: 3px; border-radius: 7px; background: var(--surface); border: 1px solid var(--line); }
 .model-filters button { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 5px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .model-filters button[aria-pressed='true'] { background: white; color: var(--ink); border-color: var(--line); box-shadow: 0 1px 2px #00000005; }
@@ -17,7 +17,7 @@
 .model-catalog-actions { display: flex; flex-shrink: 0; gap: 8px; }
 .model-catalog-actions .secondary { height: 38px; padding: 8px 12px; background: white; font-size: 13px; }
 .model-catalog-actions .secondary:hover { background: var(--surface); }
-.model-catalog-actions .secondary > span { font-size: 19px; line-height: 1; }
+.model-catalog-actions .secondary > span { font-size: 14px; line-height: 1; }
 .model-catalog { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; }
 .model-catalog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--line); background: #fafafa; color: var(--muted); font-size: 12px; }
 .model-catalog-head > span:first-child { color: var(--secondary); }
@@ -33,15 +33,17 @@
 .model-drag-handle:hover, .model-drag-handle:focus-visible { color: var(--action); }
 .model-drag-handle:active { cursor: grabbing; }
 .model-drag-handle[aria-disabled="true"] { color: #d2cfcc; cursor: not-allowed; }
-.model-drag-handle svg { width: 16px; height: 20px; fill: currentColor; stroke: none; }
+.model-drag-handle svg { width: 12px; height: 16px; fill: currentColor; stroke: none; }
 .model-catalog-choice { display: flex; align-items: center; align-self: stretch; gap: 12px; padding: 10px 0 10px 16px; margin: 0; flex: 1; min-width: 0; cursor: pointer; color: var(--ink); font-weight: 400; }
 .model-catalog-choice input { appearance: auto; width: 15px; height: 15px; padding: 0; margin: 0; accent-color: var(--action); flex-shrink: 0; cursor: pointer; }
 .model-catalog-choice input:disabled { opacity: .75; cursor: default; }
 .model-catalog-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .model-catalog-name { font: 14px var(--body); overflow-wrap: anywhere; }
 .model-catalog-id { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
-.model-rename-button, .model-remove-button { width: 28px; flex-shrink: 0; }
-.model-rename-button svg, .model-remove-button svg { width: 14px; height: 14px; }
+.model-rename-button { flex-shrink: 0; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--secondary); font-size: 12px; }
+.model-rename-button:hover { border-color: var(--border-active); background: var(--surface); }
+.model-remove-button { width: 28px; flex-shrink: 0; }
+.model-remove-button svg { width: 14px; height: 14px; }
 .model-remove-button:hover { color: var(--danger); background: #fff0ee; }
 #remove-picker-model-description { overflow-wrap: anywhere; }
 dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7; }
@@ -89,6 +91,7 @@ dialog .model-edit-help { margin: 7px 0 19px; font-size: 13px; line-height: 1.7;
   .model-catalog-head { padding: 9px 10px; }
   .model-catalog-row { gap: 5px; padding-right: 5px; }
   .model-drag-handle { width: 24px; margin-right: -5px; padding-left: 4px; }
+  .model-rename-button { min-height: 28px; padding: 4px 6px; font-size: 11px; }
   .model-catalog-choice { padding-left: 6px; gap: 9px; }
   .model-catalog-name { font-size: 13px; }
   .model-default-button { min-width: 65px; padding: 6px 7px; font-size: 12px; }

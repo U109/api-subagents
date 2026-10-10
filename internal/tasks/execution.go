@@ -73,10 +73,6 @@ func (m *Manager) runExecution(j *job) {
 	j.execution, j.steps, j.calls = &result, result.Requests, result.ToolCalls
 	m.mu.Unlock()
 	m.finish(j, status, result.Text, err)
-	m.mu.Lock()
-	m.running--
-	m.pumpLocked()
-	m.mu.Unlock()
 }
 
 // compactExecution 在保留退出码和变更提示的同时限制父模型上下文；完整证据可从任务记录读取。

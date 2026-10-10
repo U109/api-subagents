@@ -30,8 +30,8 @@
     if (focused && entry.origin?.isConnected) entry.origin.focus();
   }
 
-  /** 各类提示统一显示三秒，悬停不延长；同一通道替换并重新计时，最多显示三条 */
-  function show(key, message, kind = 'success') {
+  /** 普通提示三秒后关闭；撤销可指定十秒及一次性操作，同通道替换清理旧计时且不保存历史。 */
+  function show(key, message, kind = 'success', options = {}) {
     clear(key);
     message = formatMessage(message);
     if (!message) return;
@@ -56,7 +56,11 @@
     const origin = document.activeElement;
     close.addEventListener('click', () => clear(key));
     card.append(icon, text, close);
-    const entry = {card, origin, timer: setTimeout(() => clear(key), 3000)};
+    if (typeof options.action === 'function') {
+      const action = document.createElement('button'); action.type = 'button'; action.className = 'notice-action'; action.textContent = options.label || '撤销';
+      action.addEventListener('click', () => { clear(key); options.action(); }); card.insertBefore(action,close);
+    }
+    const entry = {card, origin, timer: setTimeout(() => clear(key), options.action ? 10000 : 3000)};
     entries.set(key, entry);
     stack.append(card);
     mount();

@@ -42,16 +42,26 @@ func TestWorkerStdio(t *testing.T) {
 	}
 	defer session.Close()
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 6 {
+	if err != nil || len(tools.Tools) != 7 {
 		t.Fatal(tools, err)
 	}
 	if strings.Contains(string(shared.Marshal(tools)), "synthetic-private-key") {
 		t.Fatal("secret in tool definitions")
 	}
+	foundImage := false
 	for _, tool := range tools.Tools {
 		if tool.Annotations == nil {
 			t.Fatal("missing annotations", tool.Name)
 		}
+		if tool.Name == "generate_image" {
+			foundImage = true
+			if tool.Annotations.ReadOnlyHint {
+				t.Fatal("image generation must be marked as a write operation")
+			}
+		}
+	}
+	if !foundImage {
+		t.Fatal("generate_image is not registered")
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "delegate_task", Arguments: shared.Object{"model": "demo", "task": "bounded task", "workspace": t.TempDir()}})
 	if err != nil || result.IsError || len(result.Content) != 1 {

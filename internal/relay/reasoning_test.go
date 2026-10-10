@@ -22,7 +22,7 @@ func TestRelayReasoningPriority(t *testing.T) {
 			}))
 			defer server.Close()
 			r := testRelay(t, protocol, server.URL, false)
-			for _, tc := range []struct{ saved, chosen, want string }{{"", "", ""}, {"low", "", "low"}, {"high", "low", "low"}, {"high", "none", "none"}} {
+			for _, tc := range []struct{ saved, chosen, want string }{{"", "", ""}, {"low", "", "low"}, {"high", "low", "low"}, {"high", "none", "none"}, {"max", "", "max"}, {"ultra", "", "ultra"}, {"high", "max", "max"}, {"max", "ultra", "ultra"}, {"ultra", "low", "low"}} {
 				c, _ := r.Store.Read()
 				p := c.Models["demo"]
 				p.ReasoningEffort = tc.saved
