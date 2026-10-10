@@ -32,7 +32,7 @@ func NewConfigService(store *configstore.ConfigStore) *ConfigService {
 	return &ConfigService{Store: store, Provider: providers.NewProvider()}
 }
 
-// Handle 处理固定路由，网络测试不占写锁；复制和删除只修改选中连接。
+// Handle 处理固定路由，网络测试不占写锁；定点保存、复制和删除只修改目标连接，其他草稿不会写入。
 func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (shared.Object, error) {
 	if len(body) > 300000 {
 		return nil, errors.New("配置过大。")
@@ -73,7 +73,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		}
 		return s.Provider.Probe(ctx, p)
 	}
-	if route != "/api/config" && route != "/api/config/copy" && route != "/api/config/remove" {
+	if route != "/api/config" && route != "/api/config/save" && route != "/api/config/copy" && route != "/api/config/remove" {
 		return nil, errors.New("未找到操作。")
 	}
 	if !s.mu.TryLock() {
@@ -86,6 +86,24 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	}
 	copiedName := ""
 	switch route {
+	case "/api/config/save":
+		single, selectErr := selectedConfig(input.Config, input.Name)
+		if selectErr != nil {
+			return nil, selectErr
+		}
+		one, mergeErr := configstore.MergeKeys(single, c, true)
+		if mergeErr != nil {
+			return nil, mergeErr
+		}
+		profile := one.Models[input.Name]
+		if profile.SavedName == nil {
+			if _, exists := c.Models[input.Name]; exists {
+				return nil, errors.New("连接名称已被另一连接使用。")
+			}
+		} else if *profile.SavedName != input.Name {
+			delete(c.Models, *profile.SavedName)
+		}
+		c.Models[input.Name] = profile
 	case "/api/config/remove":
 		if _, ok := c.Models[input.Name]; !ok {
 			return nil, errors.New("该模型配置不存在，请刷新后重试。")
@@ -134,7 +152,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 	return result, nil
 }
 
-// selectedConfig 只取当前连接草稿，其他未完成的模型不影响测试、目录查询或复制。
+// selectedConfig 只取当前连接草稿，其他未完成的模型不影响测试、目录查询、复制或定点保存。
 func selectedConfig(data []byte, name string) ([]byte, error) {
 	var input struct {
 		Models map[string]json.RawMessage `json:"models"`
@@ -180,7 +198,7 @@ func StartSetup(service *ConfigService, assets fs.FS) (*SetupServer, error) {
 			if name == "" {
 				name = "index.html"
 			}
-			if shared.Contains([]string{"index.html", "config-ui.js", "config.css", "desktop-ui.js", "desktop.css", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"}, name) {
+			if shared.Contains([]string{"index.html", "config-ui.js", "config-operations.js", "config.css", "desktop-ui.js", "desktop.css", "approved-workbench.css", "workbench-views.js", "bridge.js", "shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css", "relay-diagnostics-ui.js"}, name) {
 				data, err := fs.ReadFile(assets, name)
 				if err != nil {
 					http.NotFound(w, r)

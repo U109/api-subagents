@@ -27,6 +27,12 @@ func (a *App) CheckPluginUpdate() (shared.Object, error) {
 	return a.GetState(), err
 }
 
+// CancelPluginUpdate 仅取消插件检查或下载；已开始的本机安装不能通过此入口中断。
+func (a *App) CancelPluginUpdate() shared.Object {
+	a.pluginUpdater.Cancel()
+	return a.GetState()
+}
+
 // InstallPlugin 安装随 App 提供的插件；已有更高版本时拒绝降级，避免独立更新被旧 App 覆盖。
 func (a *App) InstallPlugin() (shared.Object, error) { return a.installPlugin(false) }
 

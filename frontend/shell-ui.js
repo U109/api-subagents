@@ -4,7 +4,7 @@
   const sidebar = document.getElementById('connection-sidebar');
   const toggle = document.getElementById('sidebar-toggle');
   const backdrop = document.getElementById('sidebar-backdrop');
-  const compact = matchMedia('(max-width: 700px)');
+  const compact = matchMedia('(max-width: 680px)');
 
   /** 同步折叠按钮与可聚焦区域；窄屏抽屉开启时，背后的配置表单不可操作。 */
   function syncSidebar() {
@@ -42,7 +42,8 @@
   backdrop.addEventListener('click', closeSidebar);
   compact.addEventListener('change', () => { app.classList.remove('sidebar-open'); syncSidebar(); });
   document.querySelectorAll('[data-dialog]').forEach(button => button.addEventListener('click', () => openDialog(button.dataset.dialog)));
-  document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeSidebar(); });
+  // 连接和模型弹窗会随配置重绘，委托关闭事件同时覆盖静态与动态入口。
+  document.addEventListener('click', event => { const button = event.target.closest('[data-close]'); if (button) button.closest('dialog')?.close(); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented) closeSidebar(); });
   syncSidebar();
 })();

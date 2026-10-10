@@ -14,6 +14,14 @@ if (window.go?.desktop?.App && window.runtime) {
     checkUpdate: () => app.CheckUpdate(),
     /** 下载并校验已发现版本的安装包。 */
     downloadUpdate: () => app.DownloadUpdate(),
+    /** 中止正在检查或下载的应用更新，不中断安装，不影响模型请求。 */
+    cancelUpdate: () => app.CancelUpdate(),
+    /** 只保存打开更新弹窗时自动检查的偏好，不开启自动安装。 */
+    setUpdateAutoCheck: (enabled) => app.SetUpdateAutoCheck(enabled),
+    /** 跳过当前已验证的应用版本，新版本仍会展示。 */
+    skipUpdate: () => app.SkipUpdate(),
+    /** 取消插件检查或下载，插件本机安装仍由固定后台流程完成。 */
+    cancelPluginUpdate: () => app.CancelPluginUpdate(),
     /** 在保存草稿后显式启动更新安装。 */
     installUpdate: () => app.InstallUpdate(),
     /** 打开固定的 GitHub Releases 地址。 */

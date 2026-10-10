@@ -5,26 +5,6 @@
   stack.setAttribute('popover', 'manual');
   stack.setAttribute('aria-label', '操作提示');
   const entries = new Map();
-  const history = new Map();
-
-  /** 渲染会话内通知历史，只使用文本节点，不保存配置对象或写入浏览器持久存储。 */
-  function renderHistory() {
-    const list = document.getElementById('notification-history');
-    if (!list) return;
-    list.replaceChildren();
-    const unread = [...history.values()].filter(item => !item.read).length;
-    document.getElementById('notification-count').textContent = String(unread);
-    document.getElementById('notifications-entry').setAttribute('aria-label', `通知，${unread} 条未读`);
-    document.getElementById('notification-empty').hidden = history.size > 0;
-    for (const [key, item] of [...history].reverse()) {
-      const row = document.createElement('div'); row.className = `notification-record ${item.kind}`;
-      const message = document.createElement('p'); message.textContent = item.message;
-      const button = document.createElement('button'); button.className = 'text-button'; button.textContent = '移除';
-      button.setAttribute('aria-label', `移除通知：${item.message}`);
-      button.addEventListener('click', () => { history.delete(key); renderHistory(); });
-      row.append(message, button); list.append(row);
-    }
-  }
 
   /** 统一提示文案的结尾样式，仅移除末尾中文句号，保留句间标点、英文句点和换行 */
   function formatMessage(message) {
@@ -50,16 +30,12 @@
     if (focused && entry.origin?.isConnected) entry.origin.focus();
   }
 
-  /** 各类提示统一显示三秒，悬停不延长；同一通道替换并重新计时，最多显示三条 */
-  function show(key, message, kind = 'success') {
+  /** 普通提示三秒后关闭；撤销可指定十秒及一次性操作，同通道替换清理旧计时且不保存历史。 */
+  function show(key, message, kind = 'success', options = {}) {
     clear(key);
     message = formatMessage(message);
     if (!message) return;
     if (!['success', 'info', 'warning', 'error'].includes(kind)) kind = 'info';
-    history.delete(key);
-    history.set(key, {message,kind,read:false});
-    while (history.size > 30) history.delete(history.keys().next().value);
-    renderHistory();
     if (entries.size >= 3) clear(entries.keys().next().value);
     const card = document.createElement('div');
     card.className = 'notice ' + kind;
@@ -80,7 +56,11 @@
     const origin = document.activeElement;
     close.addEventListener('click', () => clear(key));
     card.append(icon, text, close);
-    const entry = {card, origin, timer: setTimeout(() => clear(key), 3000)};
+    if (typeof options.action === 'function') {
+      const action = document.createElement('button'); action.type = 'button'; action.className = 'notice-action'; action.textContent = options.label || '撤销';
+      action.addEventListener('click', () => { clear(key); options.action(); }); card.insertBefore(action,close);
+    }
+    const entry = {card, origin, timer: setTimeout(() => clear(key), options.action ? 10000 : 3000)};
     entries.set(key, entry);
     stack.append(card);
     mount();
@@ -89,10 +69,4 @@
 
   new MutationObserver(mount).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['open']});
   window.notices = {show, clear, formatMessage};
-  document.getElementById('notifications-entry').addEventListener('click', () => {
-    history.forEach(item => { item.read = true; }); renderHistory();
-    document.getElementById('notifications-dialog').showModal();
-  });
-  document.getElementById('notifications-clear').addEventListener('click', () => { history.clear(); renderHistory(); });
-  renderHistory();
 })();

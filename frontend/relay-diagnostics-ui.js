@@ -104,7 +104,7 @@
     }
     document.getElementById('relay-diagnostics-empty').hidden = items.length > 0;
     const newlyFailed = items.find(item => previous.get(item.id) === 'receiving' && describe(item.outcome)[1] === 'warning');
-    if (newlyFailed) window.notices?.show('request-diagnostics', newlyFailed.connection + '：' + describe(newlyFailed.outcome)[0] + '，可展开“最近请求”查看诊断', 'warning');
+    if (newlyFailed) window.notices?.show('request-diagnostics', newlyFailed.connection + '：' + describe(newlyFailed.outcome)[0] + '，可在“使用帮助”中查看最近请求', 'warning');
     previous = new Map(items.map(item => [item.id, item.outcome]));
   }
 

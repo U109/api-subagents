@@ -45,7 +45,7 @@ func TestSetupFrontendModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer setup.Server.Close()
-	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css"} {
+	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css", "config-operations.js", "workbench-views.js", "approved-workbench.css", "relay-diagnostics-ui.js"} {
 		response, err := http.Get(setup.Origin + "/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -67,6 +67,11 @@ func TestSetupFrontendModules(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("private path exposed as a static asset: %d", response.StatusCode)
+	}
+	for _, name := range []string{"workbench.test.cjs", "config-operations.test.cjs", "workbench-theme.css", "radix-palette.css", "../models.json"} {
+		if _, err := frontend.Files.ReadFile(name); err == nil {
+			t.Fatal("non-release asset embedded", name)
+		}
 	}
 }
 

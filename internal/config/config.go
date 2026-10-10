@@ -37,6 +37,7 @@ type Profile struct {
 	ModelImageInputs      map[string]bool               `json:"modelImageInputs,omitempty"`
 	ModelOutputs          map[string]ModelOutputSetting `json:"modelOutputs,omitempty"`
 	MaxTokens             int                           `json:"maxTokens"`
+	AdvancedOverride      *bool                         `json:"advancedOverride,omitempty"`
 	Stream                bool                          `json:"stream"`
 	FirstTimeout          int                           `json:"firstResponseTimeoutSeconds"`
 	IdleTimeout           int                           `json:"streamIdleTimeoutSeconds"`
@@ -227,7 +228,7 @@ func ResolveProfile(c Config, name string) (Profile, error) {
 			return p, errors.New("未找到配置的 Key 环境变量。")
 		}
 	}
-	return p, nil
+	return p.EffectiveParameters(), nil
 }
 
 // MergeKeys 沿用原连接的已保存密钥，修改地址或协议无需重填；显式输入的新 Key 优先。

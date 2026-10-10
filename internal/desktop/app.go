@@ -146,7 +146,7 @@ func (a *App) API(route, body string) (shared.Object, error) {
 		}
 	}
 	value, err := a.service.Handle(requestContext, route, []byte(body))
-	if err == nil && body != "" && (route == "/api/config" || route == "/api/config/copy" || route == "/api/config/remove") {
+	if err == nil && body != "" && (route == "/api/config" || route == "/api/config/save" || route == "/api/config/copy" || route == "/api/config/remove") {
 		if refreshErr := a.relay.RefreshCatalog(); refreshErr != nil {
 			value["warning"] = refreshErr.Error()
 		}
@@ -154,10 +154,10 @@ func (a *App) API(route, body string) (shared.Object, error) {
 	return value, err
 }
 
-// EnableRelay 只允许已保存的连接接管主模型，草稿或配置请求尚未完成时明确阻止。
+// EnableRelay 只从磁盘读取已保存连接接管主模型；其他连接草稿不参与切换，请求或退出尚未完成时阻止。
 func (a *App) EnableRelay(model string) (shared.Object, error) {
 	a.mu.Lock()
-	if a.dirty || a.busy.Load() > 0 || a.closeInProgressLocked() {
+	if a.busy.Load() > 0 || a.closeInProgressLocked() {
 		a.mu.Unlock()
 		return a.GetState(), errors.New("请先保存当前配置并等待操作完成。")
 	}
@@ -190,6 +190,24 @@ func (a *App) CheckUpdate() (shared.Object, error) {
 // DownloadUpdate 下载已发现的版本并推送进度，不自动运行安装器。
 func (a *App) DownloadUpdate() (shared.Object, error) {
 	err := a.updater.Download(a.ctx)
+	return a.GetState(), err
+}
+
+// CancelUpdate 只取消应用更新的网络操作，关闭弹窗或普通退出不等价于安装。
+func (a *App) CancelUpdate() shared.Object {
+	a.updater.Cancel()
+	return a.GetState()
+}
+
+// SetUpdateAutoCheck 持久化打开更新弹窗时的检查偏好，不在启动时自动下载或安装。
+func (a *App) SetUpdateAutoCheck(enabled bool) (shared.Object, error) {
+	err := a.updater.SetAutoCheck(enabled)
+	return a.GetState(), err
+}
+
+// SkipUpdate 仅跳过当前已验证版本，新版本仍可显示；不会删除已下载包或改变配置。
+func (a *App) SkipUpdate() (shared.Object, error) {
+	err := a.updater.Skip()
 	return a.GetState(), err
 }
 
@@ -255,7 +273,16 @@ func (a *App) FrontendReady(report shared.Object) {
 	go func() { time.Sleep(100 * time.Millisecond); wailsruntime.Quit(a.ctx) }()
 }
 
-// Run 启动单实例 Wails 窗口，沿用现有配置界面和窗口尺寸。
+// desktopWindowsOptions 保持正式窗口行为不变；启动测试使用报告旁的独立 WebView2 数据目录，避免与已安装 App 共用浏览器状态。
+func desktopWindowsOptions(smokeReport string) *windows.Options {
+	windowOptions := &windows.Options{WebviewIsTransparent: false, WindowIsTranslucent: false}
+	if smokeReport != "" {
+		windowOptions.WebviewUserDataPath = filepath.Join(filepath.Dir(smokeReport), "webview")
+	}
+	return windowOptions
+}
+
+// Run 启动单实例 Wails 窗口；启动测试隔离实例标识与浏览器数据，正式启动沿用现有配置和窗口尺寸。
 func Run(packaged bool) {
 	app := newApp(packaged)
 	instance := "com.u109.api-subagents"
@@ -267,7 +294,7 @@ func Run(packaged bool) {
 			wailsruntime.WindowUnminimise(app.ctx)
 			wailsruntime.Show(app.ctx)
 		}
-	}}, Windows: &windows.Options{WebviewIsTransparent: false, WindowIsTranslucent: false}})
+	}}, Windows: desktopWindowsOptions(app.smoke)})
 	if err != nil {
 		if app.smoke != "" {
 			_ = shared.AtomicWrite(app.smoke, shared.Marshal(shared.Object{"ok": false, "error": err.Error()}), 0600)

@@ -74,14 +74,15 @@ test('independent requests keep latest request status and list remains bounded',
 });
 
 test('prototype theme, production resources, and automatic context limit agree', () => {
-  const css = fs.readFileSync(path.join(__dirname, 'workbench-theme.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'approved-workbench.css'), 'utf8');
   const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
   const embed = fs.readFileSync(path.join(__dirname, 'assets.go'), 'utf8');
-  assert.match(css, /--action: #7c756e/);
-  assert.match(css, /\.notice\.error \.notice-icon[^}]+radix-amber/);
-  assert.match(css, /\.notice\.success \.notice-icon[^}]+radix-green/);
-  assert.doesNotMatch(css, /radix-red|#b24738|#c65746/);
-  for (const name of ['radix-palette.css', 'workbench-theme.css', 'relay-diagnostics-ui.js']) { assert.ok(html.includes('/' + name)); assert.ok(embed.includes(name)); }
+  assert.match(css, /--ink:\s*#24262c/);
+  assert.match(css, /--accent:\s*#b64b20/);
+  assert.match(css, /--surface:\s*#f8f9fb/);
+  for (const name of ['approved-workbench.css','workbench-views.js','relay-diagnostics-ui.js']) { assert.ok(html.includes('/' + name)); assert.ok(embed.includes(name)); }
+  for (const name of ['radix-palette.css','workbench-theme.css','workbench.css']) assert.equal(html.includes('/' + name),false);
+  assert.match(html, /id="help-request-diagnostics"/); assert.match(html, /<dialog id="relay-diagnostics-dialog"/);
   const source = fs.readFileSync(path.join(__dirname, 'model-picker-ui.js'), 'utf8');
   const start = source.indexOf('function updateContextHint(');
   const end = source.indexOf('\n  /**', start);

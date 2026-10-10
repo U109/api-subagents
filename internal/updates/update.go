@@ -46,6 +46,9 @@ type UpdateState struct {
 	AvailableVersion string  `json:"availableVersion"`
 	Progress         float64 `json:"progress"`
 	Message          string  `json:"message"`
+	ReleaseNotes     string  `json:"releaseNotes"`
+	AutoCheck        bool    `json:"autoCheck"`
+	SkippedVersion   string  `json:"skippedVersion,omitempty"`
 }
 
 type Updater struct {
@@ -59,6 +62,9 @@ type Updater struct {
 	manifest          UpdateManifest
 	downloadURL, file string
 	plugin            bool
+	operation         context.Context
+	cancel            context.CancelFunc
+	preferences       Preferences
 }
 
 var versionPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
@@ -67,7 +73,7 @@ var checksumPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 // NewUpdater 更新源编译时确定，普通退出不下载或安装，不把作者令牌植入客户端。
 func NewUpdater(release Release, cache string, packaged bool) *Updater {
-	return &Updater{Release: release, Cache: cache, Packaged: packaged, state: UpdateState{Phase: "idle", Version: release.Version, Message: "检查是否有新版本"}, Client: &http.Client{Transport: platform.DefaultTransport(), CheckRedirect: releaseRedirect}}
+	return &Updater{Release: release, Cache: cache, Packaged: packaged, preferences: readPreferences(cache), state: UpdateState{Phase: "idle", Version: release.Version, Message: "检查是否有新版本"}, Client: &http.Client{Transport: platform.DefaultTransport(), CheckRedirect: releaseRedirect}}
 }
 
 // NewPluginUpdater 复用固定发布源与下载校验，但以已安装插件版本独立判断更新，不要求升级桌面 App。
@@ -108,7 +114,13 @@ func (u *Updater) ReleaseURL() string {
 }
 
 // Snapshot 拷贝可展示状态，不暴露安装器路径或内部网络参数。
-func (u *Updater) Snapshot() UpdateState { u.mu.Lock(); defer u.mu.Unlock(); return u.state }
+func (u *Updater) Snapshot() UpdateState {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	state := u.state
+	state.AutoCheck, state.SkippedVersion = u.preferences.AutoCheck, u.preferences.SkippedVersion
+	return state
+}
 
 // notify 在释放状态锁后发布进度，避免 UI 回调再次读取快照时死锁。
 func (u *Updater) notify() {
@@ -120,6 +132,10 @@ func (u *Updater) notify() {
 // change 将网络处理的结果写入状态，再通知前端。
 func (u *Updater) change(phase, message string) {
 	u.mu.Lock()
+	if u.operation != nil && u.operation.Err() != nil {
+		u.mu.Unlock()
+		return
+	}
 	u.state.Phase = phase
 	u.state.Message = message
 	u.mu.Unlock()
@@ -150,7 +166,7 @@ func NewerVersion(next, current string) bool {
 	return false
 }
 
-// getJSON 要求重新验证发布元数据并限制为 1 MB，网络错误不回显 URL 或响应原文。
+// getJSON 要求重新验证发布元数据并限制为 1 MB，解析前拒绝已取消的迟到响应；错误不回显 URL 或响应原文。
 func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
@@ -169,6 +185,9 @@ func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) erro
 		return fmt.Errorf("更新服务 HTTP %d。", res.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 1024*1024+1))
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil || len(data) > 1024*1024 || json.Unmarshal(data, target) != nil {
 		return errors.New("更新元数据无效。")
 	}
@@ -178,7 +197,7 @@ func (u *Updater) getJSON(ctx context.Context, endpoint string, target any) erro
 // Check 仅显式操作时查询最新稳定 Release；已下载旧包时也会重新比较，发现更高版本则改推最新包。
 func (u *Updater) Check(ctx context.Context) (checkErr error) {
 	u.mu.Lock()
-	if shared.Contains([]string{"checking", "downloading", "installing"}, u.state.Phase) {
+	if u.cancel != nil || shared.Contains([]string{"checking", "downloading", "installing"}, u.state.Phase) {
 		u.mu.Unlock()
 		return nil
 	}
@@ -196,27 +215,38 @@ func (u *Updater) Check(ctx context.Context) (checkErr error) {
 	previousState, previousManifest := u.state, u.manifest
 	previousURL, previousFile := u.downloadURL, u.file
 	hadDownload := previousState.Phase == "downloaded" && previousFile != ""
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	u.operation, u.cancel = ctx, cancel
 	// 检查失败仍保留此前完整下载的包；重新进入安装时仍须核对大小和哈希。
 	defer func() {
+		u.mu.Lock()
+		if ctx.Err() != nil {
+			checkErr = ctx.Err()
+			u.state.Phase, u.state.Message = "error", "更新检查超时，请重试。"
+			if errors.Is(ctx.Err(), context.Canceled) {
+				u.state.Phase, u.state.Message = "cancelled", "更新检查已取消。"
+			}
+		}
 		if checkErr != nil && hadDownload {
-			u.mu.Lock()
 			u.state, u.manifest = previousState, previousManifest
 			u.downloadURL, u.file = previousURL, previousFile
-			u.mu.Unlock()
-			u.notify()
 		}
+		u.operation, u.cancel = nil, nil
+		u.mu.Unlock()
+		cancel()
+		u.notify()
 	}()
 	u.state.Phase = "checking"
 	u.state.AvailableVersion = ""
 	u.state.Message = "正在检查更新…"
 	u.state.Progress = 0
+	u.state.ReleaseNotes = ""
 	u.manifest, u.downloadURL, u.file = UpdateManifest{}, "", ""
 	u.mu.Unlock()
 	u.notify()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	var release struct {
 		Tag               string `json:"tag_name"`
+		Body              string `json:"body"`
 		Draft, Prerelease bool
 	}
 	err := u.getJSON(ctx, "https://api.github.com/repos/"+u.Release.Owner+"/"+u.Release.Repo+"/releases/latest", &release)
@@ -272,12 +302,20 @@ func (u *Updater) Check(ctx context.Context) (checkErr error) {
 		return errors.New("版本信息暂未同步，请稍后重试")
 	}
 	u.mu.Lock()
+	if ctx.Err() != nil {
+		u.mu.Unlock()
+		return ctx.Err()
+	}
 	u.manifest = manifest
 	u.downloadURL = root + url.PathEscape(manifest.File)
 	u.state.Phase = "available"
 	u.state.AvailableVersion = version
 	u.state.Message = "发现新版本 " + version
+	u.state.ReleaseNotes = boundedNotes(release.Body)
 	u.state.Progress = 0
+	if !u.plugin && u.preferences.SkippedVersion == version {
+		u.state.Phase, u.state.Message = "skipped", "已跳过版本 "+version
+	}
 	if hadDownload && previousManifest == manifest {
 		u.file = previousFile
 		u.state.Phase = "downloaded"
@@ -293,30 +331,46 @@ func (u *Updater) Check(ctx context.Context) (checkErr error) {
 }
 
 // Download 流式写入临时文件并报告进度，大小和 SHA-256 均匹配后才允许安装。
-func (u *Updater) Download(ctx context.Context) error {
+func (u *Updater) Download(ctx context.Context) (downloadErr error) {
 	u.mu.Lock()
-	if u.state.Phase != "available" {
+	if u.cancel != nil || u.state.Phase != "available" {
 		u.mu.Unlock()
 		return errors.New("请先检查更新并确认有新版本。")
 	}
 	manifest, endpoint := u.manifest, u.downloadURL
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	u.operation, u.cancel = ctx, cancel
 	u.state.Phase = "downloading"
 	u.state.Progress = 0
 	u.state.Message = "正在下载更新…"
 	u.mu.Unlock()
 	u.notify()
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
+	defer func() {
+		u.mu.Lock()
+		if downloadErr == nil && ctx.Err() == nil {
+			u.state.Phase, u.state.Message = "downloaded", "更新已下载，重启后安装"
+			if u.plugin {
+				u.state.Message = "插件已下载，正在准备安装"
+			}
+		}
+		if ctx.Err() != nil {
+			downloadErr = ctx.Err()
+			u.state.Phase, u.state.Message = "error", "更新下载超时，请重新检查后重试。"
+			if errors.Is(ctx.Err(), context.Canceled) {
+				u.state.Phase, u.state.Message = "cancelled", "更新下载已取消，请重新检查后重试。"
+			}
+			u.state.Progress = 0
+		}
+		u.operation, u.cancel = nil, nil
+		u.mu.Unlock()
+		cancel()
+		u.notify()
+	}()
 	err := u.downloadFile(ctx, manifest, endpoint)
 	if err != nil {
 		u.change("error", "更新下载或校验失败，请重新检查后重试。")
 		return err
 	}
-	message := "更新已下载，重启后安装"
-	if u.plugin {
-		message = "插件已下载，正在准备安装"
-	}
-	u.change("downloaded", message)
 	return nil
 }
 
@@ -348,6 +402,9 @@ func (u *Updater) downloadFile(ctx context.Context, manifest UpdateManifest, end
 	var size int64
 	last := time.Time{}
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		n, readErr := reader.Read(buffer)
 		if n > 0 {
 			size += int64(n)
@@ -383,13 +440,16 @@ func (u *Updater) downloadFile(ctx context.Context, manifest UpdateManifest, end
 		return err
 	}
 	target := filepath.Join(u.Cache, manifest.File)
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err = os.Rename(temp, target); err != nil {
 		return err
 	}
-	u.mu.Lock()
 	u.file = target
 	u.state.Progress = 100
-	u.mu.Unlock()
 	return nil
 }
 
