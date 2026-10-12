@@ -29,8 +29,8 @@ try {
         throw ('The desktop did not produce its startup report. Exit code: ' + $process.ExitCode + '; ' + $diagnostic + '; test directory: ' + $testRoot)
     }
     $result = Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
-    # 正式页面使用四个真实页签、服务默认与八个显式思考档位，不再使用折叠区；不放宽配置恢复断言。
-    if (-not $result.ok -or -not $result.configLoaded -or $result.tabs -ne 4 -or $result.reasoningOptions -ne 9 -or $result.reasoningValue -ne 'low' -or $result.expanders -ne 0 -or $result.relayModelCount -ne 3 -or -not $result.updateBindings -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
+    # 新入口为接入工作台；验证真实配置级绑定和三个受限目录模型，配置恢复断言保持不变。
+    if (-not $result.ok -or -not $result.configLoaded -or $result.accessConfigCount -ne 1 -or $result.accessID -ne 'legacy' -or $result.visibleModelCount -ne 3 -or -not $result.updateBindings -or -not $result.relayEnabledBeforeClose) { throw ('Desktop smoke failed: ' + ($result | ConvertTo-Json -Compress)) }
     $restored = Get-Content -LiteralPath $codexConfig -Raw -Encoding UTF8
     if (-not $restored.Contains("model = 'original-smoke-model'") -or $restored.Contains('X-Api-Subagents-Token') -or (Test-Path -LiteralPath (Join-Path $env:API_SUBAGENTS_HOME 'codex-relay-backup.json'))) { throw 'Desktop close did not restore Codex configuration.' }
     if ([IO.File]::ReadAllText((Join-Path $env:API_SUBAGENTS_HOME 'models.json')) -ne $fixture) { throw 'Desktop close modified the saved model configuration.' }

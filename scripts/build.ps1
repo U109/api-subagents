@@ -5,6 +5,11 @@ Push-Location -LiteralPath $root
 try {
     $goExe = & (Join-Path $PSScriptRoot 'ensure-go.ps1')
     $env:PATH = (Split-Path -Parent $goExe) + ';' + $env:PATH
+    # 前端仅从锁定依赖和已批准组件构建，worker 的配置入口也使用相同的白名单产物。
+    & npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE) { throw 'Frontend dependency install failed.' }
+    & npm --prefix frontend run build
+    if ($LASTEXITCODE) { throw 'Frontend build failed.' }
     $release = Get-Content -LiteralPath 'packaging/release.json' -Raw -Encoding UTF8 | ConvertFrom-Json
     $plugin = Get-Content -LiteralPath '.codex-plugin/plugin.json' -Raw -Encoding UTF8 | ConvertFrom-Json
     New-Item -ItemType Directory -Force -Path 'build/bin','bundle','release' | Out-Null

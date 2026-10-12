@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,13 +30,15 @@ import (
 )
 
 type State struct {
-	Enabled       bool   `json:"enabled"`
-	Model         string `json:"model"`
-	ActiveModel   string `json:"activeModel"`
-	ActiveModelID string `json:"activeModelId,omitempty"`
-	Address       string `json:"address"`
-	Message       string `json:"message"`
-	Requests      uint64 `json:"requests"`
+	Enabled       bool                      `json:"enabled"`
+	Model         string                    `json:"model"`
+	ActiveModel   string                    `json:"activeModel"`
+	ActiveModelID string                    `json:"activeModelId,omitempty"`
+	Address       string                    `json:"address"`
+	Message       string                    `json:"message"`
+	Requests      uint64                    `json:"requests"`
+	Access        *configstore.AccessConfig `json:"access,omitempty"`
+	scope         *configstore.Config
 }
 type Relay struct {
 	Store         *configstore.ConfigStore
@@ -63,7 +66,13 @@ func New(store *configstore.ConfigStore, codex codexconfig.CodexConfig) *Relay {
 }
 
 // Snapshot 返回不含 Key、令牌和 Codex 备份的状态，供左侧连接标识显示。
-func (r *Relay) Snapshot() State { r.mu.RLock(); defer r.mu.RUnlock(); return r.state }
+func (r *Relay) Snapshot() State {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	state := r.state
+	state.Access = configstore.CloneAccess(state.Access)
+	return state
+}
 
 // notify 发布网关状态变化，不对模型输出或请求内容做日志记录。
 func (r *Relay) notify() {
@@ -85,15 +94,37 @@ func (r *Relay) Recover() error {
 
 // Enable 验证已保存连接，备份并接管全部旧提供商入口；已启用时同步该连接的星标默认模型和旧模型名路由。
 func (r *Relay) Enable(model string) error {
-	r.operation.Lock()
-	defer r.operation.Unlock()
 	config, err := r.Store.Read()
 	if err != nil {
 		return err
 	}
-	if _, err = configstore.ResolveProfile(config, model); err != nil {
+	return r.enableConfig(config, model, nil)
+}
+
+// EnableAccess 使用配置级模型子集生成不可扩大的运行快照，配置默认项不修改共享连接的默认模型。
+func (r *Relay) EnableAccess(c configstore.Config, plan configstore.AccessConfig) error {
+	scope, defaultName, err := c.ScopedConfig(plan)
+	if err != nil {
 		return err
 	}
+	return r.enableConfig(scope, defaultName, &plan)
+}
+
+// enableConfig 串行切换本地网关；先成功写入 Codex 再替换运行范围，失败保留旧快照和恢复备份。
+func (r *Relay) enableConfig(config configstore.Config, model string, access *configstore.AccessConfig) error {
+	r.operation.Lock()
+	defer r.operation.Unlock()
+	for name := range config.Models {
+		if _, err := configstore.ResolveProfile(config, name); err != nil {
+			return err
+		}
+	}
+	var scope *configstore.Config
+	if access != nil {
+		sanitized := configstore.Editable(config)
+		scope = &sanitized
+	}
+	var err error
 	r.mu.Lock()
 	if r.state.Enabled {
 		r.mu.Unlock()
@@ -102,9 +133,11 @@ func (r *Relay) Enable(model string) error {
 		}
 		r.mu.Lock()
 		r.state.Model = model
+		r.state.Access = configstore.CloneAccess(access)
+		r.state.scope = scope
 		r.state.ActiveModel = ""
 		r.state.ActiveModelID = ""
-		r.state.Message = "已切换到当前连接的默认模型；旧对话请求使用当前连接"
+		r.state.Message = "接入配置已更新，请重启 Codex 刷新模型目录"
 		r.mu.Unlock()
 		r.notify()
 		return nil
@@ -132,7 +165,7 @@ func (r *Relay) Enable(model string) error {
 	r.host = host
 	r.server = server
 	r.cancel = cancel
-	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由"}
+	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由", Access: configstore.CloneAccess(access), scope: scope}
 	r.mu.Unlock()
 	go func() { _ = server.Serve(listener) }()
 	if err = r.Codex.Enable(config, model, port, token); err != nil {
@@ -165,7 +198,7 @@ func (r *Relay) disableLocked() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
-	r.state = State{Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
+	r.state = State{Access: r.state.Access, Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -190,11 +223,70 @@ func (r *Relay) RefreshCatalog() error {
 	if err != nil {
 		return err
 	}
+	if state.scope != nil {
+		for name, profile := range state.scope.Models {
+			id := profile.ID
+			if id == "" {
+				id = name
+			}
+			if _, _, exists := config.FindConnection(id); !exists {
+				return r.disableLocked()
+			}
+		}
+		return nil
+	}
 	if _, exists := config.Models[state.Model]; !exists {
 		return r.disableLocked()
 	}
 	return r.Codex.RefreshCatalog(config, state.Model, false)
 }
+
+// RemoveConnection 在删除正在运行范围中的连接前先安全恢复 Codex；恢复冲突阻止删除，不留下失效入口。
+func (r *Relay) RemoveConnection(id string) error {
+	r.operation.Lock()
+	defer r.operation.Unlock()
+	state := r.Snapshot()
+	if state.Access != nil && slices.Contains(state.Access.ConnectionIDs, id) {
+		if state.Enabled {
+			if err := r.disableLocked(); err != nil {
+				return err
+			}
+		}
+		r.clearAccess()
+		return nil
+	}
+	if !state.Enabled {
+		return nil
+	}
+	if state.scope != nil {
+		for name, profile := range state.scope.Models {
+			if profile.ID == id || profile.ID == "" && name == id {
+				return r.disableLocked()
+			}
+		}
+		return nil
+	}
+	return r.disableLocked()
+}
+
+// RemoveAccess 删除当前运行配置时先恢复，删除其他配置不影响主对话范围。
+func (r *Relay) RemoveAccess(id string) error {
+	r.operation.Lock()
+	defer r.operation.Unlock()
+	state := r.Snapshot()
+	if state.Access != nil && state.Access.ID == id {
+		if state.Enabled {
+			if err := r.disableLocked(); err != nil {
+				return err
+			}
+		}
+		r.clearAccess()
+	}
+	return nil
+}
+
+// clearAccess 在删除恢复目标后清除仅用于展示的内存引用，防止重新加载页面仍出现已经删除的配置。
+func (r *Relay) clearAccess() { r.mu.Lock(); r.state.Access = nil; r.mu.Unlock(); r.notify() }
 
 // ServeHTTP 限定回环 Host 和固定路径，拒绝浏览器跨站访问及未持有本地随机令牌的请求。
 // 自定义入口使用令牌头，内置 OpenAI 使用带随机令牌的本地路径；不会转发 Codex 原登录凭据。
@@ -225,7 +317,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if req.Method == "GET" && req.URL.Path == "/v1/models" {
-		config, err := r.requestConfig()
+		config, err := r.requestConfigFor(state)
 		if err != nil {
 			replyError(w, 500, err.Error())
 			return
@@ -268,7 +360,7 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		replyError(w, 400, "模型标识必须是字符串。")
 		return
 	}
-	config, err := r.requestConfig()
+	config, err := r.requestConfigFor(state)
 	if err != nil {
 		replyError(w, 500, err.Error())
 		return

@@ -181,7 +181,7 @@ App 和插件可分别更新：桌面版通过 **检查更新**，插件通过 *
 <details>
 <summary>开发与验证命令（Windows）</summary>
 
-构建脚本会准备并校验 Go 工具链；桌面应用使用 Wails 和系统 WebView2，不需要 npm 构建前端。
+构建脚本会准备并校验 Go 工具链，并用 npm 锁定依赖构建 React 工作台；开发机需要 Node.js 与 npm。桌面应用使用 Wails 和系统 WebView2，最终用户无需安装 Node.js 或 npm。
 
 ```powershell
 # 构建桌面 App 与内置插件

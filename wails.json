@@ -3,8 +3,8 @@
   "name": "API Subagents",
   "outputfilename": "API Subagents",
   "frontend:dir": "frontend",
-  "frontend:install": "",
-  "frontend:build": "",
+  "frontend:install": "npm ci --ignore-scripts --no-audit --no-fund",
+  "frontend:build": "npm run build",
   "frontend:dev:watcher": "",
   "author": {"name": "U109"},
   "info": {"productName": "API Subagents", "productVersion": "0.4.9", "comments": "Go + Wails desktop and standalone MCP worker"}

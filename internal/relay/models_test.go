@@ -37,6 +37,7 @@ func TestRelayModelSwitching(t *testing.T) {
 	p.RelayModels = []string{"model/a", "模型二"}
 	c.Models["demo"] = p
 	p.BaseURL, p.APIKey = server.URL+"/second", "synthetic-second-key"
+	p.ID = "另一连接 / Gemini #2"
 	c.Models["另一连接 / Gemini #2"] = p
 	if err = r.Store.Save(c); err != nil {
 		t.Fatal(err)

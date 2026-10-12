@@ -301,7 +301,7 @@ func catalogModel(slug, name, description, effort string, priority, contextWindo
 		defaultEffort = effort
 	}
 	instructions := codingInstructions
-	return shared.Object{
+	result := shared.Object{
 		"slug":                                 slug,
 		"display_name":                         name,
 		"description":                          description,
@@ -335,6 +335,11 @@ func catalogModel(slug, name, description, effort string, priority, contextWindo
 		"use_responses_lite":                   false,
 		"tool_mode":                            "direct",
 	}
+	if contextWindow == 0 {
+		delete(result, "context_window")
+		delete(result, "auto_compact_token_limit")
+	}
+	return result
 }
 
 // Enable 使用已保存连接的星标模型作为默认选择；先保存完整本机备份，再原子修改 Codex，并发编辑时拒绝覆盖。

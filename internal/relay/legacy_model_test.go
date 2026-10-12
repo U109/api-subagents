@@ -30,6 +30,7 @@ func TestLegacyModelFollowsCurrentConnection(t *testing.T) {
 	}
 	profile := config.Models["demo"]
 	profile.Model, profile.APIKey = "second-model", "synthetic-second-key"
+	profile.ID = ""
 	config.Models["second"] = profile
 	if err := r.Store.Save(config); err != nil {
 		t.Fatal(err)

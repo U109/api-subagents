@@ -8,8 +8,20 @@ const DefaultContextWindow = 256000
 const MinContextWindow = 4096
 const MaxContextWindow = 2000000
 
-// ContextWindow 对目录明确声明的容量取官方值与 256K 的较小值；未知容量保留旧配置手动值，避免静默改写既有连接。
+// ContextWindow 显式关闭覆盖时采用原生声明（未知返回零，不编造容量）；新策略开启后采用手动值或 min(原生值, 256K)，旧配置保留原策略。
 func (p Profile) ContextWindow(model string) int {
+	if enabled, set := p.ModelContextOverrides[model]; set {
+		if !enabled {
+			return p.ModelOfficialContexts[model]
+		}
+		if size := p.ModelContextWindows[model]; size > 0 && size <= MaxContextWindow {
+			return size
+		}
+		if official := p.ModelOfficialContexts[model]; official > 0 {
+			return min(official, DefaultContextWindow)
+		}
+		return 0
+	}
 	if official := p.ModelOfficialContexts[model]; official > 0 && official <= 100000000 {
 		return min(official, DefaultContextWindow)
 	}
@@ -17,6 +29,20 @@ func (p Profile) ContextWindow(model string) int {
 		return size
 	}
 	return DefaultContextWindow
+}
+
+// normalizeModelContextOverrides 保留显式开关的 false 值，清理未选择模型的孤立策略。
+func normalizeModelContextOverrides(p Profile) map[string]bool {
+	var result map[string]bool
+	for _, id := range append([]string{p.Model}, p.RelayModels...) {
+		if value, ok := p.ModelContextOverrides[id]; ok && id != "" {
+			if result == nil {
+				result = map[string]bool{}
+			}
+			result[id] = value
+		}
+	}
+	return result
 }
 
 // normalizeModelOfficialContexts 只保存已选模型的明确目录数据，不按型号猜测；未知值为零时清除。
@@ -52,7 +78,7 @@ func normalizeModelContextWindows(p Profile) (map[string]int, error) {
 		if size == 0 {
 			continue
 		}
-		if size < MinContextWindow || size > MaxContextWindow {
+		if size < MinContextWindow && !(p.ModelContextOverrides[id] && size > 0) || size > MaxContextWindow {
 			return nil, errors.New("模型上下文长度必须为 4096–2000000 的整数 tokens，默认 256000")
 		}
 		if result == nil {

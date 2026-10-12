@@ -31,7 +31,7 @@ func TestLegacyConnectionKeyMigration(t *testing.T) {
 // TestLegacyConcurrentFieldIgnored 确认旧并发数字既不进入新配置也不影响配置读取。
 func TestLegacyConcurrentFieldIgnored(t *testing.T) {
 	c, err := ValidateConfig([]byte(`{"version":1,"maxConcurrent":1,"models":{}}`), true)
-	if err != nil || string(shared.Marshal(c)) != `{"version":1,"models":{}}` {
+	if err != nil || string(shared.Marshal(c)) != `{"version":1,"models":{},"accessConfigs":[]}` {
 		t.Fatal("legacy concurrency setting should be discarded", c, err)
 	}
 }

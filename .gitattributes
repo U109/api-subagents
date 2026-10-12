@@ -2,3 +2,5 @@
 * text=auto eol=lf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+# 构建产物保留第三方库的 CSS 模板字符串空行，不把其中的空格当作手写源码行尾错误。
+frontend/workbench-app.js whitespace=-blank-at-eol

@@ -72,12 +72,29 @@ func newApp(packaged bool) *App {
 	app.pluginUpdater.OnChange = app.broadcast
 	app.relay = relay.New(app.service.Store, codexconfig.CodexConfig{Home: app.installOptions.CodexHome, DataRoot: configstore.DataDir()})
 	app.relay.OnChange = app.broadcast
+	app.service.BeforeRemoveConnection = app.relay.RemoveConnection
+	app.service.BeforeRemoveAccess = app.relay.RemoveAccess
 	for i, arg := range os.Args {
 		if arg == "--smoke-report" && i+1 < len(os.Args) {
 			app.smoke = os.Args[i+1]
 		}
 	}
 	return app
+}
+
+// EnableAccess 只启用已保存配置；空标识恢复最后生效范围，不使用界面正在查看的配置或草稿。
+func (a *App) EnableAccess(id string) (shared.Object, error) {
+	a.mu.Lock()
+	if a.busy.Load() > 0 || a.closeInProgressLocked() {
+		a.mu.Unlock()
+		return a.GetState(), errors.New("请先等待当前操作完成。")
+	}
+	a.busy.Add(1)
+	a.mu.Unlock()
+	defer a.busy.Add(-1)
+	err := a.service.ActivateAccess(id, a.relay.EnableAccess)
+	a.broadcast()
+	return a.GetState(), err
 }
 
 // startup 获取窗口生命周期上下文并恢复之前的挟持配置；插件版本已在构造时读取，避免与手动更新竞争。
@@ -129,7 +146,7 @@ func (a *App) API(route, body string) (shared.Object, error) {
 	}
 	defer a.busy.Add(-1)
 	requestContext := a.ctx
-	if route == "/api/probe" {
+	if route == "/api/probe" || route == "/api/models" {
 		var request struct {
 			RequestID string `json:"requestId"`
 		}
@@ -264,10 +281,25 @@ func (a *App) FrontendReady(report shared.Object) {
 	root := filepath.Dir(a.smoke)
 	if a.relay.Codex.Home != filepath.Join(root, "codex") || configstore.DataDir() != filepath.Join(root, "config") {
 		report["ok"], report["error"] = false, "启动测试必须使用独立 Codex 与配置目录。"
-	} else if err := a.relay.Enable("demo"); err != nil {
-		report["ok"], report["error"] = false, "启动测试无法开启本地网关。"
 	} else {
-		report["relayEnabledBeforeClose"] = a.relay.Snapshot().Enabled
+		c, err := a.service.Store.Read()
+		if err != nil || len(c.AccessConfigs) != 1 {
+			report["ok"], report["error"] = false, "启动测试接入配置未加载。"
+		} else if err := a.relay.EnableAccess(c, c.AccessConfigs[0]); err != nil {
+			report["ok"], report["error"] = false, "启动测试无法开启接入配置。"
+		} else {
+			report["relayEnabledBeforeClose"] = a.relay.Snapshot().Enabled
+			report["accessID"] = a.relay.Snapshot().Access.ID
+			data, readErr := os.ReadFile(filepath.Join(configstore.DataDir(), "codex-model-catalog.json"))
+			var catalogue struct {
+				Models []shared.Object `json:"models"`
+			}
+			if readErr != nil || json.Unmarshal(data, &catalogue) != nil {
+				report["ok"], report["error"] = false, "启动测试模型目录无法读取。"
+			} else {
+				report["visibleModelCount"] = len(catalogue.Models)
+			}
+		}
 	}
 	_ = shared.AtomicWrite(a.smoke, shared.Marshal(report), 0600)
 	go func() { time.Sleep(100 * time.Millisecond); wailsruntime.Quit(a.ctx) }()

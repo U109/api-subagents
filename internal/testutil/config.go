@@ -19,5 +19,8 @@ func Config(t *testing.T, protocol, base string) (*configstore.ConfigStore, conf
 	if err = store.Save(c); err != nil {
 		t.Fatal(err)
 	}
-	return store, c.Models["demo"]
+	profile := c.Models["demo"]
+	// 返回供测试新增连接复用的模板；每条新连接必须由校验器分配自己的身份。
+	profile.ID = ""
+	return store, profile
 }

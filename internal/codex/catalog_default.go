@@ -75,18 +75,36 @@ func (c CodexConfig) RefreshCatalog(config configstore.Config, connection string
 	if err != nil || backupErr != nil || !bytes.Equal(latest, current) || !bytes.Equal(latestBackup, backupData) {
 		return errors.New("Codex 配置刚刚发生变化，请重试。")
 	}
+	oldCatalog, catalogErr := os.ReadFile(c.catalogPath())
+	if catalogErr != nil && !os.IsNotExist(catalogErr) {
+		return errors.New("无法读取当前模型目录，未切换接入配置。")
+	}
 	if err := c.WriteCatalog(config, connection); err != nil {
 		return err
 	}
 	backup.Written, backup.Model = written, connection
 	if err := shared.AtomicWrite(c.backupPath(), shared.Marshal(backup), 0600); err != nil {
+		_ = c.restoreCatalog(oldCatalog, catalogErr == nil)
 		return err
 	}
 	if !bytes.Equal(updated, current) {
 		if err := shared.AtomicWrite(c.configPath(), updated, 0600); err != nil {
 			_ = shared.AtomicWrite(c.backupPath(), backupData, 0600)
+			_ = c.restoreCatalog(oldCatalog, catalogErr == nil)
 			return err
 		}
 	}
 	return nil
+}
+
+// restoreCatalog 在默认模型或备份写入失败时还原之前的目录，不允许失败切换留下扩大后的模型列表。
+func (c CodexConfig) restoreCatalog(data []byte, existed bool) error {
+	if existed {
+		return shared.AtomicWrite(c.catalogPath(), data, 0600)
+	}
+	err := os.Remove(c.catalogPath())
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }

@@ -40,6 +40,8 @@ if (window.go?.desktop?.App && window.runtime) {
     cancelClose: () => app.CancelClose(),
     /** 用已保存的连接开启或切换 Codex 主模型，启用前自动保存原配置备份。 */
     enableRelay: (name) => app.EnableRelay(name),
+    /** 启用已保存的接入配置；空标识恢复最后生效范围，查看项不会参与切换。 */
+    enableAccess: (id) => app.EnableAccess(id),
     /** 关闭本地网关并恢复原有 Codex 模型设置。 */
     disableRelay: () => app.DisableRelay(),
   };

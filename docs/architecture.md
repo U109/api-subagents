@@ -26,7 +26,9 @@
 
 `CODEX_TEST_BIN` 同样可启用 `go test ./internal/codexworker -run TestCodexWorker -v -timeout 240s`：使用本地合成模型验证四类协议的回答、实际文件修改、命令和测试执行，以及只读权限和请求限额；不调用付费模型。协议模拟测试还覆盖模型/provider 不匹配、审批拒绝、无响应进程、取消和临时目录清理。运行身份和状态不进入发布包。
 
-前端按职责拆分：`shell-ui.js` 管理侧栏与弹窗，`select-ui.js` 管理下拉菜单和键盘操作，`notification-ui.js` 管理顶部提示，`config-ui.js` 维护连接草稿，`config-operations.js` 管理定点快照、容量声明与可取消测试，`workbench-views.js` 绘制连接总览与任务分工；`model-picker-ui.js` 管理模型搜索、勾选、排序与默认值，配套样式位于 `model-picker.css` 和 `approved-workbench.css`；`desktop-ui.js` 同步安装、更新与挟持状态，`bridge.js` 保留固定 Go 绑定。静态资源同时列入嵌入和浏览器访问白名单，测试与原型样式不进入应用资源。
+正式前端直接复用已批准原型的 React／Radix／Lucide／dnd-kit 组件树与样式：`frontend/src/app.jsx` 绘制页面和可访问交互，`styles.css` 保存原型令牌；`controller.jsx` 管理草稿、定点保存、异步取消和实际桌面状态，`adapter.mjs` 在脱敏 Go 配置与组件形状之间转换，`domain.mjs` 维护配置级独立模型范围、排序及上下文策略，`transport.mjs` 只访问固定绑定或带令牌 API。`bridge.js` 保留固定 Go 绑定。嵌入和浏览器访问白名单只有 `index.html`、`bridge.js`、`workbench-app.js`、`workbench-app.css`；旧版脚本、原型、测试、npm 依赖与本机配置均不作为运行资源提供。
+
+`internal/config/access.go` 管理稳定连接身份和接入配置；`accessConfigs` 保存独立的连接／模型子集及配置默认，`lastAccess` 只记录最后明确启用范围。配置服务在写锁内持久化并启用，失败回滚；普通保存不改变运行范围。Relay 持有不公开序列化的参数快照，请求开始后不跨配置切换；凭据按稳定身份获取最新值，但地址或协议变化时拒绝向旧目的地发送新密钥。指纹只包含已选非凭据参数，新增未选候选或轮换密钥不会误判为扩大范围。
 
 连接配置的 `model` 与可选 `relayModels` 存储实际发送上游的模型 ID，前端编辑直接替换对应值，默认模型仍供 Worker 和旧连接别名使用。可选 `modelNames` 按 ID 保存显示名称，只用于目录展示。`internal/codex/models.go` 同时生成启动目录与网关 `/v1/models`，避免两个列表不一致；连接名按单个路径段编码，额外模型再拼接模型 ID 的完整 SHA-256，中文、空格和斜线不会混淆路由。旧连接别名保持不变，顺序、显示名称和凭据变化不改变别名。修改 ID 会生成新别名，需要刷新并重新选择；网关只路由到已配置模型，对每次请求的连接副本替换模型，不修改原配置，同名模型不会跨连接复用 Key。
 
@@ -59,9 +61,9 @@ go vet ./...
 .\scripts\smoke.ps1
 ```
 
-如果 Go 位于项目 .tools/go/bin，可直接使用该目录的 go.exe。构建不需要 npm，不随安装包分发 Go、Node 或浏览器引擎。
+如果 Go 位于项目 .tools/go/bin，可直接使用该目录的 go.exe。开发构建需要 Node.js 和 npm：`npm --prefix frontend ci --ignore-scripts --no-audit --no-fund` 后运行 `npm --prefix frontend run build`；构建脚本及 Wails 配置会执行这两步。最终安装包不分发 Go、Node、npm 依赖或浏览器引擎。
 
-前端纯逻辑测试运行 `node --test frontend/config-operations.test.cjs`。可选浏览器回归运行 `node frontend/workbench.test.cjs`，只使用本地合成绑定并阻断外部请求。需要已有 Playwright 与浏览器：默认从 `playwright` 模块加载其 Chromium，也可用 `PLAYWRIGHT_MODULE` 指定模块路径、`CHROME_PATH` 指定浏览器可执行文件。截图和报告默认写入系统临时目录，可用 `WORKBENCH_TEST_OUTPUT` 指定输出目录；测试依赖及产物不进入发布包。
+前端纯逻辑测试运行 `npm --prefix frontend test` 和 `node frontend/config-operations.test.cjs`；浏览器回归运行 `npm --prefix frontend run test:browser`，只使用本地合成绑定并阻断外部请求。Windows 默认使用已安装 Chrome，也可用 `CHROME_PATH` 指定浏览器；其他系统需准备 Playwright Chromium。`test:visual` 使用 `APPROVED_PROTOTYPE` 指定已批准自包含 HTML，在相同数据与尺寸下比较组件、计算样式和截图；视觉基准不是演示运行数据。截图和报告默认写入 `output/approved-implementation-qa`，可用 `WORKBENCH_TEST_OUTPUT` 指定输出目录；测试依赖及产物不进入发布包。详见 [前端构建与验收](../frontend/README.md)。
 
 真实 Codex 兼容测试为可选项：设置 CODEX_TEST_BIN 为已安装的 codex.exe 路径后运行 `go test ./internal/relay -run TestCodex -v -timeout 180s`。测试自动创建独立 CODEX_HOME，使用本地模拟服务，不调用真实模型。
 

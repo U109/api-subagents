@@ -1,299 +1,245 @@
-// 正式静态资源的浏览器回归：Go 绑定只用内存合成数据，所有外部网络均阻断，不读本机配置或调用模型。
+// 正式前端浏览器回归：全部绑定使用合成内存数据，阻断任何非本地请求。
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const http = require('node:http');
 const assert = require('node:assert/strict');
-const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const assets = ['index.html','config.css','model-picker.css','desktop.css','approved-workbench.css','bridge.js','shell-ui.js','notification-ui.js','select-ui.js','model-picker-ui.js','config-operations.js','workbench-views.js','config-ui.js','desktop-ui.js'];
-const output = path.resolve(process.env.WORKBENCH_TEST_OUTPUT || path.join(os.tmpdir(),'api-subagents-workbench-'+process.pid));
+const {pathToFileURL} = require('node:url');
+const {chromium} = require('playwright');
+const {mockBindings} = require('./tests/mock-bindings.cjs');
+const assets = ['index.html', 'workbench-app.js', 'workbench-app.css', 'bridge.js'];
+const output = path.resolve(process.env.WORKBENCH_TEST_OUTPUT || path.join(__dirname, '../output/approved-implementation-qa'));
 
-/** 注入仅属于测试页面的固定 Go 绑定，记录定点写入和取消；已保存 Key 从不进入正式表单响应。 */
-function mockBindings(fixture) {
-  /** 克隆合成绑定值，避免状态对象与表单草稿互相修改。 */
-  const copy = value => JSON.parse(JSON.stringify(value));
-  const base = {protocol:'responses',baseUrl:'http://127.0.0.1:9/v1',apiKey:'synthetic-test-secret',model:'gpt-5-extra',relayModels:['gpt-5.1-fast-high','deepseek-v4-flash'],modelOrder:['gpt-5-extra','gpt-5.1-fast-high','deepseek-v4-flash'],modelOfficialContexts:{'gpt-5-extra':1000000,'gpt-5.1-fast-high':128000},maxTokens:8000,stream:false,firstResponseTimeoutSeconds:300,streamIdleTimeoutSeconds:200,taskTimeoutMinutes:30,advancedOverride:false,reasoningEffort:'high',description:''};
-  let saved = {version:1,models:{cpa:copy(base),review:{...copy(base),description:'review saved'},batch:copy(base)}}, listener, dirty=false, token=0, pendingUpdate, pendingProbe;
-  const calls = [], state = {version:'0.4.1',plugin:{phase:'installed',installedVersion:'0.5.0',bundledVersion:'0.5.0',message:'插件已安装'},pluginUpdate:{phase:'idle',progress:0},update:{phase:'idle',autoCheck:true,progress:0,message:'检查是否有新版本'},relay:{enabled:false,model:'',message:'保存连接后开启，重启 Codex 后生效',requests:0},close:{}};
-  if (fixture?.models) saved.models = copy(fixture.models);
-  if (fixture?.state) Object.assign(state,copy(fixture.state));
-  /** 返回脱敏的完整配置快照，用 savedName 标记真实凭据来源。 */
-  const editable = () => ({version:1,models:Object.fromEntries(Object.entries(saved.models).map(([name,p]) => [name,{...copy(p),apiKey:'',hasKey:Boolean(p.apiKey),savedName:name}]))});
-  /** 推送克隆状态，测试不共享前端内部对象或假装访问真实服务。 */
-  const emit = () => { if(listener) listener(copy(state)); return copy(state); };
-  /** 根据草稿合并保存 Key，只持久化明确目标连接。 */
-  const persist = (name,p) => { const source=p.savedName || name, old=saved.models[source]; if(source!==name && saved.models[name]) throw Error('名称冲突'); const next=copy(p); next.apiKey=p.apiKey || old?.apiKey || ''; delete next.savedName; delete next.hasKey; if(source!==name) delete saved.models[source]; saved.models[name]=next; };
-  /** 模拟阶段切换和迟到结果；取消递增令牌并结束原操作，旧完成函数不能再次广播成功。 */
-  const updateOperation = download => {
-    const mine=++token;
-    Object.assign(state.update,{phase:download?'downloading':'checking',message:download?'正在下载更新…':'正在检查更新…'}); emit();
-    return new Promise(resolve => {
-      pendingUpdate = () => { if(mine===token) Object.assign(state.update,download?{phase:'downloaded',progress:100,message:'更新已下载'}:{phase:'available',availableVersion:'0.4.4',releaseNotes:'修复连接与模型设置\n<script>untrusted</script>',message:'发现新版本 0.4.4'}); resolve(emit()); };
-      if(!window.__mock.holdUpdate) pendingUpdate();
-      window.__mock.resolveUpdate = pendingUpdate;
-    });
-  };
-  window.__mock = {
-    calls,holdUpdate:false,holdProbe:false,installed:0,
-    /** 返回隔离的磁盘替身快照，供测试断言草稿隔离与密钥保留。 */
-    saved:() => copy(saved),
-    /** 后台更新进度不重建配置页面。 */
-    progress(value) { state.update.progress=value; emit(); },
-    /** 为测试推送可信绑定快照中的阶段，不在正式资源中提供此入口。 */
-    phase(phase) { Object.assign(state.update,{phase,availableVersion:'0.4.4',message:phase,progress:phase==='downloaded'?100:0}); emit(); },
-  };
-  window.runtime = {
-    /** 只注册本页面桌面状态回调。 */
-    EventsOn(event,callback) { listener=callback; },
-  };
-  window.go = {desktop:{App:{
-    /** 初始化和刷新只返回版本及安全状态。 */
-    GetState:async () => copy(state),
-    /** 实现正式固定路由语义，不调用 HTTP 或实际文件系统。 */
-    async API(route,body) {
-      const input=body ? JSON.parse(body):null; calls.push({route,input:copy(input)});
-      if(route==='/api/config') return {config:editable(),path:'isolated-test/models.json'};
-      if(route==='/api/config/save') { persist(input.name,input.config.models[input.name]); return {config:editable()}; }
-      if(route==='/api/config/copy') { const name=input.name+'-copy'; persist(name,{...input.config.models[input.name],savedName:undefined,apiKey:saved.models[input.name]?.apiKey}); return {name,config:editable()}; }
-      if(route==='/api/config/remove') { delete saved.models[input.name]; return {config:editable()}; }
-      if(route==='/api/models') return {models:copy(fixture?.catalogs?.[input.name] || [{id:'gpt-5-extra',contextWindow:1000000},{id:'gpt-5.1-fast-high',contextWindow:128000},{id:'deepseek-v4-flash'},{id:'candidate-model',contextWindow:64000}])};
-      if(route==='/api/probe') return new Promise(resolve => { pendingProbe=resolve; window.__mock.resolveProbe=()=>resolve({ok:true,message:'测试成功'}); if(!window.__mock.holdProbe) resolve({ok:true,message:'测试成功'}); });
-      throw Error('Unexpected route: '+route);
-    },
-    /** 请求号取消只结束本次合成测试请求。 */
-    CancelProbe:async () => { if(pendingProbe) pendingProbe({cancelled:true,message:'已取消'}); },
-    /** 同步草稿标志给安装保护，不接收任何配置数据。 */
-    SetDirty:async value => { dirty=value; },
-    /** 已保存连接切换以独立快照为准，不持久化其他草稿。 */
-    EnableRelay:async name => { if(!saved.models[name]) throw Error('连接未保存'); calls.push({route:'EnableRelay',name}); Object.assign(state.relay,{enabled:true,model:name,activeModel:name,activeModelId:saved.models[name].model,message:'主对话已开启'}); return emit(); },
-    /** 关闭仅改变测试状态，不触碰 Codex。 */
-    DisableRelay:async () => { state.relay.enabled=false; return emit(); },
-    /** 模拟可取消检查。 */
-    CheckUpdate:async () => updateOperation(false),
-    /** 模拟可取消下载，关闭弹窗不结束 Promise。 */
-    DownloadUpdate:async () => updateOperation(true),
-    /** 取消网络令牌，不允许旧回调重新就绪。 */
-    CancelUpdate:async () => { token++; state.update.phase='cancelled'; state.update.message='当前操作已取消'; if(pendingUpdate) pendingUpdate(); return emit(); },
-    /** 更新偏好只影响下次打开弹窗。 */
-    SetUpdateAutoCheck:async value => { state.update.autoCheck=value; return emit(); },
-    /** 合成跳过操作不下载。 */
-    SkipUpdate:async () => { state.update.phase='skipped'; return emit(); },
-    /** 断言草稿保护后才进入合成安装阶段。 */
-    InstallUpdate:async () => { if(dirty) throw Error('有草稿'); window.__mock.installed++; state.update.phase='installing'; return emit(); },
-    /** 插件检查使用独立状态。 */
-    CheckPluginUpdate:async () => { state.pluginUpdate={phase:'latest',message:'插件已是最新版本'}; return emit(); },
-    /** 本测试不执行插件安装，仅返回现有状态。 */
-    InstallPlugin:async () => emit(),
-    /** 本测试不执行插件更新，仅返回现有状态。 */
-    UpdatePlugin:async () => emit(),
-    /** 插件取消不改变应用更新状态。 */
-    CancelPluginUpdate:async () => { state.pluginUpdate.phase='cancelled'; return emit(); },
-    /** 页面外链操作只记录，不启动系统浏览器。 */
-    OpenReleases:async () => emit(),
-    /** 退出保护仅返回合成状态。 */
-    ConfirmClose:async () => emit(),
-    /** 取消退出不改动草稿。 */
-    CancelClose:async () => emit(),
-    /** 记录真实页面初始化报告。 */
-    FrontendReady:report => { window.__mock.ready=report; },
-  }}};
-}
-
-/** 在固定资源白名单本地服务器和全新浏览器上下文中验证正式行为、视口边界与截图。 */
-async function main() {
-  fs.mkdirSync(output,{recursive:true});
-  const server=http.createServer((req,res) => {
-    const name=new URL(req.url,'http://localhost').pathname.slice(1) || 'index.html';
-    if(!assets.includes(name)) { res.writeHead(404); res.end(); return; }
-    res.setHeader('Content-Type',name.endsWith('.css')?'text/css':name.endsWith('.js')?'text/javascript':'text/html'); res.end(fs.readFileSync(path.join(__dirname,name)));
+/** 仅提供正式嵌入白名单资源，测试服务器没有任何模型或文件操作接口。 */
+async function serve() {
+  const server = http.createServer((req, res) => {
+    const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
+    if (!assets.includes(name)) {res.writeHead(404); res.end(); return;}
+    res.setHeader('Content-Type', name.endsWith('.css') ? 'text/css' : name.endsWith('.js') ? 'text/javascript' : 'text/html');
+    res.end(fs.readFileSync(path.join(__dirname, name)));
   });
-  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
-  const origin='http://127.0.0.1:'+server.address().port;
-  const browser=await chromium.launch({...(process.env.CHROME_PATH ? {executablePath:process.env.CHROME_PATH} : {}),headless:true});
-  const context=await browser.newContext({viewport:{width:1073,height:884}});
-  const errors=[],outside=[]; let layouts=0;
-  await context.route('**/*',route => { if(route.request().url().startsWith(origin+'/')) return route.continue(); outside.push(route.request().url()); return route.abort(); });
-  await context.addInitScript(mockBindings);
-  const page=await context.newPage(); page.on('pageerror',error => errors.push(error.stack));
-  const groups=[];
-  /** 执行一个具名行为组并记录；失败即退出，避免把后续连锁失败误判为独立问题。 */
-  async function check(name,operation) { await operation(); groups.push(name); console.log('PASS '+name); }
-  /** 等待异步绑定和保存锁完成后再操作下一控件。 */
-  async function settled() { await page.waitForFunction(() => window.__mock.ready && !document.querySelector('#save').disabled); }
-  /** 切换配置页签并断言只有一个可见面板，不丢失输入。 */
-  async function tab(name) { await page.locator('#tab-'+name).click(); assert.equal(await page.locator('#panel-'+name).isVisible(),true); }
-  /** 用侧栏管理指定连接；窄屏先打开抽屉。 */
-  async function manage(name) { if(await page.locator('#sidebar-toggle').isVisible() && !await page.locator('#connection-sidebar').evaluate(el => !el.inert)) await page.locator('#sidebar-toggle').click(); await page.locator('.model-select[data-name="'+name+'"]').click(); }
-  try {
-    await page.goto(origin); await settled();
-    await check('正式页面初始化、四页签与移除冗余文案',async () => {
-      assert.equal(await page.locator('[role=tab]').count(),4); assert.equal(await page.locator('[data-effort]').count(),9);
-      assert.equal(await page.locator('details, #remove-picker-model-dialog, .table-footer, .reasoning-caption, .protocol-badge').count(),0);
-      assert.equal(await page.locator('#apiKey').inputValue(),''); assert.equal((await page.locator('body').innerText()).includes('synthetic-test-secret'),false);
-      assert.equal(await page.locator('.model-catalog-head').isVisible(),true);
-      assert.equal(await page.locator('.model-default-tag:visible').count(),1);
-      assert.equal(await page.locator('#select-all-models').evaluate(el => el.getBoundingClientRect().width),13);
-      assert.equal(await page.locator('#panel-model').evaluate(el => getComputedStyle(el).paddingLeft),'22px');
-    });
-    await check('总览选连接不进详情，独立管理无协议或模型下拉',async () => {
-      await page.locator('#overview-entry').click(); await page.locator('[data-select-connection=review]').click();
-      assert.equal(await page.locator('#overview-page').isVisible(),true); assert.equal(await page.locator('[data-select-connection=review]').getAttribute('aria-pressed'),'true');
-      assert.equal(await page.locator('#overview-page select').count(),0); assert.equal(await page.locator('#overview-page').innerText().then(s => s.includes('Responses')),false);
-      await page.locator('[data-manage-connection=cpa]').click(); await tab('connection');
-    });
-    await check('总览搜索保留输入焦点，按全部已选模型匹配且不改写选择',async () => {
-      await page.locator('#overview-entry').click();
-      await page.locator('#connection-search').fill('deepseek');
-      assert.equal(await page.locator('.provider-card').count(),3);
-      assert.equal(await page.locator('#connection-search:focus').count(),1);
-      await page.locator('#connection-search').fill('no-such-connection');
-      assert.equal(await page.locator('.provider-card').count(),0);
-      assert.equal(await page.locator('.empty-state strong').textContent(),'还没有匹配的连接');
-      await page.locator('#connection-search').fill('review');
-      assert.equal(await page.locator('.provider-card').count(),1);
-      await page.locator('#connection-search').fill('');
-      assert.equal(await page.locator('[data-select-connection=cpa]').getAttribute('aria-pressed'),'true');
-      await page.locator('[data-manage-connection=cpa]').click(); await tab('model');
-      await page.locator('#workspace').focus(); await page.keyboard.press('/');
-      assert.equal(await page.locator('#model-search:focus').count(),1);
-      assert.equal(await page.locator('#pull-models svg').evaluate(el => getComputedStyle(el).display),'block');
-      await tab('connection');
-    });
-    await check('连接改名后模型回调、目录与凭据来源仍有效',async () => {
-      await page.locator('#name').fill('renamed'); await page.locator('#baseUrl').click();
-      await tab('model'); await page.locator('#pull-models').click(); await page.waitForFunction(() => document.querySelectorAll('.model-catalog-row').length===4);
-      await page.locator('.model-catalog-row[data-model-id="candidate-model"] input').check(); await page.locator('#save').click(); await settled();
-      const saved=await page.evaluate(() => window.__mock.saved()); assert(!saved.models.cpa); assert.equal(saved.models.renamed.apiKey,'synthetic-test-secret'); assert(saved.models.renamed.relayModels.includes('candidate-model'));
-    });
-    await check('定点保存保留其他连接草稿及未保存连接',async () => {
-      await manage('review'); await tab('purpose'); await page.locator('#description').fill('review draft');
-      await manage('batch'); await tab('purpose'); await page.locator('#description').fill('batch saved'); await page.locator('#save').click(); await settled();
-      const saved=await page.evaluate(() => window.__mock.saved()); assert.equal(saved.models.review.description,'review saved'); assert.equal(saved.models.batch.description,'batch saved');
-      await manage('review'); await tab('purpose'); assert.equal(await page.locator('#description').inputValue(),'review draft');
-    });
-    await check('九档思考键盘、用途标签、计数与单连接放弃',async () => {
-      await page.locator('[data-purpose="0"]').click(); assert.match(await page.locator('#purpose-count').innerText(),/\/ 300/);
-      await tab('model'); await page.locator('[data-effort=ultra]').click(); await page.locator('[data-effort=ultra]').press('Home'); assert.equal(await page.locator('[data-effort=""]').getAttribute('aria-checked'),'true');
-      await page.locator('#discard-current').click(); await page.locator('#confirm-discard-current').click(); await tab('purpose'); assert.equal(await page.locator('#description').inputValue(),'review saved');
-    });
-    await check('高级覆盖保留输入、范围在上方、恢复默认',async () => {
-      await tab('advanced'); assert.equal(await page.locator('#maxTokens').isDisabled(),true);
-      await page.locator('#advanced-override').click(); await page.locator('#maxTokens').fill('12000'); await page.locator('#advanced-override').click();
-      assert.equal(await page.locator('#maxTokens').inputValue(),'12000'); assert.equal(await page.locator('#maxTokens').isDisabled(),true);
-      assert.match(await page.locator('#firstResponseTimeoutSeconds').locator('..').innerText(),/10–600 秒/);
-      await page.locator('#reset-advanced').click(); assert.equal(await page.locator('#maxTokens').inputValue(),'4096'); assert.equal(await page.locator('#advanced-override').getAttribute('aria-checked'),'false');
-      await page.locator('#save').click(); await settled();
-    });
-    await check('模型容量、全选、默认切换、即时移除与撤销',async () => {
-      await manage('renamed'); await tab('model'); await page.locator('#pull-models').click();
-      const row=page.locator('.model-catalog-row[data-model-id="gpt-5-extra"]'); assert.match(await row.innerText(),/256K/);
-      await row.locator('[data-remove-model]').click(); await page.locator('[data-notice-key=model-remove] .notice-action').click(); assert.equal(await row.locator('input').isChecked(),true);
-      await page.locator('.model-catalog-row[data-model-id="candidate-model"] [data-set-default]').click(); assert.equal(await page.locator('.model-catalog-row[data-model-id="candidate-model"] [data-set-default]').getAttribute('aria-pressed'),'true');
-      assert.equal(await page.locator('.model-catalog-row[data-model-id="candidate-model"] .model-default-tag').isVisible(),true); assert.equal(await row.locator('.model-default-tag').isVisible(),false);
-      await page.locator('#select-all-models').uncheck(); assert.equal(await page.locator('#picker').getAttribute('data-selected-count'),'0');
-      await page.locator('#select-all-models').check(); assert.equal(await page.locator('#picker').getAttribute('data-selected-count'),'4');
-      await page.locator('#save').click(); await settled();
-    });
-    await check('手动模型、编辑校验和搜索不改写选择',async () => {
-      await page.locator('#add-manual-model').click(); await page.locator('#manual-model-id').fill('custom-model'); await page.locator('#manual-model-form button[type=submit]').click();
-      const row=page.locator('.model-catalog-row[data-model-id="custom-model"]'); assert.equal(await row.locator('input').isChecked(),true);
-      await row.locator('[data-rename-model]').click(); await page.locator('#edit-model-id').fill(''); await page.locator('#rename-model-form button[type=submit]').click(); assert.equal(await page.locator('#rename-model-dialog').isVisible(),true);
-      await page.locator('#edit-model-id').fill('custom-model'); await page.locator('#model-display-name').fill('手动模型'); await page.locator('#rename-model-form button[type=submit]').click(); assert.match(await row.innerText(),/手动模型/);
-      await page.locator('#model-search').fill('手动模型'); assert.equal(await page.locator('.model-catalog-row').count(),1); assert.equal(await row.locator('[data-reorder-model]').getAttribute('aria-disabled'),'true');
-      await page.locator('#clear-model-search').click(); assert.equal(await page.locator('#picker').getAttribute('data-selected-count'),'5');
-      await page.locator('#save').click(); await settled(); assert.equal(await page.evaluate(() => window.__mock.saved().models.renamed.modelNames['custom-model']),'手动模型');
-    });
-    await check('新连接默认关闭覆盖、草稿放弃不删除其他保存项',async () => {
-      await page.locator('#add').click(); assert.equal(await page.locator('#panel-connection').isVisible(),true); const name=await page.locator('#name').inputValue();
-      await tab('advanced'); assert.equal(await page.locator('#advanced-override').getAttribute('aria-checked'),'false'); assert.equal(await page.locator('#firstResponseTimeoutSeconds').inputValue(),'180');
-      await page.locator('#discard-current').click(); await page.locator('#confirm-discard-current').click(); assert.equal(await page.locator('.model-select[data-name="'+name+'"]').count(),0); assert.equal(Object.keys(await page.evaluate(() => window.__mock.saved().models)).length,3);
-    });
-    await check('主对话跟随已保存连接，草稿不切换且不丢失',async () => {
-      await page.locator('#relay-switch').click(); await page.waitForFunction(() => document.querySelector('#relay-switch').getAttribute('aria-checked')==='true');
-      assert.equal(await page.locator('#relay-label').evaluate(el => el.classList.contains('warm')),true);
-      await manage('batch'); await page.waitForFunction(() => window.__mock.calls.some(c => c.route==='EnableRelay' && c.name==='batch'));
-      await tab('purpose'); await page.locator('#description').fill('batch unsaved'); await manage('review'); await page.waitForFunction(() => window.__mock.calls.some(c => c.route==='EnableRelay' && c.name==='review'));
-      const before=await page.evaluate(() => window.__mock.calls.filter(c => c.route==='EnableRelay').length); await manage('batch');
-      assert.equal(await page.evaluate(() => window.__mock.calls.filter(c => c.route==='EnableRelay').length),before); await tab('purpose'); assert.equal(await page.locator('#description').inputValue(),'batch unsaved');
-      await page.locator('#save').click(); await settled(); await page.waitForFunction(() => window.__mock.calls.filter(c => c.route==='EnableRelay' && c.name==='batch').length===2);
-    });
-    await check('图标复制定位到连接页，原 Key 不回显',async () => {
-      await page.locator('#copy-current').click(); await settled(); assert.equal(await page.locator('#panel-connection').isVisible(),true); assert.equal(await page.locator('#name').inputValue(),'batch-copy'); assert.equal(await page.locator('#apiKey').inputValue(),'');
-    });
-    await check('真实测试入口可取消且迟到成功不覆盖',async () => {
-      await page.evaluate(() => { window.__mock.holdProbe=true; }); await page.locator('#probe').click(); await page.locator('#cancel-probe').click();
-      await page.waitForFunction(() => document.querySelector('#cancel-probe').hidden); await page.evaluate(() => window.__mock.resolveProbe()); assert.match(await page.locator('#probe-result').innerText(),/取消/);
-    });
-    await check('更新弹窗保持草稿与页签，关闭≠取消，真实偏好与迟到保护',async () => {
-      await tab('purpose'); await page.locator('#description').fill('modal preserved'); await page.evaluate(() => { window.__mock.holdUpdate=true; });
-      await page.locator('#update-entry').click(); await page.locator('#update-dialog [data-close]').click(); assert.equal(await page.locator('#update-dialog').isVisible(),false); assert.equal(await page.locator('#description').inputValue(),'modal preserved');
-      await page.locator('#update-entry').click(); await page.locator('#cancel-update').click(); await page.waitForFunction(() => !document.querySelector('#recheck-update').disabled);
-      await page.evaluate(() => window.__mock.resolveUpdate()); assert.match(await page.locator('#update-state').innerText(),/取消/);
-      await page.locator('#update-auto-check').uncheck(); await page.waitForFunction(() => !document.querySelector('#update-auto-check').disabled);
-      await page.locator('#update-dialog [data-close]').click(); await page.locator('#update-entry').click(); assert.equal(await page.locator('#update-title').innerText(),'更新操作已取消');
-      await page.evaluate(() => { window.__mock.holdUpdate=false; }); await page.locator('#recheck-update').click(); await page.waitForFunction(() => !document.querySelector('#check-update').disabled);
-      assert.match(await page.locator('#update-notes').innerText(),/<script>untrusted/); assert.equal(await page.locator('#update-notes script').count(),0);
-      await page.locator('#skip-update').click(); await page.waitForFunction(() => document.querySelector('#update-title').textContent==='已跳过此版本');
-      assert.equal(await page.locator('#check-update').isVisible(),false); await page.locator('#recheck-update').click(); await page.waitForFunction(() => !document.querySelector('#check-update').disabled);
-      await page.locator('#check-update').click(); await page.waitForFunction(() => document.querySelector('#update-title').textContent==='更新已准备好');
-      assert.equal(await page.locator('#check-update').isDisabled(),true); assert.equal(await page.locator('#update-draft-note').isVisible(),true); assert.equal(await page.evaluate(() => window.__mock.installed),0);
-      await page.locator('#update-dialog [data-close]').click(); assert.equal(await page.locator('#description').inputValue(),'modal preserved');
-    });
-    await check('插件与帮助为独立页面，返回保留连接草稿',async () => {
-      await page.locator('#plugin-entry').click(); assert.equal(await page.locator('#plugin-page').isVisible(),true); await page.locator('#check-plugin-update').click();
-      assert.equal(await page.locator('.plugin-card-heading').count(),1); assert.equal(await page.locator('.plugin-features span').count(),2);
-      await page.locator('#plugin-help-entry').click(); assert.equal(await page.locator('#help-page').isVisible(),true);
-      assert.equal(await page.locator('.feature-card').count(),2); assert.equal(await page.locator('.help-block').count(),3);
-      await page.locator('#help-plugin-entry').click(); assert.equal(await page.locator('#plugin-page').isVisible(),true);
-      await page.locator('#help-entry').click(); await page.locator('#help-current-connection').click();
-      await tab('purpose'); assert.equal(await page.locator('#description').inputValue(),'modal preserved');
-    });
-    await page.locator('#discard-current').click(); await page.locator('#confirm-discard-current').click();
-    await page.evaluate(() => document.querySelectorAll('[data-notice-key]').forEach(node => window.notices.clear(node.dataset.noticeKey)));
-    await check('侧栏菜单优先靠右，操作不改变当前选择',async () => {
-      await page.locator('[data-menu=review]').click(); const box=await page.locator('#model-menu').boundingBox(); assert(box.x>=198); assert.equal(await page.locator('#model-menu').getAttribute('data-placement'),'right');
-      assert.equal(await page.locator('#model-menu-name').textContent(),'review');
-      await page.locator('#model-menu').press('Escape'); assert.equal(await page.locator('#connection-title').innerText(),'batch-copy');
-    });
-    for(const width of [1366,1132,1073,993,913,751,700,390,320]) {
-      await page.setViewportSize({width,height:884});
-      for(const name of ['connection','model','purpose','advanced']) {
-        await tab(name);
-        // 窄屏页签按已确认原型横向滚动；只排除其被裁切的非当前按钮，仍严格验证当前页签与其余控件。
-        const overflow=await page.evaluate(() => { const visible=[...document.querySelectorAll('main button, main input, main textarea, main select')].filter(el => el.getClientRects().length && !el.closest('[hidden]') && (!el.closest('#config-tabs') || el.getAttribute('aria-selected') === 'true')); return visible.filter(el => {const r=el.getBoundingClientRect();return r.left < -1 || r.right > innerWidth+1;}).map(el => el.id || el.className); });
-        assert.deepEqual(overflow,[],`${width} ${name} controls outside viewport`);
-        const tabBounds=await page.locator('#config-tabs').boundingBox(); assert(tabBounds.x>=0 && tabBounds.x+tabBounds.width<=width+1,`${width} tab container outside viewport`);
-        await page.screenshot({animations:'disabled',path:path.join(output,`${width}-${name}.png`)});
-        layouts++;
-      }
-      for(const name of ['overview','plugin','help']) {
-        if(await page.locator('#sidebar-toggle').isVisible()) await page.locator('#sidebar-toggle').click();
-        await page.locator('#'+name+'-entry').click();
-        const overflow=await page.locator('#'+name+'-page').evaluate(el => [...el.querySelectorAll('button')].filter(button => {const r=button.getBoundingClientRect(); return r.width && (r.left<0 || r.right>innerWidth+1);}).map(el => el.id || el.className));
-        assert.deepEqual(overflow,[],`${width} ${name} overflow`); await page.screenshot({animations:'disabled',path:path.join(output,`${width}-${name}.png`)}); layouts++;
-      }
-      await page.locator('#update-entry').click();
-      const dialog=await page.locator('#update-dialog').boundingBox(); assert(dialog.x>=0 && dialog.y>=0 && dialog.x+dialog.width<=width+1 && dialog.y+dialog.height<=885);
-      await page.screenshot({animations:'disabled',path:path.join(output,`${width}-update.png`)}); layouts++;
-      await page.locator('#update-dialog [data-close]').click(); await manage('batch-copy');
-    }
-    groups.push(layouts+' 个响应式布局与截图');
-    await check('320px 横向页签与键盘导航符合原型',async () => {
-      await page.locator('#tab-model').press('Home'); assert.equal(await page.locator('#tab-connection').getAttribute('aria-selected'),'true');
-      await page.locator('#tab-connection').press('End'); assert.equal(await page.locator('#tab-advanced').getAttribute('aria-selected'),'true');
-      const box=await page.locator('#tab-advanced').boundingBox(), container=await page.locator('#config-tabs').boundingBox(); assert(box.x>=container.x-1 && box.x+box.width<=container.x+container.width+1);
-      assert(await page.locator('#config-tabs').evaluate(el => el.scrollLeft>0));
-    });
-    await check('320px 抽屉、右侧菜单与移动排序',async () => {
-      await page.locator('#sidebar-toggle').click(); await page.locator('[data-menu=review]').click(); const box=await page.locator('#model-menu').boundingBox(); assert(box.x>=8 && box.x+box.width<=312);
-      await page.locator('#model-menu').press('Escape'); await page.locator('.model-select[data-name=review]').click(); await tab('model');
-      const row=page.locator('.model-catalog-row').first(); await row.locator('[data-move-down]').click(); assert.equal(await page.locator('[data-move-down]:focus').count(),1);
-      await page.screenshot({path:path.join(output,'320-mobile-sort.png')});
-    });
-    assert.deepEqual(errors,[]); assert.deepEqual(outside,[]);
-    fs.writeFileSync(path.join(output,'browser-qa.json'),JSON.stringify({groups,layouts,scriptErrors:errors,outsideRequests:outside},null,2));
-    console.log(`Verified ${groups.length} groups, ${layouts} layouts; no script errors or external requests.`);
-  } finally { await browser.close(); server.close(); }
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return {server, origin: `http://127.0.0.1:${server.address().port}`};
 }
-if (require.main === module) main().catch(error => { console.error(error); process.exitCode=1; });
-module.exports = {mockBindings,assets};
+/** 创建带真实资源与隔离 Go 绑定的页面，记录脚本错误及非本地请求。 */
+async function createPage(browser, origin, fixture, report, viewport = {width: 1204, height: 884}) {
+  const page = await browser.newPage({viewport});
+  page.on('pageerror', error => report.errors.push(error.message));
+  await page.route('**/*', route => {if (route.request().url().startsWith(origin)) return route.continue(); report.external.push(route.request().url()); return route.abort();});
+  await page.addInitScript(mockBindings, fixture);
+  await page.goto(origin); await page.waitForFunction(() => window.__mock?.ready?.configLoaded); await page.evaluate(() => document.fonts.ready);
+  return page;
+}
+/** 查看连接仅通过公开导航进入，不访问前端内部状态或改变接入配置。 */
+async function openConnection(page, id = 'cpa', tab = '连接信息') {
+  const nav = page.locator('.sidebar .nav-button').filter({hasText: '我的连接'});
+  if (await nav.isVisible()) await nav.click(); else {await page.getByRole('button', {name: '打开导航', exact: true}).click(); await page.locator('.mobile-sidebar .nav-button').filter({hasText: '我的连接'}).click();}
+  await page.getByRole('button', {name: `管理连接 ${id}`, exact: true}).click();
+  await page.getByRole('tab', {name: tab, exact: false}).click();
+}
+/** 返回仅属于测试的保存和运行副本。 */
+async function snapshot(page) {return page.evaluate(() => window.__mock.snapshot());}
+/** 检查视口横向适配及控制器错误，长表格只能纵向增长。 */
+async function layout(page, label, report) {
+  const result = await page.evaluate(() => ({viewport: innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth, invalidNesting: document.querySelectorAll('button button').length}));
+  assert(result.document <= result.viewport + 1, `${label}: horizontal overflow ${JSON.stringify(result)}`); assert.equal(result.invalidNesting, 0);
+  report.layouts.push({label, ...result});
+}
+/** 截图只包含合成配置，用于人工复核所有页面及关键状态。 */
+async function shot(page, name, report) {await page.screenshot({path: path.join(output, name + '.png'), fullPage: true}); report.screenshots.push(name + '.png');}
+/** 按原型语义验证配置作用域、持久化、拖动、取消、弹窗和响应式布局。 */
+async function main() {
+  fs.mkdirSync(output, {recursive: true});
+  const {fixtureConfig, fixtureState} = await import(pathToFileURL(path.join(__dirname, 'tests/fixtures.mjs')));
+  const fixture = {config: fixtureConfig(), state: fixtureState()};
+  const {server, origin} = await serve();
+  const browser = await chromium.launch({headless: true, executablePath: process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined)});
+  const report = {groups: [], layouts: [], screenshots: [], errors: [], external: []};
+  let page;
+  /** 每组使用独立页面，测试副作用不会污染下一组。 */
+  async function check(name, test, data = fixture) {if (page) await page.close(); page = await createPage(browser, origin, data, report); await test(page); report.groups.push(name); console.log('PASS ' + name);}
+  try {
+    const emptyConfig = {version: 1, models: {}, accessConfigs: []};
+    await check('首次启动为空工作区，单一创建入口且不会自动开启接入', async page => {
+      assert.equal(await page.locator('.scope-model-row, [data-directory-connection]').count(), 0);
+      const toggle = page.getByRole('switch', {name: '主对话接入', exact: true});
+      assert.equal(await toggle.getAttribute('aria-checked'), 'false');
+      await toggle.click();
+      await page.getByText('先选择配置，点击「启用此配置」。', {exact: true}).waitFor({state: 'visible'});
+      assert.equal((await snapshot(page)).state.relay.enabled, false);
+      await page.locator('.sidebar .nav-button').filter({hasText: '我的连接'}).click();
+      assert.equal(await page.locator('#main').getByRole('button', {name: '添加连接', exact: true}).count(), 1);
+      await page.locator('#main').getByRole('button', {name: '添加连接', exact: true}).click();
+      assert.equal(await page.getByRole('dialog').count(), 1);
+      assert.equal(await page.getByRole('textbox', {name: '连接名称', exact: true}).inputValue(), '');
+      await page.getByRole('button', {name: '取消', exact: true}).click();
+      assert.deepEqual((await snapshot(page)).saved.models, {});
+      await layout(page, 'first-use-empty', report);
+    }, {config: emptyConfig, state: {...fixtureState(emptyConfig), relay: {enabled: false}}});
+    const manyConfig = fixtureConfig(24);
+    await check('多配置分页、名称搜索和查看均不改变运行范围', async page => {
+      assert.equal(await page.locator('.plan-list [data-plan-id]').count(), 20);
+      await page.getByRole('button', {name: '下一页配置', exact: true}).click();
+      assert.equal(await page.locator('.plan-list [data-plan-id]').count(), 4);
+      assert.match(await page.locator('.plan-list-footer').innerText(), /21–24 \/ 24/);
+      await page.getByRole('searchbox', {name: '搜索配置或连接', exact: true}).fill('代码审查');
+      const names = await page.locator('.plan-list-title strong').allTextContents();
+      assert.equal(names.length, 3); assert(names.every(name => name.includes('代码审查')));
+      await page.locator('.plan-list [data-plan-id]').first().click();
+      assert.equal((await snapshot(page)).state.relay.access.id, 'plan-a');
+      await page.getByRole('searchbox', {name: '搜索配置或连接', exact: true}).fill('不存在的配置');
+      assert.equal(await page.locator('.plan-list [data-plan-id]').count(), 0);
+      await page.locator('.plan-list .empty').getByRole('button', {name: '清空搜索', exact: true}).click();
+      assert.equal(await page.locator('.plan-list [data-plan-id]').count(), 20);
+      await layout(page, 'many-plans-search', report);
+    }, {config: manyConfig, state: fixtureState(manyConfig)});
+    const longConfig = fixtureConfig(), longName = '这是用于验证超长连接名称与右端菜单对齐的测试连接'.repeat(3);
+    longConfig.models[longName] = longConfig.models.cpa; delete longConfig.models.cpa;
+    longConfig.accessConfigs[0].name = '这是一份很长的接入配置名称用于检查标签对齐'.repeat(2);
+    longConfig.lastAccess = JSON.parse(JSON.stringify(longConfig.accessConfigs[0]));
+    await check('超长名称不挤出布局，连接更多菜单靠右且 Escape 恢复焦点', async page => {
+      await layout(page, 'long-plan-name', report);
+      await page.locator('.sidebar .nav-button').filter({hasText: '我的连接'}).click();
+      await layout(page, 'long-connection-name', report);
+      const trigger = page.locator('[data-directory-connection="cpa"] .icon-button'), anchor = await trigger.boundingBox();
+      await trigger.click(); const menu = page.getByRole('menu'); await menu.waitFor({state: 'visible'});
+      const bounds = await menu.boundingBox();
+      assert(Math.abs(bounds.x + bounds.width - anchor.x - anchor.width) <= 1, 'connection menu must align to its right-side trigger');
+      assert(bounds.x >= 0 && bounds.x + bounds.width <= 1204);
+      await page.keyboard.press('Escape'); assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+      await page.locator('[data-directory-connection="cpa"] .connection-directory-open').click();
+      await layout(page, 'long-connection-detail', report);
+    }, {config: longConfig, state: fixtureState(longConfig)});
+    await check('接入工作台、固定标题、无连接子导航/多余上下文', async page => {
+      assert.equal(await page.locator('.scope-model-row').count(), 8); assert.equal(await page.locator('.scope-model-row .capacity').count(), 0); assert.equal(await page.locator('.sidebar .nav-button').count(), 4);
+      assert.equal(await page.locator('.heading-actions').getByRole('button', {name: '添加连接'}).count(), 0);
+      assert.equal(await page.locator('.save-message').count(), 0);
+      const before = await page.locator('.access-status-copy').evaluate(el => ({text: el.innerText, rect: el.getBoundingClientRect().toJSON()}));
+      await page.getByRole('switch', {name: '主对话接入', exact: true}).click();
+      await page.waitForFunction(() => !window.__mock.snapshot().state.relay.enabled);
+      const after = await page.locator('.access-status-copy').evaluate(el => ({text: el.innerText, rect: el.getBoundingClientRect().toJSON()}));
+      assert.deepEqual(after, before); await shot(page, '1204-access-off', report);
+    });
+    await check('查看 B 和关闭重开不切换 A 的运行范围', async page => {
+      await page.locator('[data-plan-id="plan-b"]').click();
+      assert.equal((await snapshot(page)).state.relay.access.id, 'plan-a');
+      await page.getByRole('switch', {name: '主对话接入', exact: true}).click(); await page.waitForFunction(() => !window.__mock.snapshot().state.relay.enabled);
+      await page.getByRole('switch', {name: '主对话接入', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().state.relay.enabled);
+      const value = await snapshot(page); assert.equal(value.state.relay.access.id, 'plan-a'); assert(value.state.relay.access.connectionIDs.includes('worker')); assert(!value.state.relay.access.connectionIDs.includes('review'));
+    });
+    await check('预览选择只改当前配置，仅保存不接入，明确启用才更新', async page => {
+      await page.locator('[data-plan-id="plan-b"]').click(); const before = await snapshot(page);
+      await page.getByRole('checkbox', {name: '配置中选择 cpa / claude-4.7-sonnet', exact: true}).click();
+      await page.getByRole('button', {name: '仅保存', exact: true}).click();
+      await page.waitForFunction(() => window.__mock.snapshot().saved.accessConfigs.find(p => p.id === 'plan-b').modelIDs.cpa.length === 1);
+      let value = await snapshot(page); assert.deepEqual(value.saved.models, before.saved.models); assert.equal(value.state.relay.access.id, 'plan-a');
+      await page.getByRole('button', {name: '启用此配置', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().state.relay.access.id === 'plan-b');
+      value = await snapshot(page); assert.deepEqual(value.state.relay.access.connectionIDs, ['cpa', 'review']); assert.equal(value.state.relay.access.modelIDs.cpa.length, 1); assert.deepEqual(value.saved.models, before.saved.models);
+    });
+    await check('失败保存保留草稿并可重试，错误不只在 toast', async page => {
+      await page.getByRole('textbox', {name: '配置名称', exact: true}).fill('修改后的 A');
+      await page.evaluate(() => {window.__mock.failure = '/api/access/save';});
+      await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.getByText('synthetic operation failed', {exact: true}).waitFor();
+      assert.equal(await page.getByRole('textbox', {name: '配置名称', exact: true}).inputValue(), '修改后的 A');
+      await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().saved.accessConfigs[0].name === '修改后的 A');
+    });
+    await check('配置默认模型独立且移除默认需显式星标', async page => {
+      await page.locator('[data-plan-id="plan-b"]').click();
+      await page.getByRole('button', {name: '设为此配置默认 review / review-model', exact: true}).click();
+      await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().saved.accessConfigs[1].defaultKey === '["review","review-model"]');
+      assert.equal((await snapshot(page)).saved.models.cpa.model, 'gpt-5-extra');
+      await page.getByRole('checkbox', {name: '配置中选择 review / review-model', exact: true}).click();
+      assert.equal(await page.getByRole('button', {name: '保存并启用', exact: true}).isDisabled(), true);
+      assert.equal(await page.locator('.inline-error').count(), 1);
+    });
+    await check('连接定点保存、改名、Key 脱敏及引用不变', async page => {
+      await openConnection(page); assert.equal(await page.getByLabel('API Key', {exact: true}).inputValue(), '');
+      assert.equal(await page.locator('input[autocomplete="new-password"]').inputValue(), '');
+      await page.getByRole('textbox', {name: '连接名称', exact: true}).fill('新的 cpa');
+      await page.getByRole('button', {name: '保存连接', exact: true}).click(); await page.waitForFunction(() => Boolean(window.__mock.snapshot().saved.models['新的 cpa']));
+      const value = await snapshot(page); assert(!value.saved.models.cpa); assert.equal(value.saved.models['新的 cpa'].apiKey, 'synthetic-fixture-secret'); assert.equal(value.saved.models['新的 cpa'].id, 'cpa'); assert(value.saved.accessConfigs.every(p => p.connectionIDs.includes('cpa')));
+    });
+    await check('复制连接先是独立草稿，不覆盖原连接或暴露 Key', async page => {
+      await openConnection(page); await page.getByRole('button', {name: '复制连接 cpa', exact: true}).click();
+      assert.equal(Object.keys((await snapshot(page)).saved.models).length, 3);
+      assert.equal(await page.getByRole('textbox', {name: '连接名称', exact: true}).inputValue(), 'cpa 副本');
+      await page.getByRole('button', {name: '保存连接', exact: true}).click(); await page.waitForFunction(() => Object.keys(window.__mock.snapshot().saved.models).length === 4);
+      const value = await snapshot(page); assert.notEqual(value.saved.models['cpa 副本'].id, value.saved.models.cpa.id); assert.equal(value.saved.models['cpa 副本'].apiKey, 'synthetic-fixture-secret');
+    });
+    await check('模型上下文开关、原生容量、模型设置取消隔离', async page => {
+      await openConnection(page, 'cpa', '模型选择'); await page.getByRole('button', {name: '模型设置 gpt-5-extra', exact: true}).click();
+      assert.equal(await page.getByRole('spinbutton', {name: '上下文大小（tokens）', exact: true}).inputValue(), '256000');
+      await page.getByRole('switch', {name: '设置上下文', exact: true}).click(); assert.equal(await page.getByRole('spinbutton', {name: '上下文大小（tokens）', exact: true}).isDisabled(), true);
+      await page.getByRole('button', {name: '保存模型', exact: true}).click(); await page.getByRole('button', {name: '保存连接', exact: true}).click();
+      await page.waitForFunction(() => window.__mock.snapshot().saved.models.cpa.modelContextOverrides['gpt-5-extra'] === false);
+      const p = (await snapshot(page)).saved.models.cpa; assert.equal(p.modelOfficialContexts['gpt-5-extra'], 1000000); assert.equal(p.modelContextWindows['gpt-5-extra'], undefined);
+      await page.getByRole('button', {name: '模型设置 deepseek-v4-flash', exact: true}).click(); assert.equal(await page.getByRole('spinbutton', {name: '上下文大小（tokens）', exact: true}).inputValue(), '128000');
+      await page.getByRole('spinbutton', {name: '上下文大小（tokens）', exact: true}).fill('64000'); await page.getByRole('button', {name: '取消', exact: true}).click();
+      assert.equal(await page.getByRole('button', {name: '保存连接', exact: true}).isDisabled(), true);
+    });
+    await check('真实鼠标拖动排序，保存后保持目录顺序且配置范围不变', async page => {
+      await openConnection(page, 'cpa', '模型选择'); const before = await snapshot(page), from = await page.getByRole('button', {name: '拖动排序 gpt-5-extra', exact: true}).boundingBox(), to = await page.locator('[data-connection-model="deepseek-v4-flash"]').boundingBox();
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down(); await page.mouse.move(from.x + from.width / 2, to.y + to.height / 2, {steps: 14}); assert.equal(await page.locator('.model-drag-preview').count(), 1); await page.mouse.up();
+      const rows = await page.locator('[data-connection-model]').evaluateAll(nodes => nodes.map(n => n.dataset.connectionModel)); assert.equal(rows[0], 'gpt-5.1-fast-high'); assert.equal(rows[2], 'gpt-5-extra');
+      // dnd-kit 在释放后保留 50ms 的点击抑制，等待其手势清理，避免把紧邻的合成保存点击当作拖动点击。
+      await page.waitForTimeout(80);
+      await page.getByRole('button', {name: '保存连接', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().saved.models.cpa.modelOrder[0] === 'gpt-5.1-fast-high');
+      assert.deepEqual((await snapshot(page)).saved.accessConfigs, before.saved.accessConfigs);
+    });
+    await check('真实触屏手势从手柄拖动，排序与保存不改变配置范围', async page => {
+      await openConnection(page, 'cpa', '模型选择');
+      const before = await snapshot(page), from = await page.getByRole('button', {name: '拖动排序 gpt-5-extra', exact: true}).boundingBox(), to = await page.locator('[data-connection-model="deepseek-v4-flash"]').boundingBox();
+      const input = await page.context().newCDPSession(page);
+      try {
+        await input.send('Emulation.setTouchEmulationEnabled', {enabled: true, maxTouchPoints: 1});
+        const x = from.x + from.width / 2, y = from.y + from.height / 2, end = to.y + to.height / 2;
+        await input.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y, id: 1}]});
+        for (let i = 1; i <= 12; i++) await input.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y: y + (end - y) * i / 12, id: 1}]});
+        assert.equal(await page.locator('.model-drag-preview').count(), 1);
+        await input.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+        const rows = await page.locator('[data-connection-model]').evaluateAll(nodes => nodes.map(n => n.dataset.connectionModel));
+        assert.equal(rows[0], 'gpt-5.1-fast-high'); assert.equal(rows[2], 'gpt-5-extra');
+        await page.waitForTimeout(80);
+        await page.getByRole('button', {name: '保存连接', exact: true}).click();
+        await page.waitForFunction(() => window.__mock.snapshot().saved.models.cpa.modelOrder[0] === 'gpt-5.1-fast-high');
+        assert.deepEqual((await snapshot(page)).saved.accessConfigs, before.saved.accessConfigs);
+      } finally {await input.detach();}
+    });
+    await check('键盘拖动及过滤排序不移动隐藏模型', async page => {
+      await openConnection(page, 'cpa', '模型选择'); await page.getByRole('searchbox', {name: '搜索模型名称或 ID', exact: true}).fill('gpt');
+      const handle = page.getByRole('button', {name: '拖动排序 gpt-5-extra', exact: true}); await handle.focus(); await handle.press('Space'); await handle.press('ArrowDown'); await handle.press('Space');
+      await page.getByRole('searchbox', {name: '搜索模型名称或 ID', exact: true}).fill('');
+      const rows = await page.locator('[data-connection-model]').evaluateAll(nodes => nodes.map(n => n.dataset.connectionModel)); assert.equal(rows[2], 'deepseek-v4-flash'); assert.equal(rows[0], 'gpt-5.1-fast-high');
+    });
+    await check('目录刷新和连接测试可取消且不接受迟到结果', async page => {
+      await openConnection(page); await page.getByRole('button', {name: '测试连接', exact: true}).click(); await page.getByRole('button', {name: '正在测试', exact: true}).waitFor(); assert.equal(await page.locator('.panel .spinner').count(), 1);
+      await page.getByRole('button', {name: '取消', exact: true}).click(); await page.evaluate(() => window.__mock.completeProbe()); await page.getByText('已取消', {exact: true}).waitFor();
+      await page.getByRole('tab', {name: '模型选择', exact: false}).click(); await page.getByRole('button', {name: '刷新', exact: true}).click(); await page.evaluate(() => window.__mock.completeProbe()); await page.getByText('已读取 1 个模型', {exact: true}).waitFor();
+      assert.equal(await page.getByRole('checkbox', {name: '连接中选择模型 new-local-model', exact: true}).isChecked(), false);
+    });
+    await check('应用更新文字前旋转、取消、减少动态效果、插件状态', async page => {
+      await page.getByRole('button', {name: '检查更新', exact: true}).click(); await page.locator('.update-trigger .spinner').waitFor();
+      assert.equal(await page.locator('.update-trigger .spinner').count(), 1); assert.equal(await page.locator('.update-trigger .spinner').evaluate(el => getComputedStyle(el).animationName), 'wait-spin');
+      await page.emulateMedia({reducedMotion: 'reduce'}); assert.equal(await page.locator('.update-trigger .spinner').evaluate(el => getComputedStyle(el).animationName), 'none'); await page.emulateMedia({reducedMotion: 'no-preference'});
+      await shot(page, '1204-update-checking', report); await page.getByRole('button', {name: '取消操作', exact: true}).click(); await page.evaluate(() => window.__mock.completeUpdate()); assert.equal((await snapshot(page)).state.update.phase, 'cancelled');
+      await page.getByRole('button', {name: '关闭弹窗', exact: true}).click(); await page.locator('.sidebar .nav-button').filter({hasText: '插件管理'}).click(); await page.getByRole('button', {name: '检查更新', exact: true}).last().click(); await page.getByRole('button', {name: '正在检查', exact: true}).waitFor(); assert.equal(await page.locator('.plugin-actions .spinner').count(), 1); await page.getByRole('button', {name: '取消', exact: true}).click();
+    });
+    await check('破坏性确认的焦点与 Escape、原生关闭保护', async page => {
+      await openConnection(page); await page.getByRole('button', {name: '删除连接 cpa', exact: true}).click(); assert.equal(await page.getByRole('alertdialog').count(), 1); assert.equal(await page.getByRole('button', {name: '取消', exact: true}).evaluate(el => el === document.activeElement), true); await page.keyboard.press('Escape'); assert.equal(await page.getByRole('alertdialog').count(), 0);
+      await page.getByRole('textbox', {name: '连接名称', exact: true}).fill('草稿'); await page.waitForFunction(() => window.__mock.snapshot().dirty); await page.evaluate(() => window.__mock.requestClose()); await page.getByRole('alertdialog').waitFor(); await page.getByRole('button', {name: '取消', exact: true}).click(); assert.equal(await page.getByRole('textbox', {name: '连接名称', exact: true}).inputValue(), '草稿'); assert.equal((await snapshot(page)).state.relay.enabled, true);
+    });
+    if (page) await page.close(); page = null;
+    for (const width of [320, 390, 640, 820, 1079, 1204, 1440, 1920]) {
+      const p = await createPage(browser, origin, fixture, report, {width, height: 884});
+      await layout(p, `${width}-plans-list`, report); await shot(p, `${width}-plans`, report);
+      await p.locator('[data-plan-id="plan-a"]').click(); await layout(p, `${width}-plans-editor`, report);
+      await openConnection(p); await layout(p, `${width}-connection-info`, report);
+      for (const [tab, label] of [['模型选择', 'models'], ['任务分工', 'purpose'], ['高级设置', 'advanced']]) {await p.getByRole('tab', {name: tab, exact: false}).click(); await layout(p, `${width}-${label}`, report); if ([390, 1079, 1440].includes(width)) await shot(p, `${width}-${label}`, report);}
+      await p.close();
+    }
+    assert.deepEqual(report.errors, []); assert.deepEqual(report.external, []);
+    fs.writeFileSync(path.join(output, 'browser-qa.json'), JSON.stringify(report, null, 2));
+    console.log(`Verified ${report.groups.length} groups, ${report.layouts.length} layouts, ${report.screenshots.length} screenshots; no script errors or external requests.`);
+  } catch (error) {fs.writeFileSync(path.join(output, 'browser-failure.json'), JSON.stringify({...report, failure: error.stack}, null, 2)); if (page && !page.isClosed()) await shot(page, 'failure', report); throw error;} finally {if (page) await page.close(); await browser.close(); server.close();}
+}
+if (require.main === module) main().catch(error => {console.error(error); process.exitCode = 1;});
+module.exports = {serve, createPage, openConnection, snapshot, layout, assets, mockBindings, output};

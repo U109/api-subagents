@@ -37,7 +37,7 @@ func TestNoAutomaticContextsMetadata(t *testing.T) {
 	}
 }
 
-// TestSetupFrontendModules 验证浏览器入口能提供新增界面模块，并继续拒绝访问白名单外的文件。
+// TestSetupFrontendModules 验证浏览器入口只提供正式构建产物，并继续拒绝访问源码、测试和本机文件。
 func TestSetupFrontendModules(t *testing.T) {
 	store, _ := testutil.Config(t, "compatible", "http://127.0.0.1:9/v1")
 	setup, err := StartSetup(NewConfigService(store), frontend.Files)
@@ -45,7 +45,7 @@ func TestSetupFrontendModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer setup.Server.Close()
-	for _, name := range []string{"shell-ui.js", "select-ui.js", "notification-ui.js", "model-picker-ui.js", "model-picker.css", "config-operations.js", "workbench-views.js", "approved-workbench.css"} {
+	for _, name := range []string{"workbench-app.js", "workbench-app.css", "bridge.js"} {
 		response, err := http.Get(setup.Origin + "/" + name)
 		if err != nil {
 			t.Fatal(err)

@@ -20,12 +20,38 @@ type WorkerGateway struct {
 	relay   *Relay
 }
 
-// requestConfig 让执行任务使用提交时的单连接快照，普通挟持模式仍读取最新连接配置。
+// requestConfig 为内部测试及执行任务读取当前请求快照。
 func (r *Relay) requestConfig() (configstore.Config, error) {
+	return r.requestConfigFor(r.Snapshot())
+}
+
+// requestConfigFor 绑定请求开始时的模型范围与参数；凭据从最新磁盘按稳定身份解析，保存不会扩大正在运行的范围。
+func (r *Relay) requestConfigFor(state State) (configstore.Config, error) {
 	if r.workerConfig != nil {
 		return *r.workerConfig, nil
 	}
-	return r.Store.Read()
+	latest, err := r.Store.Read()
+	if err != nil || state.scope == nil {
+		return latest, err
+	}
+	result := configstore.EmptyConfig()
+	for name, profile := range state.scope.Models {
+		id := profile.ID
+		if id == "" {
+			id = name
+		}
+		_, current, exists := latest.FindConnection(id)
+		if !exists {
+			return result, errors.New("接入配置的连接已移除，请重新启用配置。")
+		}
+		// 地址或协议改变时禁止把新供应商的 Key 发往旧快照地址，必须由用户明确更新接入。
+		if current.BaseURL != profile.BaseURL || current.Protocol != profile.Protocol {
+			return result, errors.New("接入连接地址或接口已修改，请重新启用接入配置。")
+		}
+		profile.APIKey, profile.APIKeyEnv, profile.HasKey, profile.SavedName = current.APIKey, current.APIKeyEnv, false, nil
+		result.Models[name] = profile
+	}
+	return result, nil
 }
 
 // StartWorkerGateway 启动带随机令牌的回环网关，复用协议适配但不把真实供应商凭据写入文件。

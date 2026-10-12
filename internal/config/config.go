@@ -21,6 +21,8 @@ var Defaults = map[string]string{"compatible": "https://api.openai.com/v1", "res
 var bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/\-]+`)
 
 type Profile struct {
+	ID                    string                        `json:"id,omitempty"`
+	ModelCatalog          []CatalogModel                `json:"modelCatalog,omitempty"`
 	Protocol              string                        `json:"protocol"`
 	Model                 string                        `json:"model"`
 	BaseURL               string                        `json:"baseUrl"`
@@ -32,6 +34,7 @@ type Profile struct {
 	ModelOrder            []string                      `json:"modelOrder,omitempty"`
 	ModelNames            map[string]string             `json:"modelNames,omitempty"`
 	ModelContextWindows   map[string]int                `json:"modelContextWindows,omitempty"`
+	ModelContextOverrides map[string]bool               `json:"modelContextOverrides,omitempty"`
 	ModelOfficialContexts map[string]int                `json:"modelOfficialContexts,omitempty"`
 	ModelCompatibility    map[string]string             `json:"modelCompatibility,omitempty"`
 	ModelImageInputs      map[string]bool               `json:"modelImageInputs,omitempty"`
@@ -44,11 +47,15 @@ type Profile struct {
 	TaskTimeout           int                           `json:"taskTimeoutMinutes"`
 	HasKey                bool                          `json:"hasKey,omitempty"`
 	SavedName             *string                       `json:"savedName,omitempty"`
+	CopySource            *string                       `json:"copySource,omitempty"`
 }
 
 type Config struct {
-	Version int                `json:"version"`
-	Models  map[string]Profile `json:"models"`
+	Version               int                `json:"version"`
+	Models                map[string]Profile `json:"models"`
+	AccessConfigs         []AccessConfig     `json:"accessConfigs"`
+	LastAccess            *AccessConfig      `json:"lastAccess,omitempty"`
+	LastAccessFingerprint string             `json:"lastAccessFingerprint,omitempty"`
 }
 
 type ConfigStore struct {
@@ -77,18 +84,28 @@ func NewConfigStore(path string) *ConfigStore {
 }
 
 // EmptyConfig 返回首次使用时的空配置，不预置模型或密钥。
-func EmptyConfig() Config { return Config{Version: 1, Models: map[string]Profile{}} }
+func EmptyConfig() Config {
+	return Config{Version: 1, Models: map[string]Profile{}, AccessConfigs: []AccessConfig{}}
+}
 
 // ValidateConfig 补齐旧版默认值并严格校验输入；目录查询可暂不要求模型 ID。
 func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 	var raw struct {
-		Version int                        `json:"version"`
-		Models  map[string]json.RawMessage `json:"models"`
+		Version               int                        `json:"version"`
+		Models                map[string]json.RawMessage `json:"models"`
+		AccessConfigs         []AccessConfig             `json:"accessConfigs"`
+		LastAccess            *AccessConfig              `json:"lastAccess"`
+		LastAccessFingerprint string                     `json:"lastAccessFingerprint"`
 	}
 	if json.Unmarshal(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}), &raw) != nil || raw.Version != 1 || raw.Models == nil {
 		return Config{}, errors.New("配置需要 version: 1 和 models 对象。")
 	}
 	c := EmptyConfig()
+	c.AccessConfigs, c.LastAccess = raw.AccessConfigs, raw.LastAccess
+	c.LastAccessFingerprint = raw.LastAccessFingerprint
+	if c.AccessConfigs == nil {
+		c.AccessConfigs = []AccessConfig{}
+	}
 	if len(raw.Models) > 50 {
 		return c, errors.New("最多配置 50 个模型。")
 	}
@@ -99,6 +116,17 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		p := Profile{MaxTokens: 4096, Stream: true, FirstTimeout: 180, IdleTimeout: 120, TaskTimeout: 15}
 		if bytes.Equal(item, []byte("null")) || json.Unmarshal(item, &p) != nil {
 			return c, errors.New("模型配置字段类型无效。")
+		}
+		if p.ID == "" {
+			p.ID = legacyConnectionID(name)
+		}
+		if len(p.ID) > 200 || strings.IndexFunc(p.ID, unicode.IsControl) >= 0 {
+			return c, errors.New("连接标识无效。")
+		}
+		for _, existing := range c.Models {
+			if existing.ID == p.ID {
+				return c, errors.New("连接标识重复，请通过复制创建新连接。")
+			}
 		}
 		base, ok := Defaults[p.Protocol]
 		if !ok {
@@ -124,6 +152,11 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		p.ModelContextWindows, err = normalizeModelContextWindows(p)
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
+		}
+		p.ModelContextOverrides = normalizeModelContextOverrides(p)
+		p.ModelCatalog, err = normalizeCatalog(p.ModelCatalog)
+		if err != nil {
+			return c, err
 		}
 		p.ModelOfficialContexts, err = normalizeModelOfficialContexts(p)
 		if err != nil {
@@ -155,6 +188,9 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 		p.Description = shared.Clip(p.Description, 300)
 		c.Models[name] = p
 	}
+	if err := validateAccessStructure(c); err != nil {
+		return c, err
+	}
 	return c, nil
 }
 
@@ -177,7 +213,15 @@ func (s *ConfigStore) Read() (Config, error) {
 	if err != nil {
 		return Config{}, errors.New("无法读取模型配置，请检查文件权限。")
 	}
-	return ValidateConfig(data, true)
+	c, err := ValidateConfig(data, true)
+	if err == nil {
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf}), &fields)
+		if _, present := fields["accessConfigs"]; !present {
+			c.MigrateAccess()
+		}
+	}
+	return c, err
 }
 
 // Save 校验并保存纯配置，不把界面的 hasKey 和 savedName 标记写入磁盘。
@@ -189,6 +233,7 @@ func (s *ConfigStore) Save(c Config) error {
 	for name, p := range c.Models {
 		p.HasKey = false
 		p.SavedName = nil
+		p.CopySource = nil
 		c.Models[name] = p
 	}
 	return shared.AtomicWrite(s.Path, append(shared.Marshal(c), '\n'), 0600)
@@ -197,18 +242,27 @@ func (s *ConfigStore) Save(c Config) error {
 // Editable 返回隐藏 Key 的副本，原名称用于改名和复制时追溯已保存凭据。
 func Editable(c Config) Config {
 	result := c
+	result.AccessConfigs = CloneAccessConfigs(c.AccessConfigs)
+	result.LastAccess = CloneAccess(c.LastAccess)
 	result.Models = map[string]Profile{}
 	for name, p := range c.Models {
 		p.RelayModels = append([]string(nil), p.RelayModels...)
+		p.ModelCatalog = append([]CatalogModel(nil), p.ModelCatalog...)
 		p.ModelOrder = append([]string(nil), p.ModelOrder...)
 		p.ModelNames = maps.Clone(p.ModelNames)
 		p.ModelContextWindows = maps.Clone(p.ModelContextWindows)
+		p.ModelContextOverrides = maps.Clone(p.ModelContextOverrides)
 		p.ModelOfficialContexts = maps.Clone(p.ModelOfficialContexts)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
 		p.ModelImageInputs = maps.Clone(p.ModelImageInputs)
 		p.ModelOutputs = maps.Clone(p.ModelOutputs)
+		if p.AdvancedOverride != nil {
+			value := *p.AdvancedOverride
+			p.AdvancedOverride = &value
+		}
 		p.HasKey = p.APIKey != "" || (p.APIKeyEnv != "" && os.Getenv(p.APIKeyEnv) != "")
 		p.APIKey = ""
+		p.CopySource = nil
 		source := name
 		p.SavedName = &source
 		result.Models[name] = p
@@ -241,6 +295,23 @@ func MergeKeys(data []byte, previous Config, requireModel bool) (Config, error) 
 	sources := map[string]bool{}
 	for name, p := range c.Models {
 		source := name
+		if p.CopySource != nil {
+			if p.SavedName != nil {
+				return c, errors.New("复制来源与改名来源不能同时指定。")
+			}
+			var origin Profile
+			var exists bool
+			source, origin, exists = previous.FindConnection(*p.CopySource)
+			if !exists {
+				return c, errors.New("复制来源已不存在，请重新复制连接。")
+			}
+			if p.APIKey == "" && p.HasKey && (origin.BaseURL != p.BaseURL || origin.Protocol != p.Protocol) {
+				return c, errors.New("复制来源的接口或地址已改变，请重新复制或填写新的 Key。")
+			}
+			if _, exists := previous.Models[name]; exists {
+				return c, errors.New("连接名称已被另一连接使用。")
+			}
+		}
 		if p.SavedName != nil {
 			source = *p.SavedName
 			if _, ok := previous.Models[source]; !ok {
