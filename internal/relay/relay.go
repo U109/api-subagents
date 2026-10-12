@@ -30,15 +30,16 @@ import (
 )
 
 type State struct {
-	Enabled       bool                      `json:"enabled"`
-	Model         string                    `json:"model"`
-	ActiveModel   string                    `json:"activeModel"`
-	ActiveModelID string                    `json:"activeModelId,omitempty"`
-	Address       string                    `json:"address"`
-	Message       string                    `json:"message"`
-	Requests      uint64                    `json:"requests"`
-	Access        *configstore.AccessConfig `json:"access,omitempty"`
-	scope         *configstore.Config
+	Enabled        bool                      `json:"enabled"`
+	Model          string                    `json:"model"`
+	ActiveModel    string                    `json:"activeModel"`
+	ActiveModelID  string                    `json:"activeModelId,omitempty"`
+	Address        string                    `json:"address"`
+	Message        string                    `json:"message"`
+	Requests       uint64                    `json:"requests"`
+	Access         *configstore.AccessConfig `json:"access,omitempty"`
+	RecentRequests []RequestResult           `json:"recentRequests,omitempty"`
+	scope          *configstore.Config
 }
 type Relay struct {
 	Store         *configstore.ConfigStore
@@ -56,6 +57,7 @@ type Relay struct {
 	workerConfig  *configstore.Config
 	requestLimit  int
 	limitExceeded bool
+	epoch         uint64
 	// responsesRetryWait 仅用于隔离测试注入等待；正式网关使用可取消的退避，worker 不自动重试。
 	responsesRetryWait func(context.Context, time.Duration) error
 }
@@ -65,12 +67,13 @@ func New(store *configstore.ConfigStore, codex codexconfig.CodexConfig) *Relay {
 	return &Relay{Store: store, Codex: codex, Client: providers.NewProvider().Client, state: State{Message: "未开启：Codex 使用自己的模型配置"}, slots: make(chan struct{}, 8)}
 }
 
-// Snapshot 返回不含 Key、令牌和 Codex 备份的状态，供左侧连接标识显示。
+// Snapshot 返回独立的接入配置和脱敏请求历史副本，不包含 Key、令牌或 Codex 备份。
 func (r *Relay) Snapshot() State {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	state := r.state
 	state.Access = configstore.CloneAccess(state.Access)
+	state.RecentRequests = append([]RequestResult(nil), r.state.RecentRequests...)
 	return state
 }
 
@@ -165,6 +168,7 @@ func (r *Relay) enableConfig(config configstore.Config, model string, access *co
 	r.host = host
 	r.server = server
 	r.cancel = cancel
+	r.epoch++
 	r.state = State{Enabled: true, Model: model, Address: "http://" + host + "/v1", Message: "已开启，请完全退出并重启 Codex 加载本地路由", Access: configstore.CloneAccess(access), scope: scope}
 	r.mu.Unlock()
 	go func() { _ = server.Serve(listener) }()
@@ -198,6 +202,7 @@ func (r *Relay) disableLocked() error {
 	server, cancel := r.server, r.cancel
 	r.server = nil
 	r.cancel = nil
+	r.epoch++
 	r.state = State{Access: r.state.Access, Message: "已恢复原配置，请完全退出并重启 Codex；旧对话改用账号登录时请选择账号支持的模型，不要保留挟持模型"}
 	r.mu.Unlock()
 	if cancel != nil {
@@ -375,6 +380,12 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	r.mu.Lock()
+	// 鉴权后读取配置期间可能关闭并重启网关，旧令牌请求不能计入新的启用周期。
+	if !r.state.Enabled || r.token != token {
+		r.mu.Unlock()
+		replyError(w, 503, "本次网关入口已关闭，请重新连接。")
+		return
+	}
 	if r.requestLimit > 0 && r.state.Requests >= uint64(r.requestLimit) {
 		r.limitExceeded = true
 		r.mu.Unlock()
@@ -385,10 +396,14 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.state.ActiveModelID = profile.Model
 	r.state.Requests++
 	r.state.Message = "Codex 请求已接入本地网关，当前模型：" + profile.Model
+	var trace *requestTrace
+	if profile.Protocol == "responses" {
+		trace = r.startTraceLocked(connection, profile)
+	}
 	r.mu.Unlock()
 	r.notify()
 	if profile.Protocol == "responses" {
-		r.forwardResponses(w, req, data, profile)
+		r.forwardResponses(w, req, data, profile, trace)
 		return
 	}
 	r.forward(w, req, input, profile)

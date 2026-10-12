@@ -16,7 +16,7 @@ import (
 	configstore "github.com/U109/api-subagents/internal/config"
 )
 
-// TestResponsesPassthroughExactBytes 验证仅替换模型和凭据，未知字段、精确数值、正文及 SSE 都逐字保留；429 不重试，持续 502/503 有限尝试后连同请求 ID 原样透传。
+// TestResponsesPassthroughExactBytes 验证仅替换模型和凭据；502/503 有限恢复后仍原样返回最后错误，其余正文、头和 SSE 逐字保留。
 func TestResponsesPassthroughExactBytes(t *testing.T) {
 	for _, tc := range []struct {
 		name, contentType, response string
@@ -25,9 +25,9 @@ func TestResponsesPassthroughExactBytes(t *testing.T) {
 		{"json", "application/json", `{ "id":"r1", "usage":{"input_tokens":9007199254740993}, "output":[{"text":"<thinking>literal</thinking>"}], "vendor":{"unknown":true} }`, 200},
 		{"sse", "text/event-stream", ": heartbeat\r\nid: 17\r\nretry: 2000\r\nevent: vendor.custom\r\ndata: {\"text\":\"<thinking>literal</thinking>\"}\r\n\r\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\",\"output\":[],\"usage\":{\"input_tokens\":1}}}\n\ndata: [DONE]\n\n", 200},
 		{"upstreamError", "application/json", `{"error":{"code":"vendor_specific","message":"synthetic upstream explanation"}}`, 429},
-		{"upstreamBadGatewayJSON", "application/json", `{"error":{"message":"Upstream service temporarily unavailable","type":"upstream_error"}}`, http.StatusBadGateway},
-		{"upstreamBadGatewayText", "text/plain", "Upstream service temporarily unavailable", http.StatusBadGateway},
-		{"upstreamServiceUnavailableJSON", "application/json", `{"error":{"message":"Service temporarily unavailable","type":"service_unavailable"}}`, http.StatusServiceUnavailable},
+		{"upstreamBadGatewayJSON", "application/json", `{"error":{"message":"synthetic upstream unavailable"}}`, http.StatusBadGateway},
+		{"upstreamBadGatewayHTML", "text/html", `<html><body>synthetic upstream unavailable</body></html>`, http.StatusBadGateway},
+		{"upstreamServiceUnavailableJSON", "application/json", `{"error":{"message":"synthetic service unavailable"}}`, http.StatusServiceUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			original := []byte(`{ "model":"api-subagents", "stream":true, "store":true, "reasoning":{"effort":"vendor-level"}, "input":[{"role":"user","content":"keep <thinking> code"}], "instructions":"EXACT INSTRUCTIONS", "tools":[{"type":"function","name":"very_long_` + strings.Repeat("tool_", 20) + `","parameters":{"id":"keep","type":"object"}}], "vendor":{"integer":9007199254740993,"decimal":1.234567890123456789}, "previous_response_id":"keep_previous", "include":["reasoning.encrypted_content"] }`)
@@ -85,11 +85,11 @@ func TestResponsesPassthroughExactBytes(t *testing.T) {
 			if res.Header.Get("X-Request-Id") != "vendor-request" || res.Header.Get("X-Codex-Turn-State") != "next-state" || res.Header.Get("Retry-After") != "7" || res.Header.Get("Set-Cookie") != "" {
 				t.Fatal("response protocol headers changed", res.Header)
 			}
-			wantRequests := int32(1)
+			wantCalls := int32(1)
 			if tc.status == http.StatusBadGateway || tc.status == http.StatusServiceUnavailable {
-				wantRequests = 4
+				wantCalls = 4
 			}
-			if count.Load() != wantRequests || len(r.chatHistory.items) != 0 {
+			if count.Load() != wantCalls || len(r.chatHistory.items) != 0 {
 				t.Fatal("unexpected retry or reasoning cache")
 			}
 		})
@@ -128,6 +128,9 @@ func TestResponsesPassthroughStreamingCancellation(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("cancel did not reach upstream")
 	}
+	if got := awaitRequestResult(t, r); got.Outcome != "client_cancelled" {
+		t.Fatalf("cancellation reported as upstream failure: %+v", got)
+	}
 }
 
 // TestResponsesPassthroughReadFailure 验证半途网络错误表现为 HTTP 断流，不插入 response.failed 或重试。
@@ -157,6 +160,9 @@ func TestResponsesPassthroughReadFailure(t *testing.T) {
 	body, err := io.ReadAll(res.Body)
 	if err == nil || string(body) != ": partial\n\n" || count.Load() != 1 {
 		t.Fatal("broken stream hidden or rewritten", err, string(body), count.Load())
+	}
+	if got := awaitRequestResult(t, r); got.Outcome != "upstream_read_error" {
+		t.Fatalf("missing read error diagnostic: %+v", got)
 	}
 }
 

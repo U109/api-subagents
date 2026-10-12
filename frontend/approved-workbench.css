@@ -298,6 +298,16 @@ input::placeholder { font-size:12px; }
 .help-block p { font-size:12px; color:var(--muted); line-height:1.9; }
 .storage-path { margin-top:24px; padding-top:18px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
 .storage-path code { display:block; overflow-wrap:anywhere; margin-top:8px; }
+#relay-diagnostics-dialog { width:min(760px,calc(100vw - 34px)); padding:0; }
+.request-summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; font-size:11px; }
+.request-results { padding:0; margin:0; list-style:none; }
+.request-result { padding:14px 0; border-top:1px solid var(--line); }
+.request-result-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.request-result-status { font-size:12px; }
+.request-result-meta,.request-result-metrics { font-size:11px; color:var(--muted); margin-top:5px; overflow-wrap:anywhere; }
+.request-result-id { display:block; font-size:11px; margin-top:6px; overflow-wrap:anywhere; }
+.request-result[data-kind="warning"] .request-result-status,#relay-diagnostics-summary[data-kind="warning"] { color:#925a13; }
+.request-result[data-kind="success"] .request-result-status,#relay-diagnostics-summary[data-kind="success"] { color:var(--success); }
 .version-list { margin:18px 0; }
 .version-list>div { display:flex; gap:18px; padding:8px 0; border-bottom:1px solid var(--line); font-size:12px; }
 .version-list dt { flex:1; color:var(--muted); }

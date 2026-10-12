@@ -227,6 +227,24 @@ async function main() {
       await openConnection(page); await page.getByRole('button', {name: '删除连接 cpa', exact: true}).click(); assert.equal(await page.getByRole('alertdialog').count(), 1); assert.equal(await page.getByRole('button', {name: '取消', exact: true}).evaluate(el => el === document.activeElement), true); await page.keyboard.press('Escape'); assert.equal(await page.getByRole('alertdialog').count(), 0);
       await page.getByRole('textbox', {name: '连接名称', exact: true}).fill('草稿'); await page.waitForFunction(() => window.__mock.snapshot().dirty); await page.evaluate(() => window.__mock.requestClose()); await page.getByRole('alertdialog').waitFor(); await page.getByRole('button', {name: '取消', exact: true}).click(); assert.equal(await page.getByRole('textbox', {name: '连接名称', exact: true}).inputValue(), '草稿'); assert.equal((await snapshot(page)).state.relay.enabled, true);
     });
+    await check('已发布诊断入口保留、脱敏白名单、实时状态和弹窗焦点', async page => {
+      await page.locator('.sidebar .nav-button').filter({hasText: '使用帮助'}).click();
+      await page.getByText('关闭后重新打开会使用什么配置？', {exact: true}).click();
+      const trigger = page.getByRole('button', {name: '查看最近请求', exact: true});
+      await trigger.click(); await page.getByRole('dialog', {name: '最近请求', exact: true}).waitFor();
+      await page.getByText('尚无请求记录', {exact: true}).waitFor();
+      await page.evaluate(() => window.__mock.publishDiagnostics([{id: 'local-test-id', connection: 'cpa', model: '<img src=x>', startedAt: '2026-10-12T00:00:00Z', outcome: 'upstream_failed', httpStatus: 200, upstreamRequestId: 'safe-test-id', firstByteMs: 12, durationMs: 24, bytesReceived: 100, apiKey: 'must-not-render', prompt: 'must-not-render'}]));
+      const row = page.locator('.request-diagnostics-list details');
+      await row.getByText('上游报告生成失败', {exact: true}).waitFor(); await row.locator('summary').click();
+      assert.equal(await page.locator('.request-diagnostics img').count(), 0);
+      assert.equal((await row.locator('pre').textContent()).includes('must-not-render'), false);
+      assert.equal((await row.locator('pre').textContent()).includes('上游报告生成失败'), true);
+      await page.getByRole('button', {name: '复制 cpa 的请求诊断', exact: true}).click();
+      await page.locator('.request-diagnostics [role=status]').filter({hasText: /已复制|无法访问剪贴板/}).waitFor();
+      await page.setViewportSize({width: 320, height: 884}); await layout(page, '320-request-diagnostics', report); await shot(page, '320-request-diagnostics', report);
+      await page.keyboard.press('Escape'); assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
+    });
     if (page) await page.close(); page = null;
     for (const width of [320, 390, 640, 820, 1079, 1204, 1440, 1920]) {
       const p = await createPage(browser, origin, fixture, report, {width, height: 884});

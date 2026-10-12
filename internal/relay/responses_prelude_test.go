@@ -402,7 +402,10 @@ func TestResponsesPreludeDeadlineStopsRecovery(t *testing.T) {
 	defer cancel()
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
-	r.forwardResponses(w, req, []byte(`{"model":"api-subagents","stream":true}`), profile)
+	r.mu.Lock()
+	trace := r.startTraceLocked("demo", profile)
+	r.mu.Unlock()
+	r.forwardResponses(w, req, []byte(`{"model":"api-subagents","stream":true}`), profile, trace)
 	if w.Code != http.StatusGatewayTimeout || count.Load() != 1 {
 		t.Fatal("prelude timeout hidden or request replayed", w.Code, count.Load())
 	}
@@ -432,7 +435,10 @@ func TestResponsesPreludeCooldownPreservesFailure(t *testing.T) {
 			defer cancel()
 			req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
 			w := httptest.NewRecorder()
-			r.forwardResponses(w, req, []byte(`{"model":"api-subagents","stream":true}`), config.Models["demo"])
+			r.mu.Lock()
+			trace := r.startTraceLocked("demo", config.Models["demo"])
+			r.mu.Unlock()
+			r.forwardResponses(w, req, []byte(`{"model":"api-subagents","stream":true}`), config.Models["demo"], trace)
 			if w.Code != http.StatusOK || w.Body.String() != payload || count.Load() != 1 || w.Header().Get("X-Request-Id") != "original-prelude-error" || w.Header().Get("Retry-After") != cooldown {
 				t.Fatal("original cooldown or failure lost", w.Code, count.Load(), w.Body.String(), w.Header())
 			}

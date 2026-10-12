@@ -97,8 +97,10 @@ func TestGenerateImageMCP(t *testing.T) {
 		t.Fatal("missing structured image path")
 	}
 	path := shared.Str(value["path"])
-	if !shared.Inside(workspace, path) || filepath.Dir(path) != filepath.Join(workspace, imageDirectory) || value["mimeType"] != "image/png" || strings.Contains(text.Text, "synthetic-private-key") {
-		t.Fatal("unsafe image result", value)
+	actualDir, actualErr := os.Stat(filepath.Dir(path))
+	expectedDir, expectedErr := os.Stat(filepath.Join(workspace, imageDirectory))
+	if !filepath.IsAbs(path) || actualErr != nil || expectedErr != nil || !os.SameFile(actualDir, expectedDir) || value["mimeType"] != "image/png" || strings.Contains(text.Text, "synthetic-private-key") {
+		t.Fatalf("unsafe image result: path=%q workspace=%q actualDirErr=%v expectedDirErr=%v", path, workspace, actualErr, expectedErr)
 	}
 	file, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(file, want) {

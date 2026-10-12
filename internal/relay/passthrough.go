@@ -3,8 +3,8 @@ package relay
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,11 +17,13 @@ import (
 )
 
 // forwardResponses 替换模型及凭据，仅在普通生成请求未给出额度时补模型预算；正文和返回流保持原样。
-// 桌面网关在普通 Responses 请求收到 502/503，或尚未交付正文与工具的安全流前导失败时有限恢复；worker、compact 与已交付内容的流不重放。
-// 仅观察安全请求的流前导事件并临时保留原始字节，不改写 SSE、不合成完成事件、不持久缓存思考历史；取消与原时限覆盖全部尝试。
-func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile) {
+// 桌面普通 Responses 请求仅在 502/503 或未交付正文与工具的安全流前导失败时有限恢复；worker、compact、连接错误与已交付内容的流不重放。
+// SSE 只旁观终止状态，不改写正文、不合成完成事件、不保存思考历史；各次尝试共享原首包及总时限，取消会中止 HTTP 传输及退避，不能正常结束为成功响应。
+func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, original []byte, profile configstore.Profile, trace *requestTrace) {
+	defer trace.finish()
 	body, err := sjson.SetBytes(original, "model", profile.Model)
 	if err != nil {
+		trace.result.Outcome = "invalid_request"
 		replyError(w, http.StatusBadRequest, "请求 JSON 无效")
 		return
 	}
@@ -30,6 +32,7 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 		if limit := profile.OutputLimit(profile.Model); limit > 0 {
 			body, err = sjson.SetBytes(body, "max_output_tokens", limit)
 			if err != nil {
+				trace.result.Outcome = "invalid_request"
 				replyError(w, http.StatusBadRequest, "无法设置模型输出额度")
 				return
 			}
@@ -46,6 +49,7 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 	defer closeRequest()
 	upstream, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
+		trace.result.Outcome = "invalid_request"
 		replyError(w, http.StatusBadRequest, "API 地址无效")
 		return
 	}
@@ -60,8 +64,10 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 	}
 	res, err := r.doResponsesWithRecovery(upstream, allowRetry, inspectPrelude)
 	if err != nil {
+		trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_connect_error")
 		if req.Context().Err() != nil {
-			return
+			// 关闭网关会先取消处理上下文；直接返回可能让 HTTP 服务补发空的 200 响应。
+			panic(http.ErrAbortHandler)
 		}
 		status := http.StatusBadGateway
 		if ctx.Err() != nil {
@@ -71,6 +77,12 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 		return
 	}
 	defer res.Body.Close()
+	trace.result.HTTPStatus = res.StatusCode
+	trace.result.UpstreamRequestID = safeUpstreamRequestID(res.Header.Get("X-Request-Id"), profile.APIKey, req.Header.Get("X-Api-Subagents-Token"))
+	trace.publish()
+	mediaType, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
+	observe := mediaType == "text/event-stream" && (res.Header.Get("Content-Encoding") == "" || res.Header.Get("Content-Encoding") == "identity")
+	observer := streamObserver{}
 	copyPassthroughHeaders(w.Header(), res.Header)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -83,7 +95,16 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 		n, readErr := res.Body.Read(buffer)
 		if n > 0 {
 			touch()
+			firstByte := trace.result.FirstByteMS < 0
+			trace.received(n)
+			if firstByte {
+				trace.publish()
+			}
+			if observe {
+				observer.Feed(buffer[:n])
+			}
 			if _, err := w.Write(buffer[:n]); err != nil {
+				trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "downstream_write_error")
 				return
 			}
 			if flush, ok := w.(http.Flusher); ok {
@@ -91,9 +112,25 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 			}
 		}
 		if readErr == io.EOF {
+			switch {
+			case req.Context().Err() != nil || ctx.Err() != nil:
+				trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_read_error")
+				panic(http.ErrAbortHandler)
+			case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
+				trace.result.Outcome = "http_auth_error"
+			case res.StatusCode < 200 || res.StatusCode >= 300:
+				trace.result.Outcome = "http_error"
+			case observe:
+				trace.result.Outcome = observer.Result()
+			case req.URL.Path == "/v1/responses" && gjson.GetBytes(original, "stream").Bool():
+				trace.result.Outcome = "observation_unknown"
+			default:
+				trace.result.Outcome = "http_completed"
+			}
 			return
 		}
 		if readErr != nil {
+			trace.result.Outcome = interruptionOutcome(req.Context(), context.Cause(ctx), "upstream_read_error")
 			// 已发送的字节不能撤回；中止 HTTP 传输，让客户端识别断流，不往上游正文中插入本地错误事件。
 			panic(http.ErrAbortHandler)
 		}
@@ -123,15 +160,15 @@ func copyPassthroughHeaders(dst, src http.Header) {
 	}
 }
 
-// passthroughContext 只管理总时限、首包和空闲超时；代数检查避免旧计时回调取消刚收到数据的请求。
+// passthroughContext 分别标记总时限、首字节和空闲超时；代数检查避免旧计时回调误取消新数据。
 func passthroughContext(parent context.Context, p configstore.Profile) (context.Context, func(), func()) {
-	task, cancelTask := context.WithTimeout(parent, time.Duration(p.TaskTimeout)*time.Minute)
+	task, cancelTask := context.WithTimeoutCause(parent, time.Duration(p.TaskTimeout)*time.Minute, errRequestTimeout)
 	ctx, cancel := context.WithCancelCause(task)
 	var mu sync.Mutex
 	var timer *time.Timer
 	generation := 0
 	closed := false
-	arm := func(wait time.Duration) {
+	arm := func(wait time.Duration, cause error) {
 		mu.Lock()
 		defer mu.Unlock()
 		if closed {
@@ -146,12 +183,12 @@ func passthroughContext(parent context.Context, p configstore.Profile) (context.
 			mu.Lock()
 			defer mu.Unlock()
 			if !closed && current == generation {
-				cancel(errors.New("上游响应超时"))
+				cancel(cause)
 			}
 		})
 	}
-	arm(time.Duration(p.FirstTimeout) * time.Second)
-	touch := func() { arm(time.Duration(p.IdleTimeout) * time.Second) }
+	arm(time.Duration(p.FirstTimeout)*time.Second, errFirstByteTimeout)
+	touch := func() { arm(time.Duration(p.IdleTimeout)*time.Second, errStreamIdleTimeout) }
 	closeRequest := func() {
 		mu.Lock()
 		closed = true

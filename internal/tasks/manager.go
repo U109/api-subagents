@@ -106,7 +106,7 @@ func (m *Manager) ListModels() ([]any, error) {
 	return result, nil
 }
 
-// Submit 校验完成后在同一把锁内入队，避免并发请求突破 24 个活动任务上限。
+// Submit 在同一把锁内校验活动任务上限并立即启动任务，避免并发请求突破 24 个活动任务的安全边界。
 func (m *Manager) Submit(req TaskRequest) (shared.Object, error) {
 	if strings.TrimSpace(req.Task) == "" || len([]rune(req.Task)) > 30000 {
 		return nil, errors.New("任务需要 1–30000 字符。")
@@ -278,8 +278,6 @@ func (m *Manager) run(j *job) {
 		failure = fmt.Errorf("达到 %d 轮上限，任务未完成，请缩小范围或提高 max_steps。", j.maxSteps)
 	}
 	m.finish(j, outcome, result, failure)
-	m.mu.Lock()
-	m.mu.Unlock()
 }
 
 // finish 脱敏并保存完整结果，持久化结束后才发完成信号，避免过早提供应用命令。

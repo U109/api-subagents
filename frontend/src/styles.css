@@ -347,6 +347,13 @@ dd {margin: 8px 0 0; font-size: .875rem; overflow-wrap: anywhere;}
 .dialog-heading {display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--surface);}
 .dialog-heading h2 {font-size: 1.125rem; font-weight: 600;}
 .dialog-body {display: grid; gap: 20px; padding: 24px;}
+.faq-list details > .button {margin: 0 0 20px;}
+.request-diagnostics p {color: var(--muted); line-height: 1.6;}
+.request-diagnostics-list {display: grid; gap: 12px; padding: 0; list-style: none;}
+.request-diagnostics-list li {min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px;}
+.request-diagnostics-list summary {cursor: pointer; display: grid; gap: 6px; overflow-wrap: anywhere;}
+.request-diagnostics-list summary span {color: var(--muted);}
+.request-diagnostics-list pre {white-space: pre-wrap; overflow-wrap: anywhere; font-size: inherit; font-variant-numeric: tabular-nums; line-height: 1.6; margin: 16px 0;}
 .dialog-actions {display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding: 18px 24px;}
 .dialog-body .field-grid {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;}
 .confirm-dialog {padding: 24px;}

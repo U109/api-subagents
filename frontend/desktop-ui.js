@@ -6,6 +6,7 @@
   let state, actionPending = false, relaySelectionPending = false, lastRelayAttempt = null, cancellationEpoch = 0;
   /** 读取固定界面节点，桌面状态只写入 textContent，不解释为 HTML */
   const node = id => document.getElementById(id);
+  node('help-request-diagnostics').hidden = false;
 
   /** 按稳定版本的三个数字比较新旧，只用于按钮呈现，真正安装仍由 Go 再次检查 */
   function newerVersion(next, current) {
@@ -128,7 +129,7 @@
     else window.notices.clear('exit');
   }
 
-  /** 无连接且未开启时隐藏主对话入口；开关表示整个挟持模式，暖色状态标签标记开启，侧栏圆点标记实际请求连接。 */
+  /** 无连接且未开启时隐藏主对话入口；开关与侧栏标识显示真实接入状态，脱敏请求诊断集中在帮助入口。 */
   function renderRelay(relay) {
     if (!relay) return;
     node('relay-panel').hidden = !relay.enabled && !window.modelEditor?.selectedName();
@@ -148,6 +149,8 @@
     node('sidebar-mode').textContent = active ? '挟持中 · ' + active : 'Codex 使用自带模型';
     node('sidebar-relay').title = node('sidebar-mode').textContent;
     node('sidebar-dot').classList.toggle('on', Boolean(active));
+    window.relayDiagnostics?.render(relay);
+    node('relay-diagnostics-off').hidden = Boolean(relay.enabled);
     document.querySelectorAll('.model-select').forEach(button => {
       const enabled = button.dataset.name === active;
       button.closest('.model').classList.toggle('relay-enabled', enabled);
@@ -210,6 +213,7 @@
   }
 
   node('check-plugin-update').onclick = () => desktopAction(() => bridge.checkPluginUpdate());
+  node('help-request-diagnostics').onclick = () => { window.relayDiagnostics?.render(state?.relay); node('relay-diagnostics-dialog').showModal(); };
   node('install-plugin').onclick = () => desktopAction(() => ['available', 'downloaded'].includes(state.pluginUpdate?.phase) ? bridge.updatePlugin() : bridge.installPlugin());
   node('relay-switch').onclick = () => desktopAction(() => state.relay.enabled ? bridge.disableRelay() : bridge.enableRelay(window.modelEditor.selectedName()));
   node('check-update').onclick = updateAction;

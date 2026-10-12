@@ -293,9 +293,15 @@ func TestResponsesRecoveryHonorsFirstDeadline(t *testing.T) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://local.invalid/v1/responses", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	r.forwardResponses(response, req, body, p)
+	r.mu.Lock()
+	trace := r.startTraceLocked("demo", p)
+	r.mu.Unlock()
+	r.forwardResponses(response, req, body, p, trace)
 	if response.Code != http.StatusGatewayTimeout || count.Load() != 1 {
 		t.Fatal("first deadline reset by recovery", response.Code, count.Load())
+	}
+	if result := awaitRequestResult(t, r); result.Outcome != "first_byte_timeout" {
+		t.Fatalf("first-byte timeout diagnosis lost during recovery: %+v", result)
 	}
 }
 

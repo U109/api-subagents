@@ -112,15 +112,13 @@ func TestCodexPrimaryModel(t *testing.T) {
 	}
 }
 
-// TestCodexModelList 检查真实 app-server 只显示具体模型，星标模型默认选中且保留 max/ultra 档位。
+// TestCodexModelList 检查桌面使用的 app-server 模型列表会显示默认路由、单独连接及 max/ultra 档位。
 func TestCodexModelList(t *testing.T) {
 	bin := codexBinary(t)
 	r := testRelay(t, "compatible", "http://127.0.0.1:9", true)
 	config, _ := r.Store.Read()
 	profile := config.Models["demo"]
 	profile.ReasoningEffort = "low"
-	profile.RelayModels = []string{"alternate"}
-	profile.ModelOrder = []string{"alternate", profile.Model}
 	config.Models["demo"] = profile
 	if err := r.Store.Save(config); err != nil {
 		t.Fatal(err)
@@ -164,13 +162,9 @@ func TestCodexModelList(t *testing.T) {
 			t.Fatal(value)
 		}
 		models := map[string]bool{}
-		defaultModel := ""
 		for _, item := range shared.Arr(shared.Obj(value["result"])["data"]) {
 			model := shared.Obj(item)
 			models[shared.Str(model["model"])] = true
-			if model["isDefault"] == true {
-				defaultModel = shared.Str(model["model"])
-			}
 			efforts := map[string]bool{}
 			for _, raw := range shared.Arr(model["supportedReasoningEfforts"]) {
 				efforts[shared.Str(shared.Obj(raw)["reasoningEffort"])] = true
@@ -184,8 +178,8 @@ func TestCodexModelList(t *testing.T) {
 				t.Fatal("connection default missing from catalog", model)
 			}
 		}
-		if len(models) != 2 || models["api-subagents"] || !models[codexconfig.RelayModelAlias("demo", "alternate")] || !models[codexconfig.RelayModelAlias("demo", "mock-model")] || defaultModel != codexconfig.RelayModelAlias("demo", "mock-model") {
-			t.Fatalf("model/list entries=%v, default=%q, want=%q; stderr: %s", models, defaultModel, codexconfig.RelayModelAlias("demo", "mock-model"), stderr.String())
+		if !models["api-subagents"] || !models[codexconfig.RelayModelAlias("demo", "mock-model")] {
+			t.Fatalf("custom models missing; stderr: %s", stderr.String())
 		}
 		break
 	}

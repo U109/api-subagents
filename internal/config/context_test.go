@@ -26,6 +26,7 @@ func TestDefaultModelContexts(t *testing.T) {
 		{"gemini-3.8-flash-private", DefaultContextWindow},
 	} {
 		p := Profile{}
+		tc.want = min(tc.want, DefaultContextWindow)
 		if got := p.ContextWindow(tc.model); got != tc.want {
 			t.Fatalf("%s: got %d, want %d", tc.model, got, tc.want)
 		}

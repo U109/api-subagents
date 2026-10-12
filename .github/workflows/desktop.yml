@@ -26,6 +26,11 @@ jobs:
         with:
           go-version: ${{ steps.toolchain.outputs.version }}
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Check release versions
         shell: pwsh
         run: |
@@ -38,6 +43,25 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne ('v' + $release.version)) { throw 'Tag must match the release version.' }
       - name: Build standalone plugin and verify payload
         run: ./scripts/build.ps1 -Target plugin
+      - name: Verify approved workbench behavior and responsive layout
+        shell: pwsh
+        run: |
+          npm --prefix frontend test
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/config-operations.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/node_modules/playwright/cli.js install chromium
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:CHROME_PATH = node -e "console.log(require('./frontend/node_modules/playwright').chromium.executablePath())"
+          node frontend/workbench.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify diagnostic UI and prototype semantics
+        shell: pwsh
+        run: |
+          node --check frontend/relay-diagnostics-ui.js
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test frontend/relay-diagnostics-ui.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Test protocols, tasks, configuration, installation and updates
         shell: pwsh
         run: |

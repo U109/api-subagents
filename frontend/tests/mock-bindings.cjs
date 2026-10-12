@@ -89,7 +89,9 @@ function mockBindings(fixture) {
     /** 完成当前模拟更新，取消令牌不符时不广播旧结果。 */
     completeUpdate: () => {const p = pendingUpdate; if (!p || p.mine !== updateToken) return; state[p.field] = {...state[p.field], phase: p.download ? 'downloaded' : 'available', availableVersion: '0.0.1-test', message: p.download ? '更新已下载' : '发现新版本'}; emit(); p.resolve(copy(state)); pendingUpdate = undefined;},
     /** 模拟后台关闭请求以验证 Radix 草稿确认。 */
-    requestClose: () => {state.close = {phase: dirty ? 'confirm' : 'closing', message: '关闭将放弃未保存修改，并恢复原配置。'}; emit();}
+    requestClose: () => {state.close = {phase: dirty ? 'confirm' : 'closing', message: '关闭将放弃未保存修改，并恢复原配置。'}; emit();},
+    /** 仅发布合成诊断事件，验证弹窗实时刷新，不触及真实请求或配置。 */
+    publishDiagnostics: items => {state.relay.recentRequests = copy(items); emit();}
   };
 }
 module.exports = {mockBindings};
