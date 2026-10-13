@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +20,13 @@ import (
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 )
 
 type ConfigService struct {
 	Store                  *configstore.ConfigStore
 	Provider               *providers.Provider
+	Usage                  *usage.Store
 	mu                     sync.Mutex
 	BeforeRemoveConnection func(string) error
 	BeforeRemoveAccess     func(string) error
@@ -31,11 +34,20 @@ type ConfigService struct {
 
 // NewConfigService 让桌面绑定和浏览器入口共享同一套配置合并与校验逻辑。
 func NewConfigService(store *configstore.ConfigStore) *ConfigService {
-	return &ConfigService{Store: store, Provider: providers.NewProvider()}
+	if store == nil {
+		store = configstore.NewConfigStore("")
+	}
+	ledger := usage.New(filepath.Join(filepath.Dir(store.Path), "usage"))
+	provider := providers.NewProvider()
+	provider.Client = usage.WrapClient(provider.Client, ledger)
+	return &ConfigService{Store: store, Provider: provider, Usage: ledger}
 }
 
 // Handle 处理固定路由，网络测试不占写锁；定点保存、复制和删除只修改目标连接，其他草稿不会写入。
 func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (shared.Object, error) {
+	if route == "/api/usage" || route == "/api/usage/prices" {
+		return s.Usage.Handle(route, body)
+	}
 	if len(body) > 300000 {
 		return nil, errors.New("配置过大。")
 	}
@@ -75,7 +87,7 @@ func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (
 		if route == "/api/models" {
 			return s.Provider.ListModels(ctx, p)
 		}
-		return s.Provider.Probe(ctx, p)
+		return s.Provider.Probe(usage.WithSource(ctx, "test", "", input.Name), p)
 	}
 	if route != "/api/config" && route != "/api/config/save" && route != "/api/config/copy" && route != "/api/config/remove" && route != "/api/access/save" && route != "/api/access/remove" {
 		return nil, errors.New("未找到操作。")

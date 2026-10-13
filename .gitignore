@@ -27,6 +27,7 @@ credentials.json
 *.pfx
 CodexApiSubagents/
 /tasks/
+/usage/
 .codex/
 
 # 临时文件、日志、备份与编辑器状态。

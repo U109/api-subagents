@@ -1,0 +1,213 @@
+.sidebar-header { display:flex; align-items:center; gap:6px; min-width:0; padding-bottom:26px; }
+.sidebar-header .brand { flex:1; min-width:0; min-height:32px; height:32px; padding:0; margin:0; gap:8px; }
+.sidebar-header .brand strong { font-size:13px; white-space:nowrap; }
+.sidebar-header .sidebar-collapse-toggle { flex:none; width:26px; height:28px; min-height:28px; padding:0; }
+.app-shell.sidebar-collapsed { grid-template-columns:64px minmax(0,1fr); }
+.sidebar-collapsed .sidebar { padding-inline:8px; }
+.sidebar-collapsed .sidebar-header { flex-direction:column; gap:12px; padding-bottom:20px; }
+.sidebar-collapsed .sidebar-header .brand { flex:none; justify-content:center; width:100%; }
+.sidebar-collapsed .brand strong,.sidebar-collapsed .sidebar-section-label,.sidebar-collapsed .nav-caption,.sidebar-collapsed .nav-count,.sidebar-collapsed .sidebar-footnote { display:none; }
+.sidebar-collapsed .nav-button { justify-content:center; gap:0; min-height:44px; padding:10px 8px; }
+.sidebar-collapsed .sidebar-bottom { padding-inline:0; }
+.topbar { min-height:52px; }
+.connection-workbench-list { padding-bottom:14px; }
+.connection-list-items { margin-top:3px; }
+.connection-workbench .directory-provider-copy>span:not(.connection-list-draft) { display:block; white-space:nowrap; overflow:visible; }
+.connection-workbench-editor .connection-save-bar.editor-footer {
+  margin:16px 0 0; padding:0; border:0; border-radius:0;
+  box-shadow:none; background:transparent; min-height:0;
+  justify-content:flex-end; flex-wrap:wrap;
+}
+.connection-save-bar .save-actions { margin-left:auto; }
+.connection-save-bar .save-message.field-error { flex:1 1 100%; margin-bottom:8px; }
+.same-page-workbench .plan-list { min-height:0; }
+.same-page-workbench .plan-list-items { max-height:min(560px,calc(100dvh - 260px)); overflow-y:auto; margin-bottom:0; }
+.u-filter-control { display:block; position:relative; min-width:0; width:100%; border:1px solid #cbd5e3; border-radius:7px; background:#fff; }
+.u-filter-control:hover { border-color:#aab8cf; background:#fbfcff; }
+.u-filters .u-filter-control select { appearance:none; -webkit-appearance:none; background:transparent; border:0; border-radius:7px; min-height:38px; padding:8px 33px 8px 11px; line-height:1.4; font-size:12px; color:#2b3b53; }
+.u-filter-control>svg { position:absolute; right:11px; top:50%; transform:translateY(-50%); color:#73839b; pointer-events:none; }
+.u-filter-control:focus-within { border-color:#7d94b9; outline:2px solid var(--focus); outline-offset:2px; }
+.usage-reference .u-filter-control select:focus-visible { outline:none; }
+.u-breakdown-total { margin-top:auto; padding-top:14px; }
+@media(max-width:900px) {
+  .same-page-workbench .plan-list-items { max-height:260px; }
+}
+@media(max-width:639px) {
+  .app-shell.sidebar-collapsed { grid-template-columns:minmax(0,1fr); }
+  .sidebar-collapse-toggle { display:none !important; }
+  .sidebar-header { padding-bottom:18px; }
+}
+@media(pointer:coarse) {
+  .u-filters .u-filter-control select { min-height:44px; font-size:16px; }
+}
+
+/* 侧栏内容独立滚动，拉手留在分隔线中央，避免品牌行承载折叠动作。 */
+.app-shell .sidebar { padding:0; overflow:visible; background:var(--canvas); }
+.mobile-sidebar { background:var(--canvas); }
+.sidebar-content { display:flex; flex-direction:column; min-height:0; height:100%; overflow-y:auto; overflow-x:hidden; padding:24px 12px 12px; }
+.sidebar-collapsed .sidebar-content { padding-inline:8px; }
+.sidebar-collapsed .sidebar-header { gap:0; }
+.sidebar .sidebar-edge-toggle { position:absolute; top:50%; right:-12px; transform:translateY(-50%); z-index:var(--z-sticky); width:24px; height:56px; min-height:56px; padding:0; border:1px solid var(--line); border-radius:8px; background:var(--canvas); color:#66758c; box-shadow:0 2px 5px #2430470a; }
+.sidebar .sidebar-edge-toggle:hover { background:var(--surface); color:var(--ink); border-color:#b8c4d5; }
+.mobile-sidebar .sidebar-content { padding:0; }
+
+/* 连接页签采用白色选中块，移除旧样式的黑色底部伪元素。 */
+.connection-workbench-editor .tab-trigger[data-state="active"]::after { display:none; content:none; }
+.u-filters { grid-template-columns:repeat(4,minmax(0,1fr)); }
+@media(max-width:639px) {
+  .u-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(pointer:coarse) {
+  .sidebar .sidebar-edge-toggle::before { content:""; position:absolute; inset:-2px -10px; }
+}
+
+/* 仅对明确标注的删除图标和接入开关调整颜色，不扩展成全局配色变更。 */
+.icon-delete svg { color:#c97878; }
+.icon-delete:hover svg { color:#b45f5f; }
+.editor-title-line>.editor-item-actions { display:flex; align-items:center; justify-content:flex-end; flex:none; flex-wrap:nowrap; gap:6px; margin-left:auto; }
+.connection-workbench .directory-provider-copy { padding-right:0; }
+.plan-editor>.editor-footer { margin:16px 22px 0; padding:0 0 20px; border:0; border-radius:0; box-shadow:none; background:transparent; min-height:0; flex-wrap:wrap; justify-content:flex-end; }
+.plan-editor>.editor-footer .save-actions { margin-left:auto; }
+.plan-editor>.editor-footer .save-message.field-error { flex:1 1 100%; margin-bottom:8px; }
+.access-status-control .switch[data-state="checked"] { background:#35b58c; box-shadow:inset 0 0 0 1px #238c6d; }
+
+/* 焦点保留在边框内部，不再出现原先向外扩张的蓝色框。 */
+.u-filter-control:focus-within { outline:0; outline-offset:0; border-color:#7d94b9; box-shadow:none; }
+.u-filter-control:has(select:focus-visible) { border-color:var(--focus); box-shadow:inset 0 0 0 1px var(--focus); }
+.connection-workbench-editor .connection-tabs>.tabs-list { padding:3px; min-height:0; }
+.connection-workbench-editor .tab-trigger { min-height:34px; padding:6px 10px; }
+@media(max-width:639px) {
+  .plan-editor>.editor-footer { margin-inline:16px; padding-bottom:16px; }
+  .connection-workbench-editor .tab-trigger { min-height:44px; padding:8px 10px; }
+}
+@media(pointer:coarse) {
+  .connection-workbench-editor .tab-trigger { min-height:44px; }
+}
+
+/* 更新图标降低视觉重量；按钮与导航的点击范围保持不变，加载图标使用同一尺寸。 */
+.sidebar .sidebar-bottom .sidebar-update>svg,
+.mobile-sidebar .sidebar-bottom .sidebar-update>svg,
+.topbar .update-trigger>svg { width:16px; height:16px; flex:0 0 16px; stroke-width:1.75; }
+
+/* 白色侧边栏、灰色工作区、白色卡片与灰色选中项保持明确分层，列宽与交互不变。 */
+.app-main { background:var(--surface); }
+.app-main>.topbar { background:transparent; border-bottom-color:transparent; }
+.plans-page .page-heading { align-items:center; margin-bottom:20px; }
+.plans-page .page-heading h1 { font-size:24px; line-height:1.3; }
+.plans-page .access-status { gap:12px; padding:14px 18px; margin-bottom:20px; border-radius:10px; background:var(--canvas); border-color:transparent; }
+.plans-page .access-status-icon { width:34px; height:34px; border-radius:8px; background:var(--canvas); border-color:transparent; }
+.plans-page .access-status-icon svg { width:18px; height:18px; }
+.plans-page .access-status-copy { gap:5px; }
+.plans-page .access-status-copy strong { gap:10px; font-size:13px; }
+.plans-page .access-status-copy>span { font-size:12px; line-height:1.5; }
+/* 配置与连接列表共用紧凑外框、标题和选中态，内部条目填满可用列，不挤压右侧编辑器。 */
+.plans-page .plan-workspace.same-page-workbench,
+.connection-workbench.same-page-workbench { grid-template-columns:232px minmax(0,1fr); gap:20px; }
+.plans-page .same-page-workbench .plan-list,
+.connection-workbench .connection-workbench-list { padding:18px 12px 12px; border-radius:10px; background:var(--canvas); border-color:transparent; box-shadow:none; }
+.plans-page .plan-list-heading,
+.connection-workbench-list .connection-list-heading { padding:0 8px 14px; }
+.plans-page .plan-list-heading h2,
+.connection-workbench-list .connection-list-heading h2 { font-size:13px; }
+.plans-page .plan-list-items,
+.connection-workbench-list .connection-list-items { padding:2px; margin:0; }
+.plans-page .plan-list-items>li { min-width:0; }
+.plans-page .plan-list-item,
+.connection-workbench .connection-directory-open { width:100%; padding:13px 12px; gap:6px; margin-bottom:6px; background:var(--canvas); border-color:transparent; box-shadow:none; }
+.plans-page .plan-list-item.selected,
+.connection-workbench .connection-directory-open[aria-pressed="true"] { background:var(--accent-soft); border-color:transparent; box-shadow:none; }
+.plans-page .plan-list-item:not(.selected):hover,
+.connection-workbench .connection-directory-open:not([aria-pressed="true"]):hover { background:var(--surface-hover); }
+.plans-page .plan-list-title strong,
+.connection-workbench .directory-provider-copy>strong { font-size:14px; line-height:1.5; color:var(--muted); font-weight:500; }
+.plans-page .plan-list-item.selected .plan-list-title strong,
+.connection-workbench .connection-directory-open[aria-pressed="true"] .directory-provider-copy>strong { color:var(--ink); font-weight:700; }
+/* 静态列表不靠描边划分区域；键盘聚焦时仍用完整的内侧轮廓明确定位。 */
+.plans-page .plan-list-item:focus-visible,
+.connection-workbench .connection-directory-open:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.plans-page .plan-list-connections { font-size:12px; line-height:1.5; }
+.plans-page .plan-list-meta { font-size:11px; }
+/* 连接条目直接展示名称与模型数量，与配置卡片对齐；图标只在右侧连接编辑标题保留。 */
+.connection-workbench-list .connection-list-items { gap:0; max-height:min(560px,calc(100dvh - 260px)); overflow-y:auto; }
+.connection-workbench-list .directory-provider-icon { display:none; }
+.connection-workbench .connection-directory-open { min-height:74px; }
+.connection-workbench .directory-provider-copy { display:grid; gap:6px; width:100%; min-width:0; padding-right:0; }
+.connection-workbench .directory-provider-copy>span { font-size:11px; line-height:1.5; }
+/* 只保留一个白色编辑面，淡化嵌套面板；输入控件自己的边界和错误状态不改。 */
+.plans-page .same-page-workbench .plan-editor,
+.connection-workbench .connection-workbench-editor { background:var(--canvas); border-color:transparent; box-shadow:0 1px 2px rgb(0 0 0 / .05); }
+.connection-workbench-editor .panel { background:var(--canvas); border-color:transparent; box-shadow:none; }
+.plans-page .editor-title-line { padding:18px 24px; gap:16px; }
+.plans-page .editor-name-field { gap:5px; }
+.plans-page .editor-name-field label { font-size:11px; }
+.plans-page .editor-name-field .input { font-size:19px; line-height:1.4; min-height:36px; }
+.plans-page .editor-content { padding:20px 24px; gap:24px; align-content:start; }
+.plans-page .section-line { margin-bottom:12px; }
+.plans-page .section-line h2 { font-size:14px; }
+.plans-page .section-line>span { font-size:11px; }
+.plans-page .member-grid { gap:10px; }
+.plans-page .member-item { padding:9px 10px 9px 12px; min-height:46px; gap:6px; background:var(--canvas); border-color:transparent; }
+.plans-page .member-item.member-selected { background:var(--accent-soft); border-color:transparent; }
+.plans-page .member-item strong { font-size:13px; font-weight:500; }
+.plans-page .member-item>.icon-button { width:28px; height:28px; min-height:28px; }
+.plans-page .scoped-toolbar { gap:10px; margin-bottom:14px; }
+.plans-page .scoped-toolbar .search-field { min-width:0; }
+.plans-page .scoped-toolbar .search-field input { font-size:12px; }
+.plans-page .scope-group { border-radius:8px; margin-bottom:14px; background:var(--canvas); border-color:transparent; }
+.plans-page .scope-group:last-child { margin-bottom:0; }
+.plans-page .scope-group-head { padding:9px 14px; min-height:44px; background:var(--surface); border-bottom-color:transparent; }
+.plans-page .scope-group-head strong { font-size:13px; }
+.plans-page .scope-group-head .avatar { width:22px; height:22px; font-size:10px; border-radius:6px; }
+/* 排序包装只是一行的容器，必须跨满模型区，避免宽屏上出现空白的第二列。 */
+.plans-page .scope-model-grid { grid-template-columns:minmax(0,1fr); overflow:visible; }
+.plans-page .scope-model-grid>.scope-sort-list { grid-column:1 / -1; width:100%; min-width:0; }
+.plans-page .scope-model-row { gap:10px; padding:8px 14px; min-height:46px; border-bottom-color:transparent; }
+.plans-page .scope-sort-row { border-bottom-color:transparent; }
+.plans-page .scope-model-row .model-id { font-size:13px; line-height:1.55; }
+.plans-page .scope-sort-content .scope-model-row { padding-left:6px; }
+.plans-page .plan-editor>.editor-footer { margin:14px 24px 0; padding-bottom:20px; }
+.plans-page .plan-editor>.editor-footer .save-actions { gap:8px; }
+@media(min-width:1080px) {
+  /* 大屏只有编辑正文滚动，名称和保存动作保持可见，不让模型分组再生成滚动容器。 */
+  .plans-page .plan-editor { height:calc(100dvh - 244px); min-height:540px; }
+  .plans-page .plan-editor .editor-content { overflow-y:auto; overflow-x:hidden; }
+}
+@media(min-width:901px) {
+  /* 仅收紧桌面列表的内边距；手机端两列卡片保留原来的安全间距。 */
+  .plans-page .same-page-workbench .plan-list,
+  .connection-workbench .connection-workbench-list { padding-inline:4px; }
+  .plans-page .plan-list-heading,
+  .connection-workbench-list .connection-list-heading { padding-inline:12px; }
+}
+@media(max-width:1200px) and (min-width:901px) {
+  .plans-page .plan-workspace.same-page-workbench,
+  .connection-workbench.same-page-workbench { grid-template-columns:208px minmax(0,1fr); gap:16px; }
+}
+@media(max-width:900px) {
+  .plans-page .plan-workspace.same-page-workbench,
+  .connection-workbench.same-page-workbench { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .plans-page .plan-list-items { gap:8px; }
+  .connection-workbench-list .connection-list-items { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; max-height:260px; }
+}
+@media(max-width:639px) {
+  .plans-page .page-heading { margin-bottom:16px; }
+  .plans-page .access-status { gap:10px; padding:12px; margin-bottom:16px; flex-wrap:nowrap; align-items:center; }
+  .plans-page .access-status-icon { width:30px; height:30px; }
+  .plans-page .access-status-copy { flex-basis:0; }
+  .plans-page .access-status-copy strong { gap:6px; font-size:12px; }
+  .plans-page .access-status-copy>span { font-size:11px; }
+  .plans-page .access-status-control { padding-left:0; margin-left:auto; width:auto; flex:0 0 auto; }
+  .plans-page .editor-title-line { padding:16px; gap:8px; }
+  .plans-page .editor-name-field .input { font-size:17px; }
+  .plans-page .editor-content { padding:18px 16px; gap:22px; }
+  .plans-page .member-grid { grid-template-columns:minmax(0,1fr); gap:8px; }
+  .plans-page .scope-group-head { padding:8px 10px; }
+  .plans-page .scope-model-row { padding:8px 10px; }
+  .plans-page .scope-model-row .capacity { justify-self:start; max-width:max-content; }
+  .plans-page .plan-editor>.editor-footer { margin-inline:16px; padding-bottom:16px; }
+}
+@media(pointer:coarse) {
+  .plans-page .member-item { min-height:48px; }
+  .plans-page .member-item>.icon-button { width:40px; height:44px; min-height:44px; }
+  .plans-page .scope-model-row .star-button { min-width:40px; min-height:44px; }
+}

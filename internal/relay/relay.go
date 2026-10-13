@@ -24,6 +24,7 @@ import (
 	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator/builtin"
@@ -402,6 +403,11 @@ func (r *Relay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Unlock()
 	r.notify()
+	operation := "generate"
+	if req.URL.Path == "/v1/responses/compact" {
+		operation = "compact"
+	}
+	req = req.WithContext(usage.EnsureCall(req.Context(), profile, connection, "main", operation))
 	if profile.Protocol == "responses" {
 		r.forwardResponses(w, req, data, profile, trace)
 		return

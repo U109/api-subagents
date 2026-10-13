@@ -1,4 +1,4 @@
-import {clone, contextSettings, defaultContextSettings, makeSnapshot} from './domain.mjs';
+import {clone, contextSettings, defaultContextSettings, isDirty, makeSnapshot} from './domain.mjs';
 
 /** 创建首次使用的真实空工作区，不预置连接、模型或任何密钥。 */
 export function emptyStore() {return {connections: {}, savedConnections: {}, plans: [], savedPlans: {}, selected: '', active: null, enabled: false};}
@@ -42,11 +42,21 @@ export function encodeConnection(c) {
   return {id: c.id, savedName: c.savedName, copySource: c.copySource, protocol: c.protocol, baseUrl: c.url, apiKey: c.apiKey || '', apiKeyEnv: c.apiKey ? '' : c.apiKeyEnv || '', hasKey: c.hasKey, model: c.defaultID, relayModels: ids.filter(id => id !== c.defaultID), modelOrder: ids, modelNames: names, modelOfficialContexts: native, modelContextWindows: context, modelContextOverrides: overrides, modelCompatibility: compatibility, modelImageInputs: images, modelOutputs: outputs, modelCatalog: c.models.map(m => ({id: m.id, name: m.name || '', context: m.context || 0})), description: c.description, reasoningEffort: c.effort === 'default' ? '' : c.effort, advancedOverride: c.override, maxTokens: Number(c.maxTokens), stream: c.response === 'stream', firstResponseTimeoutSeconds: Number(c.firstTimeout), streamIdleTimeoutSeconds: Number(c.idleTimeout), taskTimeoutMinutes: Number(c.taskTimeout)};
 }
 
-/** 只吸收目标操作已保存的对象，后台返回其他对象时不覆盖用户的其他配置或连接草稿。 */
-export function mergeSaved(store, config, {connectionID, planID, removeConnectionID, removePlanID} = {}) {
+/** 合并保存快照；有提交副本时保留等待期间的新草稿，只更新凭据引用并清除已提交而未再次修改的 Key。 */
+export function mergeSaved(store, config, {connectionID, planID, submittedConnection, submittedPlan, removeConnectionID, removePlanID} = {}) {
   const canonical = decodeConfig(config), next = {...store, savedConnections: canonical.savedConnections, savedPlans: canonical.savedPlans, connections: {...store.connections}, plans: [...store.plans]};
-  if (connectionID && canonical.connections[connectionID]) next.connections[connectionID] = clone(canonical.connections[connectionID]);
-  if (planID) next.plans = next.plans.map(p => p.id === planID ? clone(canonical.savedPlans[p.id] || p) : p);
+  if (connectionID && canonical.connections[connectionID]) {
+    const saved = canonical.connections[connectionID], draft = store.connections[connectionID];
+    if (!submittedConnection || (draft && !isDirty(draft, submittedConnection))) next.connections[connectionID] = clone(saved);
+    else if (draft) {
+      const retained = {...clone(draft), savedName: saved.savedName, hasKey: saved.hasKey};
+      if (draft.apiKey === submittedConnection.apiKey) retained.apiKey = '';
+      if (draft.apiKeyEnv === submittedConnection.apiKeyEnv) retained.apiKeyEnv = saved.apiKeyEnv;
+      delete retained.copySource;
+      next.connections[connectionID] = retained;
+    }
+  }
+  if (planID) next.plans = next.plans.map(p => p.id === planID && (!submittedPlan || !isDirty(p, submittedPlan)) ? clone(canonical.savedPlans[p.id] || p) : p);
   if (removeConnectionID) {
     delete next.connections[removeConnectionID];
     next.plans = next.plans.map(p => {
@@ -76,4 +86,9 @@ export function mergeCatalog(c, result) {
     next.models.push({id, name: '', context: item.contextWindow || null, ...defaultContextSettings(item.contextWindow), selected: false, image: 'auto', output: '', outputMode: 'auto', compatibility: 'auto'});
   }
   return next;
+}
+
+/** 目录只属于发起查询时的地址、协议和凭据来源；本地模型编辑不使结果失效，改 Key 则必须重新查询。 */
+export function sameCatalogSource(current, submitted) {
+  return Boolean(current && submitted) && ['id', 'url', 'protocol', 'apiKey', 'apiKeyEnv', 'hasKey', 'savedName', 'copySource'].every(field => current[field] === submitted[field]);
 }

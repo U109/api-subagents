@@ -55,6 +55,13 @@ jobs:
           $env:CHROME_PATH = node -e "console.log(require('./frontend/node_modules/playwright').chromium.executablePath())"
           node frontend/workbench.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/macos-settings.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/usage.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:GO_EXE = (Get-Command go.exe).Source
+          node frontend/real-service.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Verify diagnostic UI and prototype semantics
         shell: pwsh
         run: |
@@ -66,6 +73,7 @@ jobs:
         shell: pwsh
         run: |
           $env:WORKER_TEST_BIN = Join-Path $pwd 'build/bin/api-subagents-worker.exe'
+          $env:CODEX_HOME = Join-Path $env:RUNNER_TEMP 'api-subagents-test-codex-home'
           go test ./... -timeout 90s
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           go vet ./...

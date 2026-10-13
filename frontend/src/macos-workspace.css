@@ -1,0 +1,255 @@
+/* 其他页面沿用接入配置的材质、系统字体与蓝色选中态；不覆盖已确认的配置编辑布局。 */
+:root {
+  --workspace-list: #f8f8fa;
+  --workspace-row: #f7f7f9;
+  --workspace-default: #e7f1ff;
+}
+.macos-workspace:not([data-page="plans"]) .page-heading {margin-bottom: 24px; align-items: flex-start;}
+.macos-workspace:not([data-page="plans"]) .page-heading p {font-size: var(--text-emphasis); line-height: 1.5; margin-top: 6px;}
+.macos-workspace:not([data-page="plans"]) .button {min-height: 34px; padding: 7px 11px; border-radius: 7px; font-size: var(--text-body);}
+.macos-workspace:not([data-page="plans"]) .icon-button {width: 32px; height: 32px; min-height: 32px; padding: 0;}
+.macos-workspace:not([data-page="plans"]) .button-primary:disabled {background: var(--surface-hover); border-color: var(--line); color: var(--muted); box-shadow: none;}
+.macos-workspace:not([data-page="plans"]) .panel {border-color: var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgb(29 29 31 / .025);}
+.macos-workspace:not([data-page="plans"]) .panel-heading {min-height: 56px; padding: 16px 20px; gap: 12px;}
+.macos-workspace:not([data-page="plans"]) .panel-title h2,
+.macos-workspace:not([data-page="plans"]) .section-line h2 {font-size: var(--text-emphasis); font-weight: 600;}
+.macos-workspace:not([data-page="plans"]) .panel-title {gap: 8px;}
+.macos-workspace:not([data-page="plans"]) .panel-title > svg {width: 17px; height: 17px;}
+.macos-workspace:not([data-page="plans"]) .panel-body {padding: 20px;}
+.macos-workspace:not([data-page="plans"]) .badge {padding: 2px 6px; font-size: var(--text-secondary); border-radius: 5px;}
+.macos-workspace:not([data-page="plans"]) .badge-active {color: var(--mac-success); background: var(--mac-success-soft); border-color: transparent;}
+.macos-workspace:not([data-page="plans"]) .field {gap: 6px;}
+.macos-workspace:not([data-page="plans"]) .field label {font-size: var(--text-body);}
+.macos-workspace:not([data-page="plans"]) .input {min-height: 36px; padding: 8px 10px; border-radius: 7px; font-size: var(--text-emphasis);}
+.macos-workspace:not([data-page="plans"]) textarea.input {line-height: 1.7; resize: vertical;}
+.macos-workspace:not([data-page="plans"]) .field-grid {gap: 20px;}
+.macos-workspace:not([data-page="plans"]) .section-divider {margin-block: 20px;}
+.macos-workspace:not([data-page="plans"]) .section-line {margin-bottom: 12px;}
+.macos-workspace:not([data-page="plans"]) .field-error {font-size: var(--text-body);}
+
+/* 连接目录与编辑区组成一张连贯的主从面板，而不是两张互不关联的悬浮卡片。 */
+.macos-workspace .connection-workbench.same-page-workbench {grid-template-columns: 208px minmax(0, 1fr); gap: 0; align-items: stretch; overflow: clip; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); box-shadow: var(--mac-shadow);}
+.macos-workspace .connection-workbench .connection-workbench-list {padding: 20px 12px 16px; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: var(--workspace-list); box-shadow: none;}
+.macos-workspace .connection-list-heading {padding: 0 8px 18px;}
+.macos-workspace .connection-list-heading h2 {color: var(--muted); font-size: var(--text-body); font-weight: 500;}
+.macos-workspace .connection-list-heading > span {padding: 0; color: var(--muted); background: transparent; border-radius: 0; font-size: var(--text-secondary);}
+.macos-workspace .connection-list-items {gap: 6px; padding: 0; margin: 0; scrollbar-width: thin;}
+.macos-workspace .connection-workbench .connection-directory-row {border-radius: 8px;}
+.macos-workspace .connection-workbench .connection-directory-open {min-height: 80px; padding: 12px; margin: 0; border: 0; border-radius: 8px; background: transparent;}
+.macos-workspace .connection-workbench .connection-directory-open:not([aria-pressed="true"]):hover {background: var(--surface-hover);}
+.macos-workspace .connection-workbench .connection-directory-open[aria-pressed="true"] {background: var(--accent); color: var(--canvas); box-shadow: 0 1px 2px rgb(0 106 220 / .12);}
+.macos-workspace .connection-workbench .directory-provider-copy {gap: 5px;}
+.macos-workspace .connection-workbench .directory-provider-copy > strong {font-size: var(--text-emphasis); font-weight: 600; color: var(--ink);}
+.macos-workspace .connection-workbench .directory-provider-copy > span {color: var(--muted); font-size: var(--text-secondary);}
+.macos-workspace .connection-workbench .connection-directory-open[aria-pressed="true"] .directory-provider-copy > :is(strong, span) {color: var(--canvas);}
+.macos-workspace .connection-workbench .directory-provider-copy > .connection-list-draft {color: var(--mac-warning);}
+.macos-workspace .connection-list-note {margin: 20px 8px 0; padding-top: 14px; line-height: 1.65; font-size: var(--text-secondary);}
+.macos-workspace .connection-workbench .connection-workbench-editor {padding: 22px 24px 0; border: 0; border-radius: 0; background: var(--canvas); box-shadow: none; min-width: 0;}
+.macos-workspace .connection-workbench-editor .page-heading {margin-bottom: 20px; align-items: center;}
+.macos-workspace .connection-workbench-editor .page-heading h2 {font-size: 21px; line-height: 1.3; font-weight: 650; letter-spacing: -.4px;}
+.macos-workspace .connection-workbench-editor .heading-actions {gap: 4px;}
+.macos-workspace .connection-page-title {gap: 10px;}
+.macos-workspace .avatar-large {border-radius: 8px; background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line);}
+.macos-workspace .connection-workbench-editor .connection-tabs > .tabs-list {margin: 0 0 20px; padding: 3px; gap: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);}
+.macos-workspace .connection-workbench-editor .tab-trigger {min-height: 34px; padding: 7px 12px; font-size: var(--text-body); border-radius: 5px; color: var(--muted); gap: 7px;}
+.macos-workspace .connection-workbench-editor .tab-trigger[data-state="active"] {color: var(--ink); background: var(--canvas); box-shadow: 0 1px 3px rgb(29 29 31 / .08);}
+.macos-workspace .connection-workbench-editor .tab-trigger[data-state="active"]::after {display: none;}
+.macos-workspace .tab-trigger[data-state="active"] > svg {color: var(--accent);}
+.macos-workspace .tab-number {font-size: var(--text-caption); color: var(--muted); background: transparent;}
+.macos-workspace .connection-workbench-editor .panel {border: 0; border-radius: 0; box-shadow: none;}
+.macos-workspace .connection-workbench-editor .panel-heading {padding: 0 0 14px; min-height: 44px;}
+.macos-workspace .connection-workbench-editor .panel-body {padding: 20px 0 24px;}
+.macos-workspace .connection-workbench-editor .editor-footer {position: static; margin: 8px -24px 0; padding: 16px 24px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--canvas);}
+.macos-workspace .connection-save-bar .save-actions {margin-left: auto;}
+.macos-workspace .key-field .icon-button {bottom: 2px;}
+
+/* 模型目录复用配置预览的中性条纹与蓝色默认行，保留全部模型操作和键盘排序。 */
+.macos-workspace .connection-model-toolbar {gap: 8px; padding: 16px 0;}
+.macos-workspace .connection-model-toolbar .search-field {min-width: min(180px, 100%);}
+.macos-workspace .connection-model-toolbar .search-field,
+.macos-workspace .connection-model-toolbar .segmented {min-height: 34px; border-radius: 7px;}
+.macos-workspace .connection-model-toolbar .search-field input {font-size: var(--text-body); min-height: 32px;}
+.macos-workspace .connection-model-toolbar .segmented button {min-height: 28px; padding: 4px 10px; font-size: var(--text-secondary);}
+.macos-workspace .connection-model-table {padding: 0; border: 1px solid var(--line); border-radius: 7px; overflow: clip;}
+.macos-workspace .model-table-head {min-height: 34px; padding: 9px 12px 9px 55px; background: var(--surface); border-bottom: 0; border-radius: 0; color: var(--muted); font-size: var(--text-secondary); font-weight: 500;}
+/* 操作标题与实际按钮组一起右靠，避免标题只对齐到空白列的左侧。 */
+.macos-workspace .model-table-head > span:last-child {justify-self: end; width: 60px; text-align: center;}
+.macos-workspace .model-row-actions {justify-content: flex-end;}
+.macos-workspace .connection-model-row {grid-template-columns: 18px 16px minmax(0, 1fr) 104px; gap: 8px; min-height: 44px; padding: 6px 12px 6px 5px; border: 0;}
+.macos-workspace .connection-model-row:nth-child(even) {background: var(--workspace-row);}
+.macos-workspace .connection-model-row.is-default {background: var(--workspace-default);}
+.macos-workspace .connection-model-row .model-id {font-size: var(--text-body);}
+.macos-workspace .connection-model-row .badge {font-size: var(--text-caption); padding: 1px 4px;}
+.macos-workspace .connection-model-row .icon-button {width: 28px; height: 28px; min-height: 28px;}
+.macos-workspace .connection-model-row .drag-handle {width: 18px; height: 26px; min-height: 26px; padding: 0; color: var(--mac-model-handle); border-radius: 3px; cursor: grab; touch-action: none;}
+.macos-workspace .connection-model-row .drag-handle:active {cursor: grabbing;}
+.macos-workspace .connection-model-name small {font-size: var(--text-secondary);}
+/* 连接默认与配置默认保留各自语义，复用相同的蓝色标签；拖动浮层也不退回绿色徽章。 */
+.macos-workspace .connection-model-name > .default-caption,
+.model-drag-preview .default-caption {flex-basis: auto; padding: 1px 4px; font-size: var(--text-caption); line-height: 1.5; border: 0; border-radius: 3px; font-weight: 400; white-space: nowrap; background: var(--mac-default-label-surface); color: var(--mac-default-label);}
+.macos-workspace .reasoning-section {padding: 24px 0;}
+.macos-workspace .effort-options {border-radius: 7px; gap: 3px; padding: 3px;}
+.macos-workspace .effort-options button {min-height: 32px; font-size: var(--text-body); border-radius: 5px;}
+.macos-workspace .effort-options button.selected {color: var(--accent);}
+.macos-workspace .purpose-caption {font-size: var(--text-body); margin-top: 8px;}
+.macos-workspace .purpose-examples {margin-top: 20px;}
+.macos-workspace .override-row strong {font-size: var(--text-emphasis);}
+.macos-workspace .radio-options label {font-size: var(--text-body);}
+.macos-workspace .timeout-grid {gap: 16px;}
+
+/* 统计保留图表的语义色和信息密度，只统一材质、筛选控件、标题层级与数据排版。 */
+.macos-workspace .usage-reference {--u-blue: var(--accent); --u-line: var(--line); font-size: var(--text-emphasis);}
+.macos-workspace .usage-reference h1 {font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", var(--font-sans); font-size: 27px; font-weight: 700; line-height: 1.25; letter-spacing: -.7px;}
+.macos-workspace .u-heading {justify-content: space-between; gap: 16px; margin-bottom: 24px;}
+.macos-workspace .u-tabs {background: var(--surface-hover); border-color: var(--line); gap: 3px;}
+.macos-workspace .u-tabs button {min-height: 32px; color: var(--muted);}
+.macos-workspace .u-tabs button[data-state="active"] {color: var(--ink); border-color: var(--line); background: var(--canvas);}
+.macos-workspace .u-tabs button[data-state="active"] > svg {color: var(--accent);}
+.macos-workspace .u-status-line {margin-bottom: 16px;}
+.macos-workspace .u-collection {border-color: var(--line); color: var(--ink); font-size: var(--text-secondary);}
+.macos-workspace .u-collect-dot {background: var(--mac-success); box-shadow: 0 0 0 3px var(--mac-success-soft);}
+.macos-workspace .u-collect-dot.paused {background: var(--muted); box-shadow: 0 0 0 3px var(--surface-hover);}
+.macos-workspace .u-filters {gap: 16px; padding: 16px; margin-bottom: 16px; border-radius: 12px; border-color: var(--line); box-shadow: 0 1px 2px rgb(29 29 31 / .025);}
+.macos-workspace .u-filters label {gap: 6px; font-size: var(--text-body); color: var(--muted);}
+.macos-workspace .u-filter-control {border-color: var(--control-line); background: var(--canvas);}
+.macos-workspace .u-filter-control:hover {border-color: var(--muted); background: var(--canvas);}
+.macos-workspace .u-filter-control:focus-within {border-color: var(--focus);}
+.macos-workspace .u-filters .u-filter-control select {color: var(--ink); border: 0; padding-right: 32px;}
+.macos-workspace .u-filters select, .macos-workspace .u-panel select {border-color: var(--control-line); border-radius: 7px; padding: 7px 10px; min-height: 34px; font-size: var(--text-body);}
+.macos-workspace .u-filter-control > svg {color: var(--muted);}
+.macos-workspace .u-kpis {gap: 12px; margin-bottom: 20px;}
+.macos-workspace .u-kpi {padding: 16px; gap: 7px; border-radius: 10px; border-color: var(--line); box-shadow: none;}
+.macos-workspace .u-kpi > :is(span, small) {color: var(--muted); font-size: var(--text-secondary);}
+.macos-workspace .u-kpi > strong {font-size: 24px; font-weight: 650; letter-spacing: -.5px;}
+.macos-workspace .u-overview-grid {gap: 20px;}
+.macos-workspace .u-panel {padding: 20px; border-radius: 12px; border-color: var(--line); box-shadow: 0 1px 2px rgb(29 29 31 / .025);}
+.macos-workspace .u-panel h2 {font-size: var(--text-emphasis);}
+.macos-workspace .u-panel-heading > span,
+.macos-workspace .u-legend button,
+.macos-workspace .u-secondary,
+.macos-workspace .u-chart-tooltip > div {color: var(--muted);}
+.macos-workspace :is(.u-breakdown-total, .u-breakdown-note, .u-footnote, .u-message, .u-prices legend) {color: var(--muted);}
+.macos-workspace .u-axis {fill: var(--muted);}
+.macos-workspace .u-chart-grid {stroke: var(--line);}
+.macos-workspace .u-chart-tooltip {background: var(--canvas); border-color: var(--line);}
+.macos-workspace .u-table th {background: var(--surface); color: var(--muted);}
+.macos-workspace .u-table td {border-color: var(--line);}
+.macos-workspace .u-table tbody tr:nth-child(even) {background: var(--workspace-row);}
+.macos-workspace .u-prices input {border-color: var(--control-line); border-radius: 7px;}
+
+/* 插件以内容与操作区区分层级；帮助保留真实步骤与原生折叠，不增加装饰性编号。 */
+.macos-workspace .plugin-list-heading {margin-bottom: 16px; max-width: 960px;}
+.macos-workspace .plugin-grid {gap: 20px; max-width: 960px;}
+.macos-workspace .plugin-panel {grid-template-columns: minmax(0, 1.2fr) minmax(280px, 1fr);}
+.macos-workspace .plugin-content {padding: 24px;}
+.macos-workspace .plugin-panel .plugin-title h2 {font-size: 17px; letter-spacing: -.2px;}
+.macos-workspace .plugin-title small {font-size: var(--text-secondary);}
+.macos-workspace .plugin-avatar {width: 40px; height: 40px; border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 10px;}
+.macos-workspace .plugin-content > p {font-size: var(--text-emphasis); line-height: 1.7; margin-top: 18px; max-width: 44ch;}
+.macos-workspace .plugin-install {display: flex; flex-direction: column; padding: 24px; border: 0; border-left: 1px solid var(--line); background: var(--workspace-list); border-radius: 0 12px 12px 0;}
+.macos-workspace .plugin-install dt {font-size: var(--text-secondary);}
+.macos-workspace .plugin-install dd {margin-top: 6px; font-size: var(--text-emphasis); font-variant-numeric: tabular-nums;}
+.macos-workspace .plugin-actions {padding-top: 24px; margin-top: auto; gap: 8px;}
+.macos-workspace .plugin-help {padding: 20px; margin-top: 20px; gap: 12px; max-width: 960px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas);}
+.macos-workspace .plugin-help > svg {color: var(--muted); width: 18px; height: 18px;}
+.macos-workspace .plugin-help strong {font-size: var(--text-emphasis);}
+.macos-workspace .plugin-help p {font-size: var(--text-body); line-height: 1.6;}
+.macos-workspace .help-grid {gap: 20px; margin-bottom: 20px;}
+.macos-workspace .help-steps {margin-bottom: 20px; padding-left: 20px;}
+.macos-workspace .help-steps li {margin-bottom: 18px;}
+.macos-workspace .help-steps li:last-child {margin-bottom: 0;}
+.macos-workspace .help-steps strong {font-size: var(--text-emphasis); margin-bottom: 5px;}
+.macos-workspace .help-steps span {font-size: var(--text-body); line-height: 1.7;}
+.macos-workspace .faq-list {padding-inline: 20px;}
+.macos-workspace .faq-list summary {min-height: 56px; padding: 16px 0; font-size: var(--text-emphasis);}
+.macos-workspace .faq-list summary > svg {width: 15px; height: 15px; color: var(--muted);}
+.macos-workspace .faq-list p {font-size: var(--text-body); line-height: 1.7; padding-bottom: 16px;}
+
+/* 弹层位于 body，直接复用根令牌，避免跳回原来的深灰按钮与蓝灰背景。 */
+.dialog-content {border-radius: 12px; box-shadow: 0 12px 40px rgb(29 29 31 / .16);}
+.dialog-heading {padding: 16px 20px; background: var(--canvas);}
+.dialog-heading h2 {font-size: 17px; letter-spacing: -.2px;}
+.dialog-body {gap: 18px; padding: 20px;}
+.dialog-content .field label {font-size: var(--text-body);}
+.dialog-content .input {min-height: 36px; padding: 8px 10px; font-size: var(--text-emphasis); border-radius: 7px;}
+.dialog-content .button {min-height: 34px; padding: 7px 11px; font-size: var(--text-body); border-radius: 7px;}
+.dialog-content .icon-button {width: 32px; height: 32px; min-height: 32px; padding: 0;}
+.dialog-actions {padding: 16px 20px; background: var(--workspace-list);}
+.menu-content {border-radius: 8px; box-shadow: 0 4px 20px rgb(29 29 31 / .12);}
+.toast {border-radius: 9px; font-size: var(--text-body);}
+.mobile-sidebar {background: var(--mac-sidebar);}
+.mobile-sidebar .sidebar-header {padding-top: 28px;}
+.mobile-sidebar .sidebar-update {display: inline-flex; min-height: 44px; justify-content: flex-start; gap: 11px; padding: 10px 12px; font-size: var(--text-emphasis); color: var(--ink);}
+
+@media (max-width: 1100px) {
+  .macos-workspace .plugin-panel {grid-template-columns: minmax(0, 1fr);}
+  .macos-workspace .plugin-install {border-left: 0; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px;}
+}
+@media (max-width: 900px) {
+  .macos-workspace .connection-workbench.same-page-workbench {grid-template-columns: minmax(0, 1fr);}
+  .macos-workspace .connection-workbench .connection-workbench-list {border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 12px 12px;}
+  .macos-workspace .connection-list-heading {padding-bottom: 12px;}
+  .macos-workspace .connection-list-items {grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 250px;}
+  .macos-workspace .connection-workbench .connection-directory-open {height: 100%; min-height: 72px; padding: 10px;}
+  .macos-workspace .connection-list-note {margin-top: 12px; padding-top: 10px;}
+  .macos-workspace .connection-workbench-editor .connection-save-bar .save-actions {display: flex; width: auto; margin-left: auto; flex-wrap: wrap;}
+  .macos-workspace .help-grid {grid-template-columns: minmax(0, 1fr);}
+}
+@media (max-width: 639px) {
+  /* 手机端正文与控件统一为 16px，保留辅助信息层级；根令牌也覆盖挂到 body 的弹窗。 */
+  :root, .app-shell.macos-settings {--text-body: var(--text-touch); --text-emphasis: var(--text-touch);}
+  .macos-workspace .connection-list-items {grid-template-columns: repeat(2, minmax(0, 1fr));}
+  .macos-workspace .connection-workbench .connection-workbench-editor {padding: 18px 16px 0;}
+  .macos-workspace .connection-workbench-editor .editor-footer {margin-inline: -16px; padding: 14px 16px max(14px, env(safe-area-inset-bottom));}
+  .macos-workspace .connection-workbench-editor .page-heading {gap: 10px;}
+  .macos-workspace .connection-workbench-editor .page-heading h2 {font-size: 19px;}
+  .macos-workspace .connection-workbench-editor .tab-trigger {flex: 1 1 110px; min-height: 40px; padding-inline: 8px;}
+  .macos-workspace .connection-model-row {grid-template-columns: 24px 18px minmax(0, 1fr) 64px; padding-inline: 6px; gap: 6px;}
+  .macos-workspace .model-table-head {grid-template-columns: minmax(0, 1fr) 64px; padding-left: 60px;}
+  .macos-workspace .model-row-actions {flex-wrap: wrap; justify-content: flex-end; gap: 0;}
+  .macos-workspace .model-table-head > span:last-child {width: 56px;}
+  .macos-workspace .connection-model-toolbar .search-field {flex: 1 1 100%;}
+  .macos-workspace .connection-model-toolbar .button {flex: 1;}
+  .macos-workspace .effort-options {grid-template-columns: repeat(3, minmax(0, 1fr));}
+  .macos-workspace .usage-reference h1 {font-size: 24px;}
+  .macos-workspace .u-heading {margin-bottom: 20px;}
+  .macos-workspace .u-tabs button {flex: 1 1 100px; min-height: 40px;}
+  .macos-workspace .u-filters {padding: 14px; gap: 12px;}
+  .macos-workspace .u-kpis {gap: 10px; margin-bottom: 16px;}
+  .macos-workspace .u-kpi {padding: 14px;}
+  .macos-workspace .u-kpi > strong {font-size: 22px;}
+  .macos-workspace .u-panel {padding: 16px;}
+  .macos-workspace .plugin-content, .macos-workspace .plugin-install {padding: 20px;}
+  .macos-workspace .plugin-help {flex-wrap: wrap; padding: 16px;}
+  .macos-workspace .plugin-help > .button {margin-left: 30px;}
+  .dialog-body, .dialog-heading {padding: 16px;}
+}
+@media (pointer: coarse) {
+  .macos-workspace:not([data-page="plans"]) .button,
+  .macos-workspace .connection-workbench-editor .tab-trigger,
+  .macos-workspace .connection-model-toolbar .segmented button,
+  .macos-workspace .effort-options button,
+  .macos-workspace .u-tabs button,
+  .dialog-content .button {min-height: 44px;}
+  .macos-workspace:not([data-page="plans"]) .icon-button,
+  .macos-workspace .connection-model-row .icon-button,
+  .dialog-content .icon-button {width: 44px; height: 44px; min-height: 44px;}
+  .macos-settings .editor-item-actions .icon-button,
+  .macos-workspace .connection-workbench-editor .heading-actions .icon-button {width: 44px; height: 44px; min-height: 44px;}
+  .macos-workspace:not([data-page="plans"]) .input,
+  .macos-workspace .u-filters select,
+  .macos-workspace .u-panel select,
+  .macos-workspace .u-prices input,
+  .dialog-content .input {min-height: 44px; font-size: var(--text-touch);}
+  .macos-workspace .connection-model-toolbar .search-field,
+  .macos-workspace .connection-model-toolbar .search-field input {min-height: 44px;}
+  .macos-workspace .connection-model-toolbar .search-field input {font-size: var(--text-touch);}
+  .macos-workspace .connection-model-row {grid-template-columns: 44px 18px minmax(0, 1fr) 88px; min-height: 56px; gap: 6px;}
+  .macos-workspace .model-table-head {grid-template-columns: minmax(0, 1fr) 88px; padding-left: 82px;}
+  .macos-workspace .model-row-actions {gap: 0;}
+  .macos-workspace .model-table-head > span:last-child {width: 88px;}
+  .macos-workspace .key-field .icon-button {bottom: 0;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog-content *, .menu-content *, .toast *, .mobile-sidebar * {transition: none !important; animation: none !important;}
+}

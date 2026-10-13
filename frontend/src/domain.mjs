@@ -76,6 +76,17 @@ export function choosePlanModel(plan, cid, mid, selected) {
   return next;
 }
 
+/** 仅重排当前配置中可见且已选的模型 ID；隐藏项留在原槽位，默认模型、连接目录及其他配置不变。 */
+export function reorderPlanModels(plan, cid, activeID, overID, visibleIDs = plan.modelIDs[cid] ?? []) {
+  if (!plan.connectionIDs.includes(cid)) return plan;
+  const ids = plan.modelIDs[cid] ?? [], models = ids.map(id => ({id}));
+  const visible = visibleIDs.filter(id => ids.includes(id)), reordered = reorderModels(models, activeID, overID, visible);
+  if (reordered === models) return plan;
+  const next = clone(plan);
+  next.modelIDs[cid] = reordered.map(model => model.id);
+  return next;
+}
+
 /** 显式添加连接时复制候选范围；移除连接后清理本配置的模型，不触碰其他配置。 */
 export function chooseConnection(plan, cid, selected, saved) {
   const next = clone(plan);

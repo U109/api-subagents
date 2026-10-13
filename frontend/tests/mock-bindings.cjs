@@ -24,6 +24,8 @@ function mockBindings(fixture) {
     API: async (route, body) => {
       calls.push({route, body}); if (window.__mock.failure === route) {window.__mock.failure = ''; throw Error('synthetic operation failed');}
       const input = body ? JSON.parse(body) : {};
+      if (route === '/api/usage') return {records: copy(fixture.usageRecords || []), prices: copy(fixture.usagePrices || {revision:'', rates:{}}), now:Date.now(), skipped:0, lost:0};
+      if (route === '/api/usage/prices') {fixture.usagePrices = {revision:'test-price-version',rates:copy(input.rates)}; return {prices:copy(fixture.usagePrices)};}
       if (route === '/api/probe' || route === '/api/models') return new Promise((resolve, reject) => pending.set(input.requestId, {resolve, reject, route}));
       if (route === '/api/config/save') {
         const p = copy(input.config.models[input.name]), source = p.savedName || (p.copySource ? Object.entries(saved.models).find(([, value]) => value.id === p.copySource)?.[0] : input.name), previous = saved.models[source];

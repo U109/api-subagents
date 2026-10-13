@@ -17,6 +17,7 @@ import (
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 )
 
 const (
@@ -248,6 +249,9 @@ func (m *Manager) GenerateImage(parent context.Context, input ImageRequest) (sha
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+profile.APIKey)
+	imageProfile := profile
+	imageProfile.Model = model
+	request = request.WithContext(usage.EnsureCall(usage.WithSource(request.Context(), "image", "", input.Model), imageProfile, input.Model, "image", "image"))
 	response, err := m.Provider.Client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {

@@ -1,0 +1,347 @@
+/* 以已确认的接入配置为工作区视觉基准；根令牌同时服务页面和挂载到 body 的菜单、弹窗。 */
+:root, .app-shell.macos-settings {
+  --canvas: #fff;
+  --surface: #f5f5f7;
+  --surface-hover: #eeeef1;
+  --line: #e3e3e8;
+  --control-line: #a0a0a8;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --primary: #006adc;
+  --primary-hover: #005bc0;
+  --accent: #006adc;
+  --accent-soft: #eef5ff;
+  --accent-line: #c6daf5;
+  --default-surface: #f4f8ff;
+  --focus: #006adc;
+  --mac-sidebar: #eeeef1;
+  --mac-success: #24713e;
+  --mac-success-soft: #edf6ef;
+  --mac-warning: #8c6018;
+  --mac-selection: #fff;
+  --mac-selection-muted: #edf4ff;
+  --mac-model-handle: #82858f;
+  --mac-default-label: #235fa7;
+  --mac-default-label-surface: #d2e4fb;
+  --mac-shadow: 0 1px 3px rgb(29 29 31 / .04), 0 8px 24px rgb(29 29 31 / .025);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  /* 小字、辅助说明、正文与强调文字分级；使用 rem 尊重用户的默认文字大小，不缩放整张界面。 */
+  --text-caption: .75rem;
+  --text-secondary: .8125rem;
+  --text-body: .875rem;
+  --text-emphasis: .9375rem;
+  --text-touch: 1rem;
+}
+.app-shell.macos-settings {
+  grid-template-columns: 208px minmax(0, 1fr);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-emphasis);
+  -webkit-font-smoothing: antialiased;
+}
+.macos-settings.sidebar-collapsed {grid-template-columns: 64px minmax(0, 1fr);}
+.macos-settings .sidebar {background: var(--mac-sidebar); border-right-color: var(--line);}
+.macos-settings .sidebar-content {padding: 28px 12px 16px;}
+.macos-settings.sidebar-collapsed .sidebar-content {padding-inline: 8px;}
+.macos-settings .sidebar-header {padding: 0 8px 32px;}
+.macos-settings .sidebar-header .brand {gap: 10px;}
+.macos-settings .brand-mark {border-radius: 9px; background: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .12);}
+.macos-settings .sidebar-header .brand strong {font-size: var(--text-emphasis); font-weight: 650; letter-spacing: -.2px;}
+.macos-settings .sidebar-section-label {padding: 0 12px 10px; font-size: var(--text-secondary); font-weight: 600;}
+.macos-settings .primary-nav {gap: 5px;}
+.macos-settings .nav-button {min-height: 42px; gap: 11px; padding: 10px 12px; border: 0; border-radius: 7px; font-size: var(--text-emphasis);}
+.macos-settings .nav-button > svg {stroke-width: 1.7; color: var(--muted);}
+.macos-settings .nav-button.active {background: rgb(0 106 220 / .1); color: var(--ink); font-weight: 600;}
+.macos-settings .nav-button.active > svg {color: var(--accent);}
+.macos-settings .nav-button:hover:not(.active) {background: rgb(29 29 31 / .05);}
+.macos-settings .nav-count {background: transparent; color: var(--muted); font-size: var(--text-secondary); padding: 0;}
+.macos-settings .sidebar .sidebar-edge-toggle {right: -10px; width: 20px; height: 44px; min-height: 44px; background: var(--mac-sidebar); border-radius: 6px; color: var(--muted); box-shadow: none;}
+.macos-settings .sidebar-footnote {font-size: var(--text-caption); gap: 5px;}
+.sidebar-update {display: none;}
+.macos-settings .sidebar .sidebar-update {display: inline-flex; width: 100%; min-height: 42px; padding: 10px 12px; justify-content: flex-start; gap: 11px; margin-bottom: 4px; font-size: var(--text-emphasis); color: var(--ink); border-radius: 7px;}
+.macos-settings.sidebar-collapsed .sidebar-update {justify-content: center; gap: 0; padding-inline: 8px;}
+.macos-settings.sidebar-collapsed .sidebar-update > span {position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;}
+.macos-settings .topbar {display: none; height: 44px; min-height: 44px; padding: 7px 32px; border-bottom: 1px solid var(--line);}
+.macos-settings .topbar .button {min-height: 30px; padding: 5px 10px; font-size: var(--text-body);}
+.macos-settings .breadcrumb {font-size: var(--text-secondary);}
+.macos-settings .page-content {padding: 28px 32px 24px; max-width: 1560px;}
+.macos-settings .plan-page-intro {margin-bottom: 24px;}
+.macos-settings .plan-page-intro .page-heading {margin-bottom: 6px;}
+.macos-settings .page-heading h1 {font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", var(--font-sans); font-size: 27px; font-weight: 700; letter-spacing: -.7px; line-height: 1.25;}
+.macos-settings .plan-page-intro > p {font-size: var(--text-emphasis); line-height: 1.5; color: var(--muted);}
+.macos-settings .heading-actions .button {min-height: 34px; padding: 7px 12px; border-radius: 7px; font-size: var(--text-body); box-shadow: 0 1px 2px rgb(0 0 0 / .035);}
+.macos-settings .access-status {min-height: 76px; padding: 16px 20px; gap: 14px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgb(29 29 31 / .025);}
+.macos-settings .access-status-icon {width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--surface); color: var(--muted);}
+.macos-settings .access-on .access-status-icon {background: var(--accent-soft); color: var(--accent);}
+.macos-settings .access-status-icon svg {width: 19px; height: 19px; stroke-width: 1.8;}
+.macos-settings .access-status-copy {gap: 5px;}
+.macos-settings .access-status-copy strong {font-size: var(--text-emphasis); gap: 12px;}
+.macos-settings .access-status-copy > span {font-size: var(--text-body); line-height: 1.5;}
+.macos-settings .access-status-copy .inline-link {display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; padding: 0;}
+.macos-settings .access-status-copy .inline-link:hover {text-decoration: underline;}
+.macos-settings .access-status-control {gap: 10px;}
+.macos-settings .access-state-label {font-size: var(--text-body); color: var(--muted); white-space: nowrap;}
+.macos-settings .access-on .access-state-label {color: var(--mac-success);}
+.macos-settings .switch {width: 38px; height: 23px; padding: 2px; background: #b5b5bc; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .06);}
+.macos-settings .access-status-control .switch[data-state="checked"] {background: #32a667; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .07);}
+.macos-settings .switch-thumb {width: 19px; height: 19px; box-shadow: 0 1px 3px rgb(0 0 0 / .18);}
+.macos-settings .switch[data-state="checked"] .switch-thumb {transform: translateX(15px);}
+
+/* 两列共用一个容器，左侧为目录材质，右侧保留可编辑的白色内容面。 */
+.macos-settings .plan-workspace.mac-plan-workspace {grid-template-columns: 216px minmax(0, 1fr); gap: 0; align-items: stretch; border: 1px solid var(--line); border-radius: 13px; background: var(--canvas); box-shadow: var(--mac-shadow); overflow: clip;}
+.macos-settings .mac-plan-workspace > .plan-list {position: static; top: auto; max-height: none; min-width: 0; padding: 20px 10px 16px; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: #f8f8fa; box-shadow: none;}
+.macos-settings .plan-list-heading {padding: 0 10px 16px;}
+.macos-settings .plan-list-heading h2 {font-size: var(--text-body); font-weight: 600; color: var(--muted);}
+.macos-settings .plan-list-heading > span {background: transparent; color: var(--muted); font-size: var(--text-secondary); padding: 0;}
+.macos-settings .plan-list-items {padding: 2px; margin: 0; max-height: 540px; overflow-y: auto; scrollbar-width: thin;}
+.macos-settings .plan-list-item {padding: 13px 12px; margin-bottom: 6px; gap: 5px; border: 0; border-radius: 8px; background: transparent;}
+.macos-settings .plan-list-item:not(.selected):hover {background: var(--surface-hover);}
+.macos-settings .plan-list-item.selected {background: var(--accent); border-color: transparent; box-shadow: 0 1px 2px rgb(0 106 220 / .12); color: var(--mac-selection);}
+.macos-settings .plan-list-title {flex-wrap: wrap; gap: 6px;}
+.macos-settings .plan-list-title strong {flex: 1 1 auto; color: var(--ink); font-size: var(--text-emphasis); font-weight: 600; line-height: 1.5;}
+.macos-settings .plan-list-item.selected .plan-list-title strong {color: var(--mac-selection); font-weight: 600;}
+.macos-settings .plan-list-connections {font-size: var(--text-body); line-height: 1.5;}
+.macos-settings .plan-list-meta {font-size: var(--text-secondary);}
+.macos-settings .plan-list-item.selected .plan-list-connections,
+.macos-settings .plan-list-item.selected .plan-list-meta {color: var(--mac-selection-muted);}
+.macos-settings .plan-list .badge-active {border: 0; padding: 1px 0; gap: 3px; background: transparent; color: var(--mac-success); font-size: var(--text-caption); border-radius: 0; white-space: nowrap;}
+.macos-settings .plan-list-item.selected .badge-active {color: var(--mac-selection);}
+.macos-settings .plan-list-item.selected .draft-dot {background: var(--mac-selection);}
+.macos-settings .plan-list-item:focus-visible {outline: 2px solid var(--focus); outline-offset: -2px;}
+.macos-settings .plan-list-item.selected:focus-visible {outline-color: var(--mac-selection); outline-offset: -3px;}
+.macos-settings .plan-list-note {padding: 24px 10px 0; margin-top: auto; font-size: var(--text-secondary); line-height: 1.7; color: var(--muted);}
+.macos-settings .mac-plan-workspace > .plan-editor {border: 0; border-radius: 0; box-shadow: none; height: auto; min-height: 0; display: flex; flex-direction: column; min-width: 0;}
+.macos-settings .editor-title-line {padding: 20px 24px 18px; gap: 16px; border-bottom: 1px solid var(--line); flex-shrink: 0;}
+.macos-settings .editor-name-field {gap: 5px;}
+.macos-settings .editor-name-field label {font-size: var(--text-secondary); color: var(--muted);}
+.macos-settings .editor-name-field .input {font-size: 21px; font-weight: 650; letter-spacing: -.4px; line-height: 1.3; min-height: 33px; padding-top: 2px; padding-bottom: 2px; max-width: min(32ch, 100%);}
+.macos-settings .editor-name-field .field-control {flex-wrap: wrap; gap: 8px 10px;}
+.macos-settings .editor-name-field .badge {font-size: var(--text-secondary); line-height: 1.5; border-radius: 5px; padding: 2px 6px;}
+.macos-settings .editor-name-field .badge-active {border: 0; background: var(--mac-success-soft); color: var(--mac-success);}
+.macos-settings .editor-name-field .badge-warning {color: var(--mac-warning);}
+.macos-settings .editor-title-line > .editor-item-actions {gap: 4px;}
+/* 两个编辑器共用标题操作尺寸；删除默认中性，只在悬停时提示危险，不改变确认交互。 */
+.macos-settings .editor-item-actions .icon-button,
+.macos-settings .connection-workbench-editor .heading-actions .icon-button {width: 30px; height: 32px; min-height: 32px; color: var(--muted); border-radius: 6px;}
+.macos-settings .editor-item-actions .icon-delete svg,
+.macos-settings .connection-workbench-editor .heading-actions .icon-delete svg {color: var(--muted);}
+.macos-settings .editor-item-actions .icon-delete:hover,
+.macos-settings .connection-workbench-editor .heading-actions .icon-delete:hover {background: var(--danger-soft);}
+.macos-settings .editor-item-actions .icon-delete:hover svg,
+.macos-settings .connection-workbench-editor .heading-actions .icon-delete:hover svg {color: var(--danger);}
+.macos-settings .editor-content {padding: 20px 24px 24px; gap: 24px; align-content: start; flex: 1; min-width: 0; min-height: 0;}
+.macos-settings .section-line {margin-bottom: 12px;}
+.macos-settings .section-line h2 {font-size: var(--text-emphasis); font-weight: 600;}
+.macos-settings .section-line > span {font-size: var(--text-secondary);}
+.macos-settings .member-grid {gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(154px, 100%), 1fr));}
+.macos-settings .member-item {min-height: 58px; padding: 9px 8px 9px 12px; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas);}
+.macos-settings .member-item.member-selected {background: var(--default-surface); border-color: var(--accent-line);}
+.macos-settings .member-item:has(label:hover) {border-color: var(--accent);}
+.macos-settings .member-item label {gap: 9px; min-height: 34px;}
+.macos-settings .member-item label > span {gap: 3px;}
+.macos-settings .member-item strong {font-size: var(--text-body); font-weight: 600;}
+.macos-settings .member-availability {font-size: var(--text-secondary); color: var(--muted); white-space: nowrap;}
+.macos-settings .member-item > .icon-button {width: 28px; height: 30px; min-height: 30px; color: var(--muted);}
+.macos-settings .checkbox {width: 16px; height: 16px; border-radius: 4px; border-color: var(--control-line);}
+.macos-settings .checkbox[data-state="checked"] {background: var(--accent); border-color: var(--accent);}
+.macos-settings .checkbox svg {width: 12px; height: 12px;}
+.macos-settings .scoped-toolbar {gap: 10px; margin-bottom: 14px;}
+.macos-settings .scoped-toolbar .search-field {min-height: 34px; border-color: var(--line); border-radius: 7px; background: var(--surface); padding-inline: 10px;}
+.macos-settings .scoped-toolbar .search-field:focus-within {background: var(--canvas); border-color: var(--focus);}
+.macos-settings .scoped-toolbar .search-field input {font-size: var(--text-body); min-height: 32px;}
+.macos-settings .scoped-toolbar .search-field input::placeholder {color: var(--muted); opacity: 1;}
+.macos-settings .segmented {border: 0; border-radius: 7px; padding: 2px; gap: 1px; background: var(--surface-hover);}
+.macos-settings .segmented button {font-size: var(--text-secondary); min-height: 30px; padding: 4px 12px; border-radius: 5px; color: var(--muted);}
+.macos-settings .segmented button.selected {color: var(--ink); font-weight: 500; box-shadow: 0 1px 3px rgb(0 0 0 / .1), 0 0 0 1px rgb(0 0 0 / .025);}
+
+/* 模型保持一列，容量为次级信息；星标与默认文字共同表达状态，不依赖颜色。 */
+.macos-settings .scope-group {margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas);}
+.macos-settings .scope-group-head {min-height: 40px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: #fafafb;}
+.macos-settings .scope-group-head strong {font-size: var(--text-body); font-weight: 600;}
+.macos-settings .scope-group-head .avatar {width: 21px; height: 21px; border-radius: 5px; font-size: var(--text-caption); color: var(--muted); border-color: var(--line);}
+.macos-settings .scope-group-head > div:first-child > span:last-child {background: transparent; color: var(--muted); padding: 0; border: 0; font-size: var(--text-secondary);}
+.macos-settings .scope-bulk .button {color: var(--accent); font-size: var(--text-secondary); min-height: 28px; padding: 4px 7px;}
+.macos-settings .scope-model-row {grid-template-columns: 16px minmax(0, 1fr) 46px 28px; gap: 10px; padding: 7px 12px; min-height: 43px; border-bottom: 1px solid var(--line);}
+.macos-settings .scope-model-row:last-child {border-bottom: 0;}
+.macos-settings .scope-model-row.is-default {background: var(--default-surface);}
+.macos-settings .scope-model-name {gap: 6px; flex-wrap: wrap;}
+.macos-settings .scope-model-row .model-id {font-family: var(--font-mono); font-size: var(--text-emphasis); line-height: 1.5;}
+.macos-settings .scope-model-name .default-caption {font-size: var(--text-secondary); padding: 1px 5px; border: 0; border-radius: 4px; color: var(--accent); background: #e7f0ff;}
+.macos-settings .scope-model-row .capacity {font-size: var(--text-secondary); line-height: 1.5; color: var(--muted); border: 0; padding: 1px 3px; background: transparent; border-radius: 0; font-variant-numeric: tabular-nums; white-space: nowrap;}
+.macos-settings .scope-model-row .icon-button {width: 28px; height: 28px; min-height: 28px;}
+.macos-settings .scope-model-row .star-button {color: #7d7d86;}
+.macos-settings .scope-model-row .star-button.is-starred {color: var(--accent);}
+.macos-settings .scope-model-row .star-button svg {width: 15px; height: 15px;}
+.macos-settings .plan-editor > .editor-footer {margin: 0; padding: 16px 24px; gap: 12px; min-height: 68px; border-top: 1px solid var(--line); border-radius: 0; background: var(--canvas); flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; flex-shrink: 0;}
+.macos-settings .editor-save-status {display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-secondary); color: var(--muted); min-width: 0; line-height: 1.5;}
+.macos-settings .editor-save-status > svg {color: var(--mac-success);}
+.macos-settings .editor-save-status.is-dirty > svg {color: var(--mac-warning);}
+.macos-settings .save-actions {gap: 8px; width: auto;}
+.macos-settings .save-actions .button {min-height: 34px; padding: 7px 11px; font-size: var(--text-body); border-radius: 7px;}
+.macos-settings .button-primary:not(.button-applied) {background: var(--primary); color: var(--canvas); border-color: var(--primary); box-shadow: 0 1px 2px rgb(0 106 220 / .12);}
+.macos-settings .button-primary:not(.button-applied):hover:not(:disabled) {background: var(--primary-hover); border-color: var(--primary-hover);}
+.macos-settings .button-applied {opacity: 1; border-color: var(--line); color: var(--muted); background: var(--surface); box-shadow: none;}
+.macos-settings .button-applied > svg {color: var(--mac-success);}
+.macos-settings .plan-editor > .editor-footer .save-message.field-error {flex: 1 1 100%; margin: 0; font-size: var(--text-body);}
+.macos-settings .button, .macos-settings .icon-button, .macos-settings .nav-button, .macos-settings .plan-list-item, .macos-settings .member-item {transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;}
+.macos-settings .switch-thumb {transition: transform 160ms ease;}
+
+@media (min-width: 901px) and (min-height: 740px) {
+  .macos-settings .plan-workspace.mac-plan-workspace {height: calc(100dvh - 238px); min-height: 440px;}
+  .macos-settings .mac-plan-workspace > .plan-list {height: 100%; min-height: 0;}
+  .macos-settings .plan-list-items {max-height: none; min-height: 0;}
+  .macos-settings .plan-editor .editor-content {overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; scrollbar-width: thin; scroll-padding-block: 16px;}
+}
+@media (max-width: 1200px) and (min-width: 901px) {
+  .macos-settings .page-content {padding-inline: 24px;}
+  .macos-settings .plan-workspace.mac-plan-workspace {grid-template-columns: 208px minmax(0, 1fr);}
+}
+@media (max-width: 900px) {
+  .macos-settings .page-content {padding: 24px;}
+  .macos-settings .plan-workspace.mac-plan-workspace {grid-template-columns: minmax(0, 1fr);}
+  .macos-settings .mac-plan-workspace > .plan-list {border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 12px 12px;}
+  .macos-settings .plan-list-items {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 244px;}
+  .macos-settings .plan-list-item {margin: 0; height: 100%;}
+  .macos-settings .plan-list-note {padding: 12px 10px 0; margin: 0;}
+  .macos-settings .plan-list-note br {display: none;}
+  .macos-settings .mac-plan-workspace > .plan-editor {height: auto; min-height: 0;}
+  .macos-settings .plan-editor .editor-content {overflow: visible;}
+  .macos-settings .plan-editor > .editor-footer {flex-direction: column; align-items: stretch;}
+  .macos-settings .editor-save-status {flex: 0 0 auto;}
+  .macos-settings .save-actions {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; min-width: 0; margin-left: 0;}
+  .macos-settings .save-actions .button {width: 100%; min-width: 0;}
+  .macos-settings .save-actions .button-primary {grid-column: 1 / -1;}
+}
+@media (max-width: 639px) {
+  .app-shell.macos-settings, .macos-settings.sidebar-collapsed {grid-template-columns: minmax(0, 1fr);}
+  .macos-settings .topbar {display: flex; height: 52px; min-height: 52px; padding: 6px 12px;}
+  .macos-settings .topbar .mobile-menu-button {min-height: 40px;}
+  .macos-settings .page-content {padding: 20px 16px 24px;}
+  .macos-settings .plan-page-intro {margin-bottom: 20px;}
+  .macos-settings .page-heading {gap: 12px;}
+  .macos-settings .plans-page .heading-actions {flex: 0 0 auto;}
+  .macos-settings .plans-page .heading-actions .button {flex: 0 0 auto;}
+  .macos-settings .page-heading h1 {font-size: 24px;}
+  .macos-settings .plan-page-intro > p {font-size: var(--text-body);}
+  .macos-settings .heading-actions .button {padding-inline: 9px;}
+  .macos-settings .access-status {padding: 14px 12px; gap: 10px; margin-bottom: 16px;}
+  .macos-settings .access-status-icon {width: 30px; height: 30px; border-radius: 8px;}
+  .macos-settings .access-status-copy strong {gap: 6px; font-size: var(--text-body);}
+  .macos-settings .access-status-copy > span {font-size: var(--text-secondary);}
+  .macos-settings .access-state-label {display: none;}
+  .macos-settings .plan-list-heading {padding-bottom: 12px;}
+  .macos-settings .plan-list-item {padding: 12px 10px;}
+  .macos-settings .editor-title-line {padding: 18px 16px 16px; align-items: flex-start; gap: 6px;}
+  .macos-settings .editor-name-field .input {font-size: 20px;}
+  .macos-settings .editor-content {padding: 20px 16px; gap: 22px;}
+  .macos-settings .member-grid {grid-template-columns: minmax(0, 1fr);}
+  .macos-settings .member-item {min-height: 58px;}
+  .macos-settings .scoped-toolbar {flex-wrap: wrap; gap: 8px;}
+  .macos-settings .scoped-toolbar .search-field {min-width: 140px; flex: 1 1 140px;}
+  .macos-settings .segmented button {padding-inline: 10px;}
+  .macos-settings .scope-model-row {grid-template-columns: 16px minmax(0, 1fr) 28px; padding: 8px 10px; gap: 4px 9px;}
+  .macos-settings .scope-model-row .capacity {grid-column: 2; grid-row: 2; justify-self: start; max-width: max-content; padding: 0;}
+  .macos-settings .scope-model-row .star-button {grid-column: 3; grid-row: 1 / 3;}
+  .macos-settings .scope-group-head {padding: 6px 10px;}
+  .macos-settings .plan-editor > .editor-footer {padding: 16px;}
+  .macos-settings .save-actions {flex-wrap: wrap; justify-content: flex-end; max-width: 100%;}
+  .macos-settings .scoped-toolbar input, .macos-settings .editor-name-field .input {font-size: var(--text-touch);}
+}
+@media (pointer: coarse) {
+  .macos-settings .member-item > .icon-button, .macos-settings .scope-model-row .star-button, .macos-settings .editor-item-actions .icon-button {width: 40px; min-height: 44px; height: 44px;}
+  .macos-settings .scope-model-row {grid-template-columns: 16px minmax(0, 1fr) 46px 40px;}
+  .macos-settings .scoped-toolbar .search-field {min-height: 44px;}
+  .macos-settings .scoped-toolbar .search-field input {min-height: 42px;}
+  .macos-settings .save-actions .button, .macos-settings .heading-actions .button, .macos-settings .segmented button {min-height: 44px;}
+  .macos-settings .switch {position: relative;}
+  .macos-settings .switch::before {content: ""; position: absolute; inset: -11px -4px;}
+}
+@media (pointer: coarse) and (max-width: 639px) {
+  .macos-settings .scope-model-row {grid-template-columns: 16px minmax(0, 1fr) 40px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .macos-settings *, .macos-settings *::before, .macos-settings *::after {transition: none !important; animation: none !important; scroll-behavior: auto !important;}
+}
+
+/* 连接区只保留已加入成员；候选连接按需在菜单中展示，不再铺满未选项。 */
+.macos-settings .member-section-actions {display: flex; align-items: center; gap: 12px; margin-left: auto; min-width: 0;}
+.macos-settings .member-count {font-size: var(--text-secondary); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;}
+.macos-settings .add-plan-connection {min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: var(--text-secondary); gap: 4px; color: var(--ink);}
+.macos-settings .connection-members .member-grid {display: flex; flex-wrap: wrap; gap: 8px;}
+.macos-settings .member-item {flex: 0 1 216px; min-width: min(216px, 100%); max-width: 100%; gap: 8px; padding: 9px 8px 9px 12px;}
+.macos-settings .member-symbol {display: grid; place-items: center; width: 24px; height: 28px; flex: none; color: var(--accent);}
+.macos-settings .member-copy {display: grid; gap: 3px; min-width: 0; flex: 1;}
+.macos-settings .member-copy strong {overflow-wrap: anywhere;}
+.macos-settings .member-warning {font-size: var(--text-secondary); color: var(--mac-warning);}
+.macos-settings .member-actions {display: flex; align-items: center; gap: 0; flex: none;}
+.macos-settings .member-actions .icon-button {width: 25px; height: 30px; min-height: 30px; padding: 0; color: var(--muted); border-radius: 5px;}
+.macos-settings .member-actions .icon-button:hover {color: var(--ink); background: var(--accent-soft);}
+.macos-settings .member-empty {font-size: var(--text-body); line-height: 1.6; padding: 8px 0; color: var(--muted);}
+.connection-picker-menu {min-width: 236px; max-width: min(340px, calc(100vw - 24px)); max-height: min(360px, var(--radix-dropdown-menu-content-available-height)); overflow-y: auto; scrollbar-width: thin;}
+.connection-picker-label {display: block; padding: 7px 9px; font-size: var(--text-secondary); font-weight: 500; color: #6e6e73;}
+.connection-picker-item {gap: 9px; min-height: 48px;}
+.connection-picker-item > span {display: grid; gap: 3px; min-width: 0; flex: 1;}
+.connection-picker-item strong {font-size: var(--text-body); font-weight: 600; overflow-wrap: anywhere;}
+.connection-picker-item small {font-size: var(--text-secondary); color: #6e6e73;}
+.connection-picker-item > svg:last-child {color: #006adc;}
+.connection-picker-empty {padding: 12px 9px; font-size: var(--text-body); line-height: 1.6; color: #6e6e73;}
+.scope-order-menu {width: 300px; max-height: min(360px, var(--radix-dropdown-menu-content-available-height)); max-width: calc(100vw - 24px); overflow-y: auto;}
+.scope-order-menu-row {display: grid; grid-template-columns: minmax(0, 1fr) 32px 32px; align-items: center; gap: 4px; padding: 2px 3px;}
+.order-model-name {min-width: 0; padding-inline: 6px; font-family: var(--font-mono); font-size: var(--text-body); overflow-wrap: anywhere;}
+.scope-order-menu-row .scope-order-action {justify-content: center; min-height: 32px; padding: 4px;}
+
+/* 参考图的紧凑模型清单：折叠箭头、数量胶囊、左侧排序手柄和弱化的容量标签。 */
+.macos-settings .scope-group {border-radius: 7px;}
+.macos-settings .scope-group-head {min-height: 34px; padding: 3px 8px; gap: 6px; background: #f4f4f6; border-bottom: 0;}
+.macos-settings .scope-group-toggle {display: inline-flex; align-items: center; gap: 7px; min-height: 28px; min-width: 0; padding: 3px 4px; border: 0; border-radius: 4px; text-align: left; color: var(--ink);}
+.macos-settings .scope-group-toggle > svg {color: var(--muted);}
+.macos-settings .scope-group-toggle[aria-expanded="true"] > svg {transform: rotate(90deg);}
+.macos-settings .scope-group-toggle strong {font-size: var(--text-body); font-weight: 500; min-width: 0; overflow-wrap: anywhere;}
+.macos-settings .scope-group-count {padding: 1px 5px; border-radius: 5px; font-size: var(--text-caption); line-height: 1.4; color: #3e6590; background: #dfeaf8; white-space: nowrap; font-variant-numeric: tabular-nums;}
+.macos-settings .scope-bulk {gap: 0;}
+.macos-settings .scope-bulk .button {min-height: 26px; padding: 3px 6px; font-size: var(--text-secondary);}
+.macos-settings .scope-bulk .scope-order-menu-trigger {width: 25px; height: 26px; min-height: 26px; padding: 0; color: var(--muted);}
+.macos-settings .scope-model-row.scope-sort-row {grid-template-columns: 18px 16px minmax(0, 1fr) 46px 28px; gap: 8px; min-height: 36px; padding: 4px 9px 4px 5px; border: 0; background: var(--canvas);}
+.macos-settings .scope-sort-row:nth-child(even) {background: #f7f7f9;}
+.macos-settings .scope-sort-row.is-default {background: #e7f1ff;}
+.macos-settings .scope-sort-row:hover:not(.is-default) {background: #eef0f4;}
+.macos-settings .scope-sort-row.is-dragging {opacity: .25;}
+.macos-settings .scope-sort-row.is-drop-target {box-shadow: inset 0 2px var(--accent);}
+.macos-settings .scope-sort-row .scope-drag-handle {width: 18px; height: 26px; min-height: 26px; padding: 0; color: var(--mac-model-handle); border-radius: 3px; cursor: grab; touch-action: none;}
+.macos-settings .scope-sort-row .scope-drag-handle:active {cursor: grabbing;}
+.macos-settings .scope-sort-row .scope-drag-handle:disabled {opacity: .35; cursor: not-allowed;}
+.macos-settings .scope-sort-row .scope-model-name {padding: 1px 0; gap: 6px;}
+.macos-settings .scope-sort-row .model-id {font-size: var(--text-body); line-height: 1.5;}
+.macos-settings .scope-sort-row .default-caption {padding: 1px 4px; font-size: var(--text-caption); border-radius: 3px; background: var(--mac-default-label-surface); color: var(--mac-default-label);}
+.macos-settings .scope-sort-row .capacity {justify-self: end; padding: 1px 4px; font-size: var(--text-caption); line-height: 1.4; border: 1px solid #dce1e9; border-radius: 4px; background: #f0f3f7; color: #626775;}
+.macos-settings .scope-sort-row .star-button {width: 28px; height: 26px; min-height: 26px;}
+.macos-settings .scope-sort-row .star-button.is-starred {color: var(--accent);}
+.macos-settings .scope-sort-row .star-button:not(.is-starred) {color: #858b96;}
+.scope-drag-preview {min-height: 36px; padding: 8px 12px; border-radius: 6px;}
+.scope-drag-preview .model-id {font-size: var(--text-body);}
+
+@media (max-width: 639px) {
+  .macos-settings .member-item {flex-basis: 100%; width: 100%;}
+  .macos-settings .member-section-actions {gap: 8px;}
+  .macos-settings .scope-model-row.scope-sort-row {grid-template-columns: 18px 16px minmax(0, 1fr) 28px; gap: 2px 7px; padding: 6px 8px 6px 4px;}
+  .macos-settings .scope-sort-row .scope-drag-handle {grid-column: 1; grid-row: 1;}
+  .macos-settings .scope-sort-row .checkbox {grid-column: 2; grid-row: 1;}
+  .macos-settings .scope-sort-row .checkbox::before {inset: -8px -4px;}
+  .macos-settings .scope-sort-row .scope-model-name {grid-column: 3; grid-row: 1;}
+  .macos-settings .scope-sort-row .capacity {grid-column: 3; grid-row: 2; justify-self: start;}
+  .macos-settings .scope-sort-row .star-button {grid-column: 4; grid-row: 1 / 3;}
+}
+@media (pointer: coarse) {
+  .scope-order-menu-row {grid-template-columns: minmax(0, 1fr) 40px 40px;}
+  .scope-order-menu-row .scope-order-action {min-height: 44px;}
+  .macos-settings .add-plan-connection, .macos-settings .scope-group-toggle, .macos-settings .scope-bulk .button {min-height: 44px;}
+  .macos-settings .member-actions .icon-button {width: 36px; min-height: 44px; height: 44px;}
+  .macos-settings .scope-model-row.scope-sort-row {grid-template-columns: 24px 18px minmax(0, 1fr) 46px 40px; min-height: 48px;}
+  .macos-settings .scope-sort-row .scope-drag-handle {width: 24px; height: 44px; min-height: 44px;}
+  .macos-settings .scope-sort-row .star-button {width: 40px; height: 44px; min-height: 44px;}
+}
+@media (pointer: coarse) and (max-width: 639px) {
+  .macos-settings .scope-model-row.scope-sort-row {grid-template-columns: 24px 18px minmax(0, 1fr) 40px;}
+}

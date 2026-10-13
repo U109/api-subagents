@@ -24,6 +24,7 @@ import (
 	"github.com/U109/api-subagents/internal/settings"
 	"github.com/U109/api-subagents/internal/shared"
 	"github.com/U109/api-subagents/internal/updates"
+	"github.com/U109/api-subagents/internal/usage"
 	"github.com/U109/api-subagents/packaging"
 
 	"github.com/wailsapp/wails/v2"
@@ -71,6 +72,7 @@ func newApp(packaged bool) *App {
 	app.pluginUpdater = updates.NewPluginUpdater(release, filepath.Join(configstore.DataDir(), "plugin-updates"), installed)
 	app.pluginUpdater.OnChange = app.broadcast
 	app.relay = relay.New(app.service.Store, codexconfig.CodexConfig{Home: app.installOptions.CodexHome, DataRoot: configstore.DataDir()})
+	app.relay.Client = usage.WrapClient(app.relay.Client, app.service.Usage)
 	app.relay.OnChange = app.broadcast
 	app.service.BeforeRemoveConnection = app.relay.RemoveConnection
 	app.service.BeforeRemoveAccess = app.relay.RemoveAccess

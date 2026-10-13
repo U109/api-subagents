@@ -16,6 +16,7 @@ import (
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/providers"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 	workfiles "github.com/U109/api-subagents/internal/workspace"
 )
 
@@ -71,6 +72,7 @@ const (
 
 // NewManager 创建后台任务管理器，不在构造时访问模型接口；只保留活动任务安全上限。
 func NewManager(store *configstore.ConfigStore, storage string, p *providers.Provider) *Manager {
+	customStorage, customStore := storage != "", store != nil
 	if store == nil {
 		store = configstore.NewConfigStore("")
 	}
@@ -80,6 +82,11 @@ func NewManager(store *configstore.ConfigStore, storage string, p *providers.Pro
 	if p == nil {
 		p = providers.NewProvider()
 	}
+	usageRoot := filepath.Join(filepath.Dir(store.Path), "usage")
+	if customStorage && !customStore {
+		usageRoot = filepath.Join(storage, "usage")
+	}
+	p.Client = usage.WrapClient(p.Client, usage.New(usageRoot))
 	return &Manager{Store: store, Storage: storage, Provider: p, Executor: &codexworker.Runner{Client: p.Client}, jobs: map[string]*job{}}
 }
 
@@ -223,7 +230,7 @@ func (m *Manager) run(j *job) {
 		m.mu.Lock()
 		j.steps = step + 1
 		m.mu.Unlock()
-		reply, err := m.Provider.Turn(j.ctx, j.profile, &j.history, workerInstructions+"\nAssigned workspace: "+j.ws.Root, workfiles.WorkspaceTools, func(progress shared.Object) {
+		reply, err := m.Provider.Turn(usage.WithSource(j.ctx, "proposal", j.id, j.model), j.profile, &j.history, workerInstructions+"\nAssigned workspace: "+j.ws.Root, workfiles.WorkspaceTools, func(progress shared.Object) {
 			m.mu.Lock()
 			progress["step"] = j.steps
 			j.progress = progress

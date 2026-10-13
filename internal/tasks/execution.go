@@ -9,6 +9,7 @@ import (
 	"github.com/U109/api-subagents/internal/codexworker"
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 )
 
 // normalizeExecution 保持旧委派的只提建议语义，执行和联网能力必须通过显式参数开启。
@@ -49,7 +50,7 @@ func (m *Manager) runExecution(j *job) {
 	if m.Executor == nil {
 		err = errors.New("执行型子代理后端未初始化。")
 	} else {
-		result, err = m.Executor.Run(j.ctx, codexworker.Request{Profile: j.profile, Task: j.request.Task, Workspace: j.ws.Root, Access: j.request.Access, NetworkAccess: j.request.NetworkAccess, HomeRoot: filepath.Join(filepath.Dir(m.Storage), "worker-homes"), MaxRequests: j.maxSteps, Progress: func(progress shared.Object) {
+		result, err = m.Executor.Run(usage.WithSource(j.ctx, "codex", j.id, j.model), codexworker.Request{Profile: j.profile, Task: j.request.Task, Workspace: j.ws.Root, Access: j.request.Access, NetworkAccess: j.request.NetworkAccess, HomeRoot: filepath.Join(filepath.Dir(m.Storage), "worker-homes"), MaxRequests: j.maxSteps, Progress: func(progress shared.Object) {
 			m.mu.Lock()
 			j.progress = progress
 			m.mu.Unlock()

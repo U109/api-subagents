@@ -13,19 +13,25 @@ import * as Checkbox from '@radix-ui/react-checkbox';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import {clsx} from 'clsx';
 import {twMerge} from 'tailwind-merge';
-import {Layers as LayersIcon, Plug as PlugIcon, Link as LinkIcon, SlidersHorizontal as SlidersHorizontalIcon, GitBranch as GitBranchIcon, Brain as BrainIcon, Plus as PlusIcon, Search as SearchIcon, Check as CheckIcon, X as XIcon, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, MoreHorizontal as MoreHorizontalIcon, Copy as CopyIcon, Trash2 as Trash2Icon, Star as StarIcon, RefreshCw as RefreshCwIcon, ArrowUp as ArrowUpIcon, ArrowDown as ArrowDownIcon, GripVertical as GripVerticalIcon, ArrowRight as ArrowRightIcon, Menu as MenuIcon, Power as PowerIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, Download as DownloadIcon, HelpCircle as HelpCircleIcon, ShieldCheck as ShieldCheckIcon, Settings2 as Settings2Icon, CircleAlert as CircleAlertIcon} from 'lucide-react';
+import {Layers as LayersIcon, Plug as PlugIcon, Link as LinkIcon, SlidersHorizontal as SlidersHorizontalIcon, GitBranch as GitBranchIcon, Brain as BrainIcon, Plus as PlusIcon, Search as SearchIcon, Check as CheckIcon, X as XIcon, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, MoreHorizontal as MoreHorizontalIcon, Copy as CopyIcon, Trash2 as Trash2Icon, Star as StarIcon, RefreshCw as RefreshCwIcon, ArrowUp as ArrowUpIcon, ArrowDown as ArrowDownIcon, ArrowRight as ArrowRightIcon, Menu as MenuIcon, Power as PowerIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, Download as DownloadIcon, HelpCircle as HelpCircleIcon, ShieldCheck as ShieldCheckIcon, Settings2 as Settings2Icon, CircleAlert as CircleAlertIcon} from 'lucide-react';
 import {PanelsTopLeft as WorkspaceIcon, Puzzle as PuzzleIcon, Cable as CableIcon, Server as ServerIcon, CircleCheck as CircleCheckIcon, PencilLine as PencilLineIcon} from 'lucide-react';
 import {useWorkbench, updateJob as toUpdateJob} from './controller.jsx';
 import {RequestDiagnostics} from './diagnostics.jsx';
-import {clone, own, modelKey, makePlan, planModels, choosePlanModel, chooseConnection, validatePlan, isDirty, activatePlan, savePlan, makeSnapshot, deleteConnection, contextSettings, defaultContextSettings, reorderModels} from './domain.mjs';
+import {UsagePage} from './usage-page.jsx';
+import {createUsageView} from './usage-domain.mjs';
+import {createUsageGate} from './usage-state.mjs';
+import {ChartNoAxesCombined as UsageRaw} from 'lucide-react';
+import {clone, own, modelKey, makePlan, planModels, choosePlanModel, chooseConnection, validatePlan, isDirty, activatePlan, savePlan, makeSnapshot, deleteConnection, contextSettings, defaultContextSettings, effectiveContext, reorderModels, reorderPlanModels} from './domain.mjs';
 
 /** 图标统一作为装饰，动作名称由按钮文字或 aria-label 提供，避免重复朗读。 */
 function decorativeIcon(Icon) {
   /** 保留图标尺寸、填充和样式，仅统一可访问边界。 */
   return function DecorativeIcon(props) {return <Icon strokeWidth={1.75} {...props} aria-hidden="true" focusable="false" />;};
 }
-const [Layers, Plug, Link, SlidersHorizontal, GitBranch, Brain, Plus, Search, Check, X, ChevronLeft, ChevronRight, MoreHorizontal, Copy, Trash2, Star, RefreshCw, ArrowUp, ArrowDown, GripVertical, ArrowRight, Menu, Power, Eye, EyeOff, Download, HelpCircle, ShieldCheck, Settings2, CircleAlert] = [LayersIcon, PlugIcon, LinkIcon, SlidersHorizontalIcon, GitBranchIcon, BrainIcon, PlusIcon, SearchIcon, CheckIcon, XIcon, ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon, CopyIcon, Trash2Icon, StarIcon, RefreshCwIcon, ArrowUpIcon, ArrowDownIcon, GripVerticalIcon, ArrowRightIcon, MenuIcon, PowerIcon, EyeIcon, EyeOffIcon, DownloadIcon, HelpCircleIcon, ShieldCheckIcon, Settings2Icon, CircleAlertIcon].map(decorativeIcon);
+const [Layers, Plug, Link, SlidersHorizontal, GitBranch, Brain, Plus, Search, Check, X, ChevronLeft, ChevronRight, MoreHorizontal, Copy, Trash2, Star, RefreshCw, ArrowUp, ArrowDown, ArrowRight, Menu, Power, Eye, EyeOff, Download, HelpCircle, ShieldCheck, Settings2, CircleAlert] = [LayersIcon, PlugIcon, LinkIcon, SlidersHorizontalIcon, GitBranchIcon, BrainIcon, PlusIcon, SearchIcon, CheckIcon, XIcon, ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon, CopyIcon, Trash2Icon, StarIcon, RefreshCwIcon, ArrowUpIcon, ArrowDownIcon, ArrowRightIcon, MenuIcon, PowerIcon, EyeIcon, EyeOffIcon, DownloadIcon, HelpCircleIcon, ShieldCheckIcon, Settings2Icon, CircleAlertIcon].map(decorativeIcon);
 const [Workspace, Puzzle, Cable, Server, CircleCheck, PencilLine] = [WorkspaceIcon, PuzzleIcon, CableIcon, ServerIcon, CircleCheckIcon, PencilLineIcon].map(decorativeIcon);
+
+const UsageIcon = decorativeIcon(UsageRaw);
 
 /** 合并组件变体与 Tailwind 类，避免布局覆盖互相冲突。 */
 function cn(...values) { return twMerge(clsx(...values)); }
@@ -82,7 +88,7 @@ function Spinner() {
 /** 空状态只给一个下一步，搜索无结果时提供清空入口。 */
 function Empty({title, children, action}) { return <div className="empty"><Layers size={25} aria-hidden="true" /><strong>{title}</strong>{children && <p>{children}</p>}{action}</div>; }
 /** 页面头与动作共用布局，长标题可换行，操作文字不被挤成竖排。 */
-function PageHeading({title, subtitle, children}) { return <header className="page-heading"><div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div><div className="heading-actions">{children}</div></header>; }
+function PageHeading({title, subtitle, children, level = 1}) { const Heading = level === 2 ? 'h2' : 'h1'; return <header className="page-heading"><div><Heading>{title}</Heading>{subtitle && <p>{subtitle}</p>}</div><div className="heading-actions">{children}</div></header>; }
 /** 详情面包屑提供返回连接目录入口；窄屏保留返回操作，长连接名不挤压右侧更新按钮。 */
 function Breadcrumb({page, connectionName, navigate}) {
   const title = page === 'plans' ? '接入配置' : page === 'plugins' ? '插件管理' : page === 'help' ? '使用帮助' : '我的连接';
@@ -95,103 +101,205 @@ function MoreMenu({label, onCopy, onDelete, side = 'bottom', align = 'end'}) {
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="ghost" className="icon-button" aria-label={label}><MoreHorizontal size={19} aria-hidden="true" /></Button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="menu-content" side={side} align={align} sideOffset={8} collisionPadding={12}><DropdownMenu.Item className="menu-item" onSelect={onCopy}><Copy size={16} aria-hidden="true" />复制</DropdownMenu.Item><DropdownMenu.Separator className="menu-separator" /><DropdownMenu.Item className="menu-item destructive" onSelect={onDelete}><Trash2 size={16} aria-hidden="true" />删除</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
-/** 侧栏只保留工作区级入口；连接统一在主内容区管理，查看详情时维持我的连接导航高亮。 */
-function Sidebar({store, page, navigate, version}) {
-  return <>
-    <a className="brand" href="#" onClick={e => {e.preventDefault(); navigate('plans');}}><span className="brand-mark"><Layers size={20} /></span><strong>API Subagents</strong></a>
+/** 更新入口共用实际任务状态与等待反馈；打开原有更新弹窗，不在渲染或导航时发起检查。 */
+function UpdateTrigger({job, onClick, className}) {
+  const loading = job?.phase === 'loading';
+  const label = loading ? job.operation === 'checking' ? '正在检查更新' : job.operation === 'downloading' ? '正在下载更新' : '正在准备安装' : job?.phase === 'available' ? '发现更新' : '检查更新';
+  return <Button variant="ghost" className={cn('update-trigger', className)} aria-busy={loading} onClick={onClick}>{loading ? <Spinner /> : <RefreshCw size={16} />}<span>{label}</span></Button>;
+}
+
+/** 侧栏支持边框拉手收起；各页面保持同一更新与帮助入口位置，图标模式仍保留名称提示。 */
+function Sidebar({store, page, navigate, collapsed, toggleCollapsed, version, updateJob, onUpdate}) {
+  const navID = useId();
+  return <><div className="sidebar-content">
+    <div className="sidebar-header"><a className="brand" href="#" aria-label="API Subagents" onClick={e => {e.preventDefault(); navigate('plans');}}><span className="brand-mark"><Layers size={20} /></span><strong>API Subagents</strong></a></div>
     <div className="sidebar-section-label">工作区</div>
-    <nav className="primary-nav" aria-label="主导航">{[['plans', Workspace, '接入配置'], ['plugins', Puzzle, '插件管理'], ['connections', Cable, '我的连接']].map(([id, Icon, label]) => <button key={id} className={cn('nav-button', (page === id || id === 'connections' && page === 'connection') && 'active')} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={19} /><span>{label}</span>{id !== 'plugins' && <span className="nav-count">{id === 'plans' ? store.plans.length : Object.keys(store.connections).length}</span>}</button>)}</nav>
-    <div className="sidebar-bottom"><button className={cn('nav-button', page === 'help' && 'active')} onClick={() => navigate('help')}><HelpCircle size={19} />使用帮助</button><div className="sidebar-footnote"><span className="status-dot" />本地工作区<span>{version}</span></div></div>
-  </>;
+    <nav id={navID} className="primary-nav" aria-label="主导航">{[['plans', Workspace, '接入配置'], ['plugins', Puzzle, '插件管理'], ['connections', Cable, '我的连接'], ['usage', UsageIcon, '用量统计']].map(([id, Icon, label]) => {
+      const count = id === 'plans' ? store.plans.length : id === 'connections' ? Object.keys(store.connections).length : null;
+      return <Tooltip.Root key={id}><Tooltip.Trigger asChild><button type="button" className={cn('nav-button', (page === id || id === 'connections' && page === 'connection') && 'active')} aria-label={count == null ? label : `${label} ${count}`} aria-current={page === id || id === 'connections' && page === 'connection' ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={19} /><span className="nav-caption">{label}</span>{count != null && <span className="nav-count">{count}</span>}</button></Tooltip.Trigger>{collapsed && <Tooltip.Portal><Tooltip.Content className="tooltip" side="right" sideOffset={8}>{label}<Tooltip.Arrow className="tooltip-arrow" /></Tooltip.Content></Tooltip.Portal>}</Tooltip.Root>;
+    })}</nav>
+    <div className="sidebar-bottom"><UpdateTrigger job={updateJob} onClick={onUpdate} className="sidebar-update" /><Tooltip.Root><Tooltip.Trigger asChild><button type="button" className={cn('nav-button', page === 'help' && 'active')} aria-label="使用帮助" onClick={() => navigate('help')}><HelpCircle size={19} /><span className="nav-caption">使用帮助</span></button></Tooltip.Trigger>{collapsed && <Tooltip.Portal><Tooltip.Content className="tooltip" side="right" sideOffset={8}>使用帮助<Tooltip.Arrow className="tooltip-arrow" /></Tooltip.Content></Tooltip.Portal>}</Tooltip.Root><div className="sidebar-footnote"><span className="status-dot" />本地工作区<span>{version || ''}</span></div></div>
+  </div><IconButton label={collapsed ? '展开侧栏' : '收起侧栏'} className="sidebar-collapse-toggle sidebar-edge-toggle" aria-expanded={!collapsed} aria-controls={navID} onClick={toggleCollapsed}>{collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}</IconButton></>;
 }
 
-/** 主内容区集中展示、搜索和管理连接；打开或筛选仅改变查看对象，不修改配置范围与运行快照。 */
-function ConnectionsPage({store, openConnection, addConnection, copyConnection, removeConnection}) {
-  const [query, setQuery] = useState(''), all = Object.values(store.connections);
-  const visible = all.filter(c => `${c.name} ${c.url}`.toLowerCase().includes(query.trim().toLowerCase()));
+/** 常驻连接列表与同页编辑器只改变查看对象，独立草稿和当前接入快照保持不变。 */
+function ConnectionsWorkspace({store, id, openConnection, addConnection, children}) {
+  const all = Object.values(store.connections);
+  useEffect(() => {if (!store.connections[id] && all.length) openConnection(all[0].id);}, [id, store.connections, openConnection]);
+  if (!all.length) return <><PageHeading title="我的连接" /><Empty title="还没有连接" action={<Button onClick={addConnection}>添加连接</Button>} /></>;
   return <>
-    <PageHeading title="我的连接">{all.length > 0 && <Button onClick={addConnection}><Plus size={17} />添加连接</Button>}</PageHeading>
-    <section className="panel connection-directory" aria-label="连接目录">
-      {all.length > 0 && <div className="connection-directory-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索连接名称或地址" /><span className="directory-count" aria-live="polite">{query ? `${visible.length} / ${all.length}` : all.length} 个连接</span></div>}
-      {visible.map(c => <article key={c.id} className="connection-directory-row" data-directory-connection={c.id}>
-        <button className="connection-directory-open" aria-label={`管理连接 ${c.name}`} onClick={() => openConnection(c.id)}>
-          <span className="directory-provider-icon" aria-hidden="true"><Server size={19} /></span>
-          <span className="directory-provider-copy"><strong>{c.name || '未命名连接'}</strong><span>{c.url}</span></span>
-          <span className="directory-row-meta"><Badge>{c.models.filter(m => m.selected).length} 个模型</Badge>{isDirty(c, store.savedConnections[c.id]) && <Badge tone="warning" icon={PencilLine}>未保存</Badge>}</span>
-          <ChevronRight size={16} className="directory-open-chevron" />
-        </button>
-        <MoreMenu label={`${c.name} 的连接操作`} side="bottom" align="end" onCopy={() => copyConnection(c.id)} onDelete={() => removeConnection(c.id)} />
-      </article>)}
-      {!visible.length && <Empty title={all.length ? '没有匹配的连接' : '还没有连接'} action={<Button onClick={all.length ? () => setQuery('') : addConnection}>{all.length ? '清空搜索' : <><Plus size={16} />添加连接</>}</Button>} />}
-    </section>
+    <PageHeading title="我的连接"><Button onClick={addConnection}><Plus size={17} />添加连接</Button></PageHeading>
+    <div className="connection-workbench same-page-workbench">
+      <aside className="panel connection-workbench-list" aria-label="连接目录">
+        <div className="connection-list-heading"><h2>全部连接</h2><span aria-live="polite">{all.length}</span></div>
+        <div className="connection-list-items">{all.map(c => <article key={c.id} className="connection-directory-row" data-directory-connection={c.id}>
+          <button className="connection-directory-open" aria-label={`管理连接 ${c.name}`} aria-pressed={c.id === id} onClick={() => openConnection(c.id)}>
+            <span className="directory-provider-icon" aria-hidden="true"><Server size={19} /></span>
+            <span className="directory-provider-copy"><strong>{c.name || '未命名连接'}</strong><span>{c.models.filter(m => m.selected).length} 个模型</span>{isDirty(c, store.savedConnections[c.id]) && <span className="connection-list-draft">未保存</span>}</span>
+          </button>
+        </article>)}</div>
+        {!all.length && <Empty title="还没有连接" action={<Button onClick={addConnection}>添加连接</Button>} />}
+      </aside>
+      <section className="panel connection-workbench-editor" aria-label="连接编辑器">{store.connections[id] ? children : <Empty title="选择或添加一个连接" action={<Button onClick={addConnection}>添加连接</Button>} />}</section>
+    </div>
   </>;
 }
 
-/** 接入栏标题与配置摘要保持固定；开关只改变启用状态，并恢复上一生效范围而不切换查看项。 */
+/** 接入摘要始终来自运行快照；独立文字标明开关状态，关闭或恢复不会把当前查看项当作生效项。 */
 function AccessStatus({store, toggle, locate}) {
   const active = store.active;
-  return <div className={cn('access-status', store.enabled && 'access-on')}><div className="access-status-icon"><Power size={20} aria-hidden="true" /></div><div className="access-status-copy"><strong>主对话接入{active && <button className="inline-link" onClick={locate}>{active.name}<ArrowRight size={14} /></button>}</strong><span>{active ? `${active.connectionIDs.map(id => active.models.find(m => m.connectionID === id)?.connectionName || id).join(' + ')} · ${active.models.length} 个模型` : '选择配置并启用后，模型才会出现在 Codex 中'}</span></div><div className="access-status-control"><span>{store.enabled ? '已开启' : '未开启'}</span><Toggle label="主对话接入" checked={store.enabled} onChange={toggle} /></div></div>;
+  return <div className={cn('access-status', store.enabled && 'access-on')}>
+    <div className="access-status-icon"><Power size={20} /></div>
+    <div className="access-status-copy">
+      <strong>主对话接入{active && <button className="inline-link" onClick={locate}>{active.name}<ChevronRight size={13} /></button>}</strong>
+      <span>{active ? `${active.connectionIDs.map(id => active.models.find(m => m.connectionID === id)?.connectionName || id).join(' + ')} · ${active.models.length} 个模型` : '选择配置并启用后，模型才会出现在 Codex 中'}</span>
+    </div>
+    <div className="access-status-control"><span className="access-state-label">{store.enabled ? '已开启' : '已关闭'}</span><Toggle label="主对话接入" checked={store.enabled} onChange={toggle} /></div>
+  </div>;
 }
 
-/** 配置列表常驻、可搜索并分页，选择只改变编辑对象，运行状态独立标注。 */
-function PlanList({store, query, setQuery, select, listPage, setListPage, create}) {
-  const matches = store.plans.filter(p => `${p.name} ${p.connectionIDs.map(cid => own(store.savedConnections, cid)?.name || cid).join(' ')}`.toLowerCase().includes(query.trim().toLowerCase()));
-  const pages = Math.max(1, Math.ceil(matches.length / 20)), index = Math.min(listPage, pages - 1), visible = matches.slice(index * 20, index * 20 + 20);
-  return <aside className="plan-list panel" aria-label="接入配置列表"><div className="plan-list-heading"><h2>全部配置</h2><span>{store.plans.length}</span></div><SearchField value={query} onChange={value => {setQuery(value); setListPage(0);}} placeholder="搜索配置或连接" /><ul className="plan-list-items">{visible.map(p => <li key={p.id}><button data-plan-id={p.id} className={cn('plan-list-item', store.selected === p.id && 'selected')} onClick={() => select(p.id)} aria-pressed={store.selected === p.id}><div className="plan-list-title"><strong title={p.name}>{p.name}</strong>{store.enabled && store.active?.id === p.id && <Badge tone="active" icon={CircleCheck}>使用中</Badge>}{isDirty(p, store.savedPlans[p.id]) && <span className="draft-dot" title="未保存" aria-label="未保存" />}</div><span className="plan-list-connections">{p.connectionIDs.map(cid => own(store.savedConnections, cid)?.name || cid).join(' + ') || '未添加连接'}</span><span className="plan-list-meta">{planModels(p, store.savedConnections).length} 个模型</span></button></li>)}</ul>{!matches.length && <Empty title="没有匹配的配置" action={<Button onClick={() => setQuery('')}>清空搜索</Button>} />}<div className="plan-list-footer"><span>{matches.length ? `${index * 20 + 1}–${Math.min((index + 1) * 20, matches.length)} / ${matches.length}` : '0 个配置'}</span><div><IconButton label="上一页配置" disabled={index === 0} onClick={() => setListPage(index - 1)}><ChevronLeft size={17} /></IconButton><IconButton label="下一页配置" disabled={index === pages - 1} onClick={() => setListPage(index + 1)}><ChevronRight size={17} /></IconButton></div></div><Button className="mobile-new-plan" onClick={create}><Plus size={16} />新建配置</Button></aside>;
+/** 配置列表用选中底色区分查看项、文字标记区分启用项；只切换编辑对象，不隐式保存或启用。 */
+function PlanList({store, select, create}) {
+  return <aside className="plan-list panel" aria-label="接入配置列表">
+    <div className="plan-list-heading"><h2>全部配置</h2><span>{store.plans.length}</span></div>
+    <ul className="plan-list-items">{store.plans.map(p => <li key={p.id}>
+      <button data-plan-id={p.id} className={cn('plan-list-item', store.selected === p.id && 'selected')} onClick={() => select(p.id)} aria-pressed={store.selected === p.id}>
+        <div className="plan-list-title"><strong title={p.name}>{p.name}</strong>{store.enabled && store.active?.id === p.id && <Badge tone="active" icon={CircleCheck}>使用中</Badge>}{isDirty(p, store.savedPlans[p.id]) && <span className="draft-dot" title="未保存" aria-label="未保存" />}</div>
+        <span className="plan-list-connections">{p.connectionIDs.map(cid => store.savedConnections[cid]?.name || cid).join(' + ') || '未添加连接'}</span>
+        <span className="plan-list-meta">{planModels(p, store.savedConnections).length} 个模型</span>
+      </button>
+    </li>)}</ul>
+    {!store.plans.length ? <Empty title="还没有接入配置" action={<Button onClick={create}>新建配置</Button>} /> : <p className="plan-list-note">选择配置仅查看和编辑，<br />不会切换当前接入。</p>}
+  </aside>;
 }
 
-/** 模型预览只展示名称、选择与默认标记，不显示容量；勾选和批量操作仅更新当前配置的模型范围。 */
+/** 已加入连接只展示当前配置成员；添加菜单列出其余连接，移除仅清理本配置引用，不删除原始连接。 */
+function PlanConnections({plan, store, edit, openConnection}) {
+  const candidates = Object.values(store.connections).filter(connection => !plan.connectionIDs.includes(connection.id));
+  return <section className="connection-members">
+    <div className="section-line"><h2>包含连接</h2><div className="member-section-actions">
+      <span className="member-count" aria-live="polite" aria-atomic="true">{plan.connectionIDs.length} 个连接</span>
+      <DropdownMenu.Root><DropdownMenu.Trigger asChild><Button className="add-plan-connection"><Plus size={14} />添加连接</Button></DropdownMenu.Trigger>
+        <DropdownMenu.Portal><DropdownMenu.Content className="menu-content connection-picker-menu" align="end" sideOffset={6} collisionPadding={12}>
+          <DropdownMenu.Label className="connection-picker-label">添加已有连接</DropdownMenu.Label>
+          {candidates.map(connection => {
+            const saved = own(store.savedConnections, connection.id), unavailable = !saved || isDirty(connection, saved);
+            return <DropdownMenu.Item key={connection.id} className="menu-item connection-picker-item" disabled={unavailable} onSelect={() => edit(next => chooseConnection(next, connection.id, true, store.savedConnections))}>
+              <Server size={16} /><span><strong>{connection.name}</strong><small>{unavailable ? '请先保存此连接' : `${saved.models.filter(model => model.selected).length} 个可用模型`}</small></span><Plus size={14} />
+            </DropdownMenu.Item>;
+          })}
+          {!candidates.length && <p className="connection-picker-empty">{Object.keys(store.connections).length ? '所有连接都已加入此配置' : '请先在「我的连接」中保存连接'}</p>}
+        </DropdownMenu.Content></DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div></div>
+    <div className="member-grid">{plan.connectionIDs.map(id => {
+      const connection = own(store.connections, id), saved = own(store.savedConnections, id), name = connection?.name || saved?.name || id, unsaved = connection && isDirty(connection, saved);
+      return <div key={id} className="member-item member-selected" data-plan-connection={id}>
+        <span className="member-symbol"><Server size={17} /></span>
+        <div className="member-copy"><strong>{name}</strong>{!connection ? <small className="field-error">连接已不可用</small> : unsaved ? <small className="member-warning">未保存修改</small> : <span className="member-availability">{saved?.models.filter(model => model.selected).length || 0} 个可用模型</span>}</div>
+        <div className="member-actions"><IconButton label={`管理连接 ${name}`} disabled={!connection} onClick={() => openConnection(id)}><Settings2 size={15} /></IconButton><IconButton label={`移除连接 ${name}`} onClick={() => edit(next => chooseConnection(next, id, false, store.savedConnections))}><X size={14} /></IconButton></div>
+      </div>;
+    })}</div>
+    {!plan.connectionIDs.length && <p className="member-empty">点击「添加连接」，选择此配置要使用的连接。</p>}
+  </section>;
+}
+
+/** 可见已选模型提供菜单上移与下移，作为拖动的单指针替代；过滤排序不会移动隐藏模型。 */
+function ScopeOrderMenu({name, models, move}) {
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="ghost" className="icon-button scope-order-menu-trigger" aria-label={`调整 ${name} 的模型顺序`} disabled={models.length < 2} aria-description={models.length < 2 ? '至少需要两个符合筛选条件的已选模型。' : undefined}><MoreHorizontal size={15} /></Button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content className="menu-content scope-order-menu" align="end" sideOffset={6} collisionPadding={12}>
+      <DropdownMenu.Label className="connection-picker-label">调整已选模型顺序</DropdownMenu.Label>
+      {models.map((model, index) => <DropdownMenu.Group key={model.id} className="scope-order-menu-row"><DropdownMenu.Label className="order-model-name">{model.name || model.id}</DropdownMenu.Label>
+        <DropdownMenu.Item className="menu-item scope-order-action" aria-label={`上移 ${name} / ${model.id}`} title={`上移 ${model.name || model.id}`} disabled={!index} onSelect={() => move(model.id, models[index - 1].id)}><ArrowUp size={15} /></DropdownMenu.Item>
+        <DropdownMenu.Item className="menu-item scope-order-action" aria-label={`下移 ${name} / ${model.id}`} title={`下移 ${model.name || model.id}`} disabled={index === models.length - 1} onSelect={() => move(model.id, models[index + 1].id)}><ArrowDown size={15} /></DropdownMenu.Item>
+      </DropdownMenu.Group>)}
+    </DropdownMenu.Content></DropdownMenu.Portal>
+  </DropdownMenu.Root>;
+}
+
+/** 紧凑模型行只从左侧手柄排序已选可用模型；勾选、默认星标与排序互不触发，缺失模型仍可取消。 */
+function ScopeModelRow({plan, cid, name, model, edit}) {
+  const key = modelKey(cid, model.id), checked = (plan.modelIDs[cid] ?? []).includes(model.id), isDefault = plan.defaultKey === key, checkboxID = `scope-${encodeURIComponent(plan.id)}-${encodeURIComponent(key)}`;
+  const {attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging, isOver} = useSortable({id: model.id, transition: null, disabled: !checked || Boolean(model.missing)});
+  return <div ref={setNodeRef} role="listitem" data-scoped-model={key} style={{transform: CSS.Transform.toString(transform)}} className={cn('scope-model-row', 'scope-sort-row', isDefault && 'is-default', model.missing && 'missing-model', isDragging && 'is-dragging', isOver && !isDragging && 'is-drop-target')}>
+    <Button ref={setActivatorNodeRef} variant="ghost" className="icon-button scope-drag-handle" {...attributes} {...listeners} disabled={!checked || model.missing} aria-label={`拖动排序 ${name} / ${model.id}`} aria-description="仅调整此配置的已选模型顺序。空格抓取，方向键移动，空格放下，Escape 取消。"><Menu size={13} /></Button>
+    <Tick id={checkboxID} checked={checked} label={`配置中选择 ${name} / ${model.id}`} onChange={value => edit(next => choosePlanModel(next, cid, model.id, value))} disabled={Boolean(model.missing && !checked)} />
+    <label htmlFor={checkboxID} className="scope-model-name"><span className="model-id" title={model.id}>{model.name || model.id}</span>{model.missing ? <small className="field-error">连接中已不可用</small> : isDefault && <small className="default-caption">配置默认</small>}</label>
+    <span className="capacity">{capacity(effectiveContext(model))}</span>
+    <IconButton className={cn('star-button', isDefault && 'is-starred')} label={`${isDefault ? '此配置默认模型' : '设为此配置默认'} ${name} / ${model.id}`} aria-pressed={isDefault} disabled={!checked || model.missing} onClick={() => edit(next => ({...next, defaultKey: key}))}><Star size={17} fill={isDefault ? 'currentColor' : 'none'} /></IconButton>
+  </div>;
+}
+
+/** 每个连接独立折叠和排序；搜索展开匹配内容，取消拖动不写草稿，隐藏或未选模型不参与重排。 */
+function ScopeModelGroup({plan, cid, store, edit, query, selectedOnly}) {
+  const [collapsed, setCollapsed] = useState(false), [dragging, setDragging] = useState(null), contentID = useId();
+  const connection = own(store.savedConnections, cid), name = connection?.name || cid, ids = plan.modelIDs[cid] ?? [], available = connection?.models.filter(model => model.selected) ?? [];
+  const selectedModels = ids.map(id => available.find(model => model.id === id)).filter(Boolean);
+  let slot = 0;
+  const ordered = available.map(model => ids.includes(model.id) ? selectedModels[slot++] : model), missing = ids.filter(id => !available.some(model => model.id === id)).map(id => ({id, context: null, missing: true}));
+  const visible = [...ordered, ...missing].filter(model => (!selectedOnly || ids.includes(model.id)) && `${model.id} ${model.name || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const sortableModels = visible.filter(model => ids.includes(model.id) && !model.missing), sortableIDs = sortableModels.map(model => model.id), draggedModel = visible.find(model => model.id === dragging?.id);
+  const sensors = useSensors(useSensor(PointerSensor, {activationConstraint: {distance: 6}}), useSensor(KeyboardSensor, {coordinateGetter: sortableKeyboardCoordinates, scrollBehavior: 'auto'}));
+  useEffect(() => {if (query.trim()) setCollapsed(false);}, [query]);
+  /** 所有排序入口只更新本配置可见已选项；非法或消失的落点由纯函数拒绝。 */
+  function move(activeID, overID) {edit(next => reorderPlanModels(next, cid, activeID, overID, sortableIDs));}
+  /** 清除拖动状态后再提交有效落点；列表外放下和取消均保留原顺序。 */
+  function finishDrag({active, over}) {setDragging(null); if (over) move(active.id, over.id);}
+  /** 收起分组同时结束局部拖动，不遗留浮动预览或不可见的键盘抓取状态。 */
+  function toggleGroup() {setDragging(null); setCollapsed(value => !value);}
+  return <section className="scope-group" aria-label={`${name} 的配置模型`}>
+    <div className="scope-group-head"><Button variant="ghost" className="scope-group-toggle" aria-label={`${collapsed ? '展开' : '收起'} ${name} 的配置模型`} aria-expanded={!collapsed} aria-controls={contentID} onClick={toggleGroup}><ChevronRight size={13} /><strong>{name}</strong><span className="scope-group-count">{ids.length} / {available.length}</span></Button>
+      <div className="scope-bulk"><Button variant="ghost" disabled={!visible.some(model => !model.missing)} onClick={() => edit(next => visible.filter(model => !model.missing).reduce((result, model) => choosePlanModel(result, cid, model.id, true), next))}>{query ? '选中结果' : '全选'}</Button><Button variant="ghost" disabled={!visible.some(model => ids.includes(model.id))} onClick={() => edit(next => visible.reduce((result, model) => choosePlanModel(result, cid, model.id, false), next))}>{query ? '清空结果' : '清空'}</Button><ScopeOrderMenu name={name} models={sortableModels} move={move} /></div>
+    </div>
+    <div id={contentID} className="scope-group-content" hidden={collapsed}>{!collapsed && <DndContext sensors={sensors} collisionDetection={modelCollision} modifiers={[verticalDrag]} accessibility={{announcements: modelDragAnnouncements, screenReaderInstructions: {draggable: '只拖动已选模型。按空格抓取，方向键调整顺序，空格放下，Escape 取消。也可使用分组右侧的顺序菜单。'}}} onDragStart={({active}) => setDragging({id: active.id, width: active.rect.current.initial?.width})} onDragEnd={finishDrag} onDragCancel={() => setDragging(null)}>
+      <SortableContext items={sortableIDs} strategy={verticalListSortingStrategy}><div className="scope-model-grid" role="list" aria-label={`${name} 的配置模型列表`}>{visible.map(model => <ScopeModelRow key={model.id} plan={plan} cid={cid} name={name} model={model} edit={edit} />)}</div></SortableContext>
+      {!visible.length && <div className="group-empty">{selectedOnly ? '此连接没有符合条件的已选模型' : '没有匹配的模型'}</div>}
+      {createPortal(<DragOverlay transition="none" dropAnimation={null} zIndex={20}>{draggedModel && <div className="model-drag-preview scope-drag-preview" style={{width: dragging.width}} aria-hidden="true"><Menu size={13} /><span className="model-id">{draggedModel.name || draggedModel.id}</span></div>}</DragOverlay>, document.body)}
+    </DndContext>}</div>
+  </section>;
+}
+
+/** 模型预览保留搜索和已选筛选；紧凑连接分组的勾选、折叠、排序与默认星标不修改连接目录。 */
 function ScopedModels({plan, store, edit}) {
   const [query, setQuery] = useState(''), [selectedOnly, setSelectedOnly] = useState(false);
   const selected = planModels(plan, store.savedConnections), total = plan.connectionIDs.reduce((n, cid) => n + (own(store.savedConnections, cid)?.models.filter(m => m.selected).length || 0), 0);
-  const hasDefault = selected.some(m => m.key === plan.defaultKey);
-  return <section className="scoped-models" aria-label="Codex 模型预览"><div className="section-line"><h2>Codex 模型预览</h2><span className="model-count" aria-live="polite">已选 {selected.length} / {total}</span></div><div className="scoped-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索模型名称或 ID" /><div className="segmented" role="group" aria-label="配置模型筛选"><button className={!selectedOnly ? 'selected' : ''} aria-pressed={!selectedOnly} onClick={() => setSelectedOnly(false)}>全部</button><button className={selectedOnly ? 'selected' : ''} aria-pressed={selectedOnly} onClick={() => setSelectedOnly(true)}>已选</button></div></div>{!plan.connectionIDs.length ? <Empty title="先添加一个连接" /> : plan.connectionIDs.map(cid => {
-    const c = own(store.savedConnections, cid), ids = plan.modelIDs[cid] ?? [], available = c?.models.filter(m => m.selected) ?? [], unavailable = ids.filter(id => !available.some(m => m.id === id)).map(id => ({id, context: null, missing: true}));
-    const visible = [...available, ...unavailable].filter(m => (!selectedOnly || ids.includes(m.id)) && `${m.id} ${m.name || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
-    return <section key={cid} className="scope-group" aria-label={`${c?.name || cid} 的配置模型`}><div className="scope-group-head"><div><span className="avatar avatar-small" aria-hidden="true">{(c?.name || cid).slice(0, 1).toUpperCase()}</span><strong>{c?.name || cid}</strong><span>{ids.length} / {available.length}</span></div><div className="scope-bulk"><Button variant="ghost" disabled={!visible.some(m => !m.missing)} onClick={() => edit(p => visible.filter(m => !m.missing).reduce((next, m) => choosePlanModel(next, cid, m.id, true), p))}>{query ? '选中结果' : '全选'}</Button><Button variant="ghost" disabled={!visible.some(m => ids.includes(m.id))} onClick={() => edit(p => visible.reduce((next, m) => choosePlanModel(next, cid, m.id, false), p))}>{query ? '清空结果' : '清空'}</Button></div></div><div className="scope-model-grid">{visible.map(m => {
-      const key = modelKey(cid, m.id), checked = ids.includes(m.id), isDefault = plan.defaultKey === key, checkboxID = `scope-${encodeURIComponent(plan.id)}-${encodeURIComponent(key)}`;
-      return <div key={key} data-scoped-model={key} className={cn('scope-model-row', isDefault && 'is-default', m.missing && 'missing-model')}><Tick id={checkboxID} checked={checked} label={`配置中选择 ${c?.name || cid} / ${m.id}`} onChange={value => edit(p => choosePlanModel(p, cid, m.id, value))} disabled={Boolean(m.missing && !checked)} /><label htmlFor={checkboxID} className="scope-model-name"><span className="model-id" title={m.id}>{m.name || m.id}</span>{m.missing ? <small className="field-error">连接中已不可用</small> : isDefault && <small className="default-caption">配置默认</small>}</label><IconButton className={cn('star-button', isDefault && 'is-starred')} label={`${isDefault ? '此配置默认模型' : '设为此配置默认'} ${c?.name || cid} / ${m.id}`} aria-pressed={isDefault} disabled={!checked || m.missing} onClick={() => edit(p => ({...p, defaultKey: key}))}><Star size={17} fill={isDefault ? 'currentColor' : 'none'} /></IconButton></div>;
-    })}</div>{!visible.length && <div className="group-empty">{selectedOnly ? '此连接没有符合条件的已选模型' : '没有匹配的模型'}</div>}</section>;
-  })}{selected.length > 0 && !hasDefault && <div className="inline-error" role="status"><CircleAlert size={16} />请星标一个已选模型作为配置默认。</div>}</section>;
+  return <section className="scoped-models" aria-label="Codex 模型预览"><div className="section-line"><h2>Codex 模型预览</h2><span className="model-count" aria-live="polite">已选 {selected.length} / {total}</span></div><div className="scoped-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索模型名称或 ID" /><div className="segmented" role="group" aria-label="配置模型筛选"><button className={!selectedOnly ? 'selected' : ''} aria-pressed={!selectedOnly} onClick={() => setSelectedOnly(false)}>全部</button><button className={selectedOnly ? 'selected' : ''} aria-pressed={selectedOnly} onClick={() => setSelectedOnly(true)}>已选</button></div></div>{!plan.connectionIDs.length ? <Empty title="先添加一个连接" /> : plan.connectionIDs.map(cid => <ScopeModelGroup key={cid} plan={plan} cid={cid} store={store} edit={edit} query={query} selectedOnly={selectedOnly} />)}</section>;
 }
 
-/** 名称与状态放在同一输入行；只展示草稿、错误及旧快照反馈，空工作区的启用失败也在面板内可见。 */
-function PlanEditor({store, edit, save, apply, restore, copy, remove, back, openConnection, create}) {
+/** 配置保留独立草稿与校验；底栏明确保存／启用进度，等待期间继续编辑，冲突操作锁定且启用须明确触发。 */
+function PlanEditor({store, edit, save, apply, restore, copy, remove, back, openConnection, create, busy = false, pending}) {
   const p = store.plans.find(p => p.id === store.selected);
   if (!p) return <section className="plan-editor panel"><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><Empty title="还没有接入配置" action={<Button onClick={create}><Plus size={16} />新建配置</Button>}>{store.actionError && <span className="field-error" role="status">{store.actionError.message}</span>}</Empty></section>;
-  const dirty = isDirty(p, store.savedPlans[p.id]), applied = store.enabled && isApplied(store, p), error = store.actionError?.target === p.id ? store.actionError.message : validatePlan(p, store.savedConnections, store.connections);
-  const message = error || (!applied && dirty ? '修改尚未保存或生效' : '');
-  return <section className="plan-editor panel" aria-label="配置编辑器"><div className="editor-title-line"><div><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><h2 className="sr-only">编辑接入配置</h2><Field className="editor-name-field" label="配置名称" title="点击编辑配置名称" size={nameInputSize(p.name)} maxLength={60} value={p.name} onChange={e => edit(next => ({...next, name: e.target.value}))} error={!p.name.trim() ? '请填写配置名称。' : ''} suffix={applied ? <Badge tone="active" icon={CircleCheck}>当前使用</Badge> : dirty ? <Badge tone="warning" icon={PencilLine}>未保存</Badge> : <Badge>未启用</Badge>} /></div><MoreMenu label="当前配置的更多操作" onCopy={copy} onDelete={remove} /></div><div className="editor-content"><section className="connection-members"><div className="section-line"><h2>包含连接</h2><span>{p.connectionIDs.length} 个连接</span></div><div className="member-grid">{Object.values(store.connections).map(c => {
-    const selected = p.connectionIDs.includes(c.id), unsaved = isDirty(c, store.savedConnections[c.id]);
-    return <div key={c.id} className={cn('member-item', selected && 'member-selected')}><label><Tick checked={selected} label={`配置中包含连接 ${c.name}`} onChange={value => edit(next => chooseConnection(next, c.id, value, store.savedConnections))} /><span><strong>{c.name}</strong>{unsaved && <small>未保存修改</small>}</span></label><IconButton label={`管理连接 ${c.name}`} onClick={() => openConnection(c.id)}><Settings2 size={16} /></IconButton></div>;
-  })}</div>{!Object.keys(store.connections).length && <span className="muted">请在「我的连接」中添加连接。</span>}</section><ScopedModels key={p.id} plan={p} store={store} edit={edit} /></div><footer className="editor-footer">{message && <div className={cn('save-message', error && 'field-error')} role="status">{message}{store.enabled && store.active?.id === p.id && !applied && !error && <small>当前仍使用上次启用的模型范围</small>}</div>}<div className="save-actions"><Button variant="ghost" disabled={!dirty} onClick={restore}>还原</Button><Button disabled={!dirty || Boolean(validatePlan(p, store.savedConnections, store.connections))} onClick={save}>仅保存</Button><Button variant="primary" className={cn(applied && 'button-applied')} disabled={applied || Boolean(validatePlan(p, store.savedConnections, store.connections))} onClick={apply}>{applied ? <Check size={16} /> : <Power size={16} />}{applied ? '正在使用' : dirty ? store.enabled && store.active?.id === p.id ? '保存并更新接入' : '保存并启用' : '启用此配置'}</Button></div></footer></section>;
+  const dirty = isDirty(p, store.savedPlans[p.id]), applied = store.enabled && isApplied(store, p), validation = validatePlan(p, store.savedConnections, store.connections), error = store.actionError?.target === p.id ? store.actionError.message : validation;
+  const feedback = error === '请星标一个已选模型作为此配置的默认模型。' ? '' : error;
+  const saving = pending?.target === p.id && pending.kind === 'plan-save', enabling = pending?.target === p.id && pending.kind === 'plan-enable';
+  const saveStatus = dirty ? '有未保存的修改' : applied ? '已与当前接入同步' : store.enabled && store.active?.id === p.id ? '已保存 · 等待更新接入' : '配置已保存';
+  return <section className="plan-editor panel" aria-label="配置编辑器"><div className="editor-title-line"><div><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><h2 className="sr-only">编辑接入配置</h2><Field className="editor-name-field" label="配置名称" title="点击编辑配置名称" size={nameInputSize(p.name)} maxLength={60} value={p.name} onChange={e => edit(next => ({...next, name: e.target.value}))} error={!p.name.trim() ? '请填写配置名称。' : ''} suffix={applied ? <Badge tone="active" icon={CircleCheck}>当前使用</Badge> : dirty ? <Badge tone="warning" icon={PencilLine}>未保存</Badge> : <Badge>未启用</Badge>} /></div><div className="editor-item-actions"><IconButton label={`复制配置 ${p.name}`} onClick={copy}><Copy size={17} /></IconButton><IconButton label={`删除配置 ${p.name}`} className="icon-delete" disabled={busy} onClick={remove}><Trash2 size={17} /></IconButton></div></div><div className="editor-content"><PlanConnections plan={p} store={store} edit={edit} openConnection={openConnection} /><ScopedModels key={p.id} plan={p} store={store} edit={edit} /></div><footer className="editor-footer">{feedback ? <div className="save-message field-error" role="alert">{feedback}</div> : <div className={cn('editor-save-status', dirty && 'is-dirty')} role="status">{dirty ? <PencilLine size={14} /> : <CircleCheck size={14} />}<span>{saveStatus}</span></div>}<div className="save-actions"><Button variant="ghost" disabled={busy || !dirty} onClick={restore}>还原</Button><Button disabled={busy || !dirty || Boolean(validation)} aria-busy={saving} aria-description={validation || undefined} onClick={save}>{saving && <Spinner />}{saving ? '正在保存' : '仅保存'}</Button><Button variant="primary" className={cn(applied && 'button-applied')} disabled={busy || applied || Boolean(validation)} aria-busy={enabling} aria-description={validation || undefined} onClick={apply}>{enabling ? <Spinner /> : applied ? <Check size={16} /> : <Power size={16} />}{enabling ? '正在启用' : applied ? '正在使用' : dirty ? store.enabled && store.active?.id === p.id ? '保存并更新接入' : '保存并启用' : '启用此配置'}</Button></div></footer></section>;
 }
 
-/** 用主从布局管理配置，头部只提供新建配置；连接统一由我的连接管理，窄屏采用列表/编辑两级。 */
+/** 配置页采用连贯的主从工作区；头部只新建配置，窄屏让目录与详情纵向排布，业务操作沿用原控制器。 */
 function PlanWorkspace(props) {
-  const [query, setQuery] = useState(''), [listPage, setListPage] = useState(0), [mobileEditing, setMobileEditing] = useState(false);
-  /** 列表点击仅切换查看对象，定位页码并保留各配置草稿。 */
-  function select(id) { props.select(id); setMobileEditing(true); }
-  /** 新建或复制清空列表筛选并回第一页，确保新草稿在列表可见。 */
-  function create() {setQuery(''); setListPage(0); props.create(); setMobileEditing(true);}
-  return <><PageHeading title="接入配置"><Button onClick={create}><Plus size={17} />新建配置</Button></PageHeading><AccessStatus store={props.store} toggle={props.toggle} locate={() => {if (props.store.active) {setQuery(''); setListPage(Math.floor(props.store.plans.findIndex(p => p.id === props.store.active.id) / 20)); select(props.store.active.id);}}} /><div className={cn('plan-workspace', mobileEditing ? 'mobile-editing' : 'mobile-list')}><PlanList store={props.store} query={query} setQuery={setQuery} listPage={listPage} setListPage={setListPage} select={select} create={create} /><PlanEditor {...props} create={create} copy={() => {setQuery(''); setListPage(0); props.copy();}} back={() => setMobileEditing(false)} /></div></>;
+  const [mobileEditing, setMobileEditing] = useState(false);
+  /** 选择只切换右侧对象，独立草稿与当前接入快照不变。 */
+  function select(id) {props.select(id); setMobileEditing(true);}
+  /** 新建空配置由原有表单处理，不自动保存或启用。 */
+  function create() {props.create(); setMobileEditing(true);}
+  /** 定位当前生效配置，并让常驻列表中的对应条目保持可见。 */
+  function locate() {if (props.store.active) {select(props.store.active.id); requestAnimationFrame(() => Array.from(document.querySelectorAll('[data-plan-id]')).find(node => node.dataset.planId === props.store.active.id)?.scrollIntoView({block: 'nearest'}));}}
+  return <><div className="plan-page-intro"><PageHeading title="接入配置"><Button onClick={create}><Plus size={17} />新建配置</Button></PageHeading><p>管理 Codex 主对话使用的连接与模型。</p></div><AccessStatus store={props.store} toggle={props.toggle} locate={locate} /><div className={cn('plan-workspace same-page-workbench mac-plan-workspace', mobileEditing ? 'mobile-editing' : 'mobile-list')}><PlanList store={props.store} select={select} create={create} /><PlanEditor {...props} create={create} copy={props.copy} back={() => setMobileEditing(false)} /></div></>;
 }
 
-/** 模型行只从六点手柄启动拖动；勾选、设置和默认操作互不触发，菜单保留单击排序替代。 */
-function ConnectionModelRow({c, model: m, change, editModel, move, visibleIDs}) {
-  const index = visibleIDs.indexOf(m.id), isDefault = m.id === c.defaultID;
+/** 模型行复用接入配置的三横线手柄启动鼠标或键盘排序；勾选、设置和默认操作互不触发，不再展示更多操作菜单。 */
+function ConnectionModelRow({c, model: m, change, editModel}) {
+  const isDefault = m.id === c.defaultID;
   const {attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging, isOver} = useSortable({id: m.id, transition: null});
   return <div ref={setNodeRef} role="listitem" style={{transform: CSS.Transform.toString(transform)}} className={cn('connection-model-row', isDefault && 'is-default', isDragging && 'is-dragging', isOver && !isDragging && 'is-drop-target')} data-connection-model={m.id}>
-    <Button variant="ghost" ref={setActivatorNodeRef} className="icon-button drag-handle" {...attributes} {...listeners} aria-label={`拖动排序 ${m.id}`}><GripVertical size={17} /></Button>
+    <Button variant="ghost" ref={setActivatorNodeRef} className="icon-button drag-handle" {...attributes} {...listeners} aria-label={`拖动排序 ${m.id}`}><Menu size={13} /></Button>
     <Tick checked={m.selected} label={`连接中选择模型 ${m.id}`} onChange={selected => change(next => {const model = next.models.find(item => item.id === m.id); model.selected = selected; if (!selected && next.defaultID === m.id) next.defaultID = next.models.find(item => item.selected)?.id || ''; return next;})} />
-    <div className="connection-model-name"><span className="model-id">{m.name || m.id}</span>{m.name && <small>{m.id}</small>}{isDefault && <Badge tone="active" icon={Star}>默认</Badge>}</div>
+    <div className="connection-model-name"><span className="model-id">{m.name || m.id}</span>{m.name && <small>{m.id}</small>}{isDefault && <small className="default-caption">默认</small>}</div>
     <div className="model-row-actions">
       <IconButton label={`模型设置 ${m.id}`} onClick={() => editModel(m.id)}><SlidersHorizontal size={16} /></IconButton>
       <IconButton label={`设为连接默认 ${m.id}`} disabled={!m.selected} aria-pressed={isDefault} className={cn('star-button', isDefault && 'is-starred')} onClick={() => change(next => ({...next, defaultID: m.id}))}><Star size={17} fill={isDefault ? 'currentColor' : 'none'} /></IconButton>
-      <DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="ghost" className="icon-button" aria-label={`更多操作 ${m.id}`}><MoreHorizontal size={16} /></Button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="menu-content" align="end" sideOffset={6}>
-        <DropdownMenu.Item className="menu-item" disabled={index === 0} onSelect={() => move(m.id, visibleIDs[index - 1], visibleIDs)}><ArrowUp size={16} />上移</DropdownMenu.Item>
-        <DropdownMenu.Item className="menu-item" disabled={index === visibleIDs.length - 1} onSelect={() => move(m.id, visibleIDs[index + 1], visibleIDs)}><ArrowDown size={16} />下移</DropdownMenu.Item>
-      </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
     </div>
   </div>;
 }
@@ -213,8 +321,8 @@ const modelDragAnnouncements = {
   onDragCancel() {return '已取消排序，原顺序不变。';}
 };
 
-/** 模型目录只展示名称和操作；拖动及菜单均仅排列筛选结果，隐藏项留在原槽位。 */
-function ConnectionModels({c, change, openModel, move, refresh, cancel, job}) {
+/** 模型目录仅用手柄排序可见结果，隐藏项留在原槽位；刷新只在按钮展示进度，并保留失败反馈。 */
+function ConnectionModels({c, change, openModel, move, refresh, job}) {
   const [query, setQuery] = useState(''), [onlySelected, setOnlySelected] = useState(false), [dragging, setDragging] = useState(null);
   const visible = c.models.filter(m => (!onlySelected || m.selected) && `${m.id} ${m.name || ''}`.toLowerCase().includes(query.trim().toLowerCase())), visibleIDs = visible.map(m => m.id);
   const busy = job?.phase === 'loading', draggedModel = c.models.find(m => m.id === dragging?.id);
@@ -222,11 +330,11 @@ function ConnectionModels({c, change, openModel, move, refresh, cancel, job}) {
   /** 只有有效的可见落点才提交新顺序，取消或列表外放下不产生草稿。 */
   function finishDrag({active, over}) {setDragging(null); if (over) move(active.id, over.id, visibleIDs);}
   return <Panel title="模型目录" icon={Brain} actions={<Badge>{c.models.filter(m => m.selected).length} 已选</Badge>}>
-    <div className="connection-model-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索模型名称或 ID" /><div className="segmented" role="group" aria-label="连接模型筛选"><button className={!onlySelected ? 'selected' : ''} aria-pressed={!onlySelected} onClick={() => setOnlySelected(false)}>全部</button><button className={onlySelected ? 'selected' : ''} aria-pressed={onlySelected} onClick={() => setOnlySelected(true)}>已选</button></div><Button disabled={busy} aria-busy={busy} onClick={refresh}>{busy ? <Spinner /> : <RefreshCw size={16} />}{busy ? '正在刷新' : '刷新'}</Button><Button onClick={() => openModel(null)}><Plus size={16} />手动添加</Button>{busy && <Button variant="ghost" onClick={cancel}>取消</Button>}</div>
-    {job && <div className={cn('job-inline', job.phase === 'error' && 'field-error')} role="status">{job.label}</div>}
-    <DndContext sensors={sensors} collisionDetection={modelCollision} modifiers={[verticalDrag]} accessibility={{announcements: modelDragAnnouncements, screenReaderInstructions: {draggable: '按空格或回车抓取模型，使用上下方向键调整位置，再按空格或回车放下；Escape 取消。也可使用更多操作菜单上移或下移。'}}} onDragStart={({active}) => setDragging({id: active.id, width: active.rect.current.initial?.width})} onDragEnd={finishDrag} onDragCancel={() => setDragging(null)}>
-      <div className="connection-model-table"><div className="model-table-head" aria-hidden="true"><span>模型名称</span><span>操作</span></div><SortableContext items={visibleIDs} strategy={verticalListSortingStrategy}><div role="list" aria-label="连接模型目录">{visible.map(m => <ConnectionModelRow key={m.id} c={c} model={m} change={change} editModel={openModel} move={move} visibleIDs={visibleIDs} />)}</div></SortableContext>{!visible.length && <Empty title="没有匹配的模型" action={<Button onClick={() => {setQuery(''); setOnlySelected(false);}}>显示全部模型</Button>} />}</div>
-      {createPortal(<DragOverlay transition="none" dropAnimation={null} zIndex={20}>{draggedModel && <div className="model-drag-preview" style={{width: dragging.width}} aria-hidden="true"><GripVertical size={17} /><span className="model-id">{draggedModel.name || draggedModel.id}</span>{draggedModel.id === c.defaultID && <Badge tone="active" icon={Star}>默认</Badge>}</div>}</DragOverlay>, document.body)}
+    <div className="connection-model-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索模型名称或 ID" /><div className="segmented" role="group" aria-label="连接模型筛选"><button className={!onlySelected ? 'selected' : ''} aria-pressed={!onlySelected} onClick={() => setOnlySelected(false)}>全部</button><button className={onlySelected ? 'selected' : ''} aria-pressed={onlySelected} onClick={() => setOnlySelected(true)}>已选</button></div><Button disabled={busy} aria-busy={busy} onClick={refresh}>{busy ? <Spinner /> : <RefreshCw size={16} />}{busy ? '正在刷新' : '刷新'}</Button><Button onClick={() => openModel(null)}><Plus size={16} />手动添加</Button></div>
+    {job?.phase === 'error' && <div className="job-inline field-error" role="alert">{job.label}</div>}
+    <DndContext sensors={sensors} collisionDetection={modelCollision} modifiers={[verticalDrag]} accessibility={{announcements: modelDragAnnouncements, screenReaderInstructions: {draggable: '按空格或回车抓取模型，使用上下方向键调整位置，再按空格或回车放下；Escape 取消。'}}} onDragStart={({active}) => setDragging({id: active.id, width: active.rect.current.initial?.width})} onDragEnd={finishDrag} onDragCancel={() => setDragging(null)}>
+      <div className="connection-model-table"><div className="model-table-head" aria-hidden="true"><span>模型名称</span><span>操作</span></div><SortableContext items={visibleIDs} strategy={verticalListSortingStrategy}><div role="list" aria-label="连接模型目录">{visible.map(m => <ConnectionModelRow key={m.id} c={c} model={m} change={change} editModel={openModel} />)}</div></SortableContext>{!visible.length && <Empty title="没有匹配的模型" action={<Button onClick={() => {setQuery(''); setOnlySelected(false);}}>显示全部模型</Button>} />}</div>
+      {createPortal(<DragOverlay transition="none" dropAnimation={null} zIndex={20}>{draggedModel && <div className="model-drag-preview" style={{width: dragging.width}} aria-hidden="true"><Menu size={13} /><span className="model-id">{draggedModel.name || draggedModel.id}</span>{draggedModel.id === c.defaultID && <small className="default-caption">默认</small>}</div>}</DragOverlay>, document.body)}
     </DndContext>
     <div className="reasoning-section"><div className="section-line"><h2>思考强度</h2><span className="muted">{c.effort === 'default' ? '服务默认' : c.effort}</span></div><div className="effort-options" role="group" aria-label="思考强度">{[['default', '默认'], ['none', '无'], ['minimal', '极低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '很高'], ['max', '最大'], ['ultra', '极致']].map(([value, label]) => <button key={value} className={cn(c.effort === value && 'selected')} aria-pressed={c.effort === value} onClick={() => change(next => ({...next, effort: value}))}>{label}</button>)}</div></div>
   </Panel>;
@@ -259,14 +367,15 @@ function connectionErrors(c) {
   return errors;
 }
 
-/** 连接四页签共用 Radix Tabs 并保留草稿；标题首字母仅装饰，辅助技术只朗读连接名称。 */
-function ConnectionPage({store, id, tab, setTab, change, copy, remove, add, openModel, move, jobs, start, cancel, save, restore, reset}) {
+/** 连接四页签保留草稿；保存提供等待反馈而不锁输入，删除和还原等冲突操作等待保存完成。 */
+function ConnectionPage({store, id, tab, setTab, change, copy, remove, add, openModel, move, jobs, start, cancel, save, restore, reset, embedded = false, busy = false, pending}) {
   const c = store.connections[id], [attempted, setAttempted] = useState(false);
   if (!c) return <><PageHeading title="我的连接"><Button onClick={add}><Plus size={16} />添加连接</Button></PageHeading><Empty title="还没有连接" action={<Button onClick={add}>添加连接</Button>} /></>;
   const dirty = isDirty(c, store.savedConnections[id]), errors = connectionErrors(c), shownErrors = attempted ? errors : {};
+  const saving = pending?.target === id && pending.kind === 'connection-save';
   /** 保存失败时跳到对应页签，让字段错误与触发操作相邻可见。 */
   async function trySave() { setAttempted(true); if (errors.name || errors.url) setTab('info'); else if (Object.keys(errors).some(key => key.endsWith('Timeout') || key === 'maxTokens')) setTab('advanced'); else if (errors.models) setTab('models'); else {if (await save()) setAttempted(false); return;} requestAnimationFrame(() => document.querySelector('#main [aria-invalid="true"]')?.focus()); }
-  return <><PageHeading title={<span className="connection-page-title"><span className="avatar avatar-large" aria-hidden="true"><Server size={21} /></span>{c.name || '未命名连接'}</span>}><IconButton label={`复制连接 ${c.name}`} onClick={copy}><Copy size={18} /></IconButton><IconButton label={`删除连接 ${c.name}`} onClick={remove}><Trash2 size={18} /></IconButton></PageHeading><Tabs.Root value={tab} onValueChange={setTab} className="connection-tabs"><Tabs.List className="tabs-list" aria-label="连接设置">{[['info', Link, '连接信息'], ['models', Brain, '模型选择'], ['purpose', GitBranch, '任务分工'], ['advanced', SlidersHorizontal, '高级设置']].map(([value, Icon, label]) => <Tabs.Trigger className="tab-trigger" key={value} value={value}><Icon size={17} aria-hidden="true" />{label}{value === 'models' && <span className="tab-number">{c.models.filter(m => m.selected).length}</span>}</Tabs.Trigger>)}</Tabs.List><Tabs.Content value="info"><ConnectionInfo c={c} change={change} errors={shownErrors} job={jobs[`test-${id}`]} cancel={() => cancel(`test-${id}`)} test={() => start(`test-${id}`, '正在测试连接')} /></Tabs.Content><Tabs.Content value="models"><ConnectionModels c={c} change={change} openModel={openModel} move={move} job={jobs[`catalog-${id}`]} cancel={() => cancel(`catalog-${id}`)} refresh={() => start(`catalog-${id}`, '正在刷新模型')} /></Tabs.Content><Tabs.Content value="purpose"><ConnectionPurpose c={c} change={change} /></Tabs.Content><Tabs.Content value="advanced"><ConnectionAdvanced c={c} change={change} reset={reset} errors={shownErrors} /></Tabs.Content></Tabs.Root><footer className="connection-save-bar editor-footer"><div className={cn('save-message', (store.actionError?.target === id || attempted && Object.keys(errors).length) && 'field-error')} role="status">{store.actionError?.target === id ? store.actionError.message : attempted && Object.keys(errors).length ? Object.values(errors)[0] : dirty ? '有未保存的修改' : '所有更改已保存'}</div><div className="save-actions"><Button variant="ghost" disabled={!dirty} onClick={() => {restore(); setAttempted(false);}}>还原</Button><Button variant="primary" disabled={!dirty} onClick={trySave}>保存连接</Button></div></footer></>;
+  return <><PageHeading level={embedded ? 2 : 1} title={<span className="connection-page-title"><span className="avatar avatar-large" aria-hidden="true"><Server size={21} /></span>{c.name || '未命名连接'}</span>}><IconButton label={`复制连接 ${c.name}`} onClick={copy}><Copy size={17} /></IconButton><IconButton label={`删除连接 ${c.name}`} className="icon-delete" disabled={busy} onClick={remove}><Trash2 size={17} /></IconButton></PageHeading><Tabs.Root value={tab} onValueChange={setTab} className="connection-tabs"><Tabs.List className="tabs-list" aria-label="连接设置">{[['info', Link, '连接信息'], ['models', Brain, '模型选择'], ['purpose', GitBranch, '任务分工'], ['advanced', SlidersHorizontal, '高级设置']].map(([value, Icon, label]) => <Tabs.Trigger className="tab-trigger" key={value} value={value}><Icon size={17} aria-hidden="true" />{label}{value === 'models' && <span className="tab-number">{c.models.filter(m => m.selected).length}</span>}</Tabs.Trigger>)}</Tabs.List><Tabs.Content value="info"><ConnectionInfo c={c} change={change} errors={shownErrors} job={jobs[`test-${id}`]} cancel={() => cancel(`test-${id}`)} test={() => start(`test-${id}`, '正在测试连接')} /></Tabs.Content><Tabs.Content value="models"><ConnectionModels c={c} change={change} openModel={openModel} move={move} job={jobs[`catalog-${id}`]} refresh={() => start(`catalog-${id}`, '正在刷新模型')} /></Tabs.Content><Tabs.Content value="purpose"><ConnectionPurpose c={c} change={change} /></Tabs.Content><Tabs.Content value="advanced"><ConnectionAdvanced c={c} change={change} reset={reset} errors={shownErrors} /></Tabs.Content></Tabs.Root><footer className="connection-save-bar editor-footer">{(store.actionError?.target === id || attempted && Object.keys(errors).length > 0) && <div className="save-message field-error" role="alert">{store.actionError?.target === id ? store.actionError.message : Object.values(errors)[0]}</div>}<div className="save-actions"><Button variant="ghost" disabled={busy || !dirty} onClick={() => {restore(); setAttempted(false);}}>还原</Button><Button variant="primary" disabled={busy || !dirty} aria-busy={saving} onClick={trySave}>{saving && <Spinner />}{saving ? '正在保存' : '保存连接'}</Button></div></footer></>;
 }
 
 /** 插件卡片直接展示 Go 检测的安装、附带及可用版本，操作复用原型按钮和等待组件。 */
@@ -333,14 +442,16 @@ function UpdatePanel({state = {}, version, updateAction, close, dirty}) {
   return <div className="update-panel"><div className="update-state-icon">{busy ? <Spinner /> : phase === 'error' ? <CircleAlert size={30} /> : <RefreshCw size={30} />}</div><h2>{busy ? phase === 'checking' ? '正在检查更新' : phase === 'downloading' ? '正在下载更新' : '正在准备安装' : phase === 'available' ? '发现新版本' : phase === 'downloaded' ? '更新已准备好' : ['latest', 'current'].includes(phase) ? '已是最新版本' : phase === 'error' ? '暂时无法检查更新' : '检查应用更新'}</h2><p role="status">{state.message || '检查新的功能与修复'}</p><dl className="update-versions"><div><dt>当前版本</dt><dd>{state.version || version || '—'}</dd></div><div><dt>可用版本</dt><dd>{state.availableVersion || '—'}</dd></div></dl>{phase === 'downloading' && <progress className="operation-progress" aria-label="应用下载进度" value={state.progress || 0} max={1} />}{state.releaseNotes && <div className="release-notes">{state.releaseNotes}</div>}<label className="update-preference"><Tick checked={state.autoCheck !== false} label="打开更新窗口时自动检查" onChange={enabled => updateAction('setUpdateAutoCheck', false, enabled)} /><span>打开更新窗口时自动检查</span></label>{dirty && phase === 'downloaded' && <div className="field-error" role="status">请先保存或还原草稿再安装更新。</div>}<div className="dialog-actions">{busy ? phase !== 'installing' && <Button onClick={() => updateAction('cancelUpdate')}>取消操作</Button> : phase === 'available' ? <><Button variant="ghost" onClick={() => updateAction('skipUpdate')}>跳过此版本</Button><Button onClick={close}>稍后</Button><Button variant="primary" onClick={() => updateAction('downloadUpdate')}><Download size={16} />下载更新</Button></> : phase === 'downloaded' ? <Button variant="primary" disabled={dirty} onClick={() => updateAction('installUpdate')}>重启并安装</Button> : phase === 'manual' ? <Button variant="primary" onClick={() => updateAction('openReleases')}>查看发布页<ArrowRight size={16} /></Button> : <Button variant="primary" onClick={() => updateAction('checkUpdate')}><RefreshCw size={16} />{phase === 'error' ? '重试' : '检查更新'}</Button>}</div></div>;
 }
 
-/** 正式入口直接复用已确认原型的组件树、交互原语与样式，业务状态来自固定 Go/API 适配层。 */
+/** 共用已确认主题与 Go/API 状态；父级持有费率草稿和请求门控，跨页面不丢输入或解除正在进行的写锁。 */
 function App() {
-  const c = useWorkbench(), {store, backend, page, connectionID, modal, confirm, jobs, opener} = c;
-  const currentConnection = store.connections[connectionID], updateJob = jobs.update, updating = updateJob?.phase === 'loading';
-  const sidebarProps = {store, page, navigate: c.navigate, version: backend.version || ''};
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false), [usageView, setUsageView] = useState(createUsageView);
+  const usageGate = useRef(createUsageGate());
+  const c = useWorkbench({extraDirty: Boolean(usageView.priceDraft?.dirty)}), {store, backend, page, connectionID, modal, confirm, jobs, opener} = c;
+  const currentConnection = store.connections[connectionID], updateJob = jobs.update;
+  const sidebarProps = {store, page, navigate: c.navigate, version: backend.version || '', collapsed: sidebarCollapsed, toggleCollapsed: () => setSidebarCollapsed(value => !value), updateJob, onUpdate: () => c.openModal({type: 'update'})};
   useEffect(() => {
     /** 保存快捷键遵循当前页面和模态边界，输入文字不会触发全局导航。 */
-    function saveShortcut(event) {if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {event.preventDefault(); if (!modal && !c.busy) {if (page === 'plans') void c.commitPlan(false); else if (page === 'connection') void c.commitConnection();}}}
+    function saveShortcut(event) {if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {event.preventDefault(); if (!modal && !c.busy) {if (page === 'plans') void c.commitPlan(false); else if (page === 'connection' || page === 'connections') void c.commitConnection();}}}
     document.addEventListener('keydown', saveShortcut); return () => document.removeEventListener('keydown', saveShortcut);
   }, [page, store.selected, connectionID, modal, c.busy]);
   const reported = useRef(false);
@@ -350,7 +461,7 @@ function App() {
       window.go?.desktop?.App?.FrontendReady?.({ok: true, configLoaded: true, accessConfigCount: store.plans.length, updateBindings: ['CancelUpdate', 'SkipUpdate', 'SetUpdateAutoCheck', 'CancelPluginUpdate', 'EnableAccess'].every(name => typeof window.go?.desktop?.App?.[name] === 'function')});
     }
   }, [c.loading, c.loadError]);
-  return <Tooltip.Provider delayDuration={350}><a className="skip-link" href="#main">跳到主内容</a><div className="app-shell"><aside className="sidebar"><Sidebar {...sidebarProps} /></aside><div className="app-main"><div className="topbar"><Dialog.Root open={c.mobileNav} onOpenChange={c.setMobileNav}><Dialog.Trigger asChild><Button variant="ghost" className="icon-button mobile-nav-trigger" aria-label="打开导航"><Menu size={20} /></Button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="mobile-sidebar"><Dialog.Title className="sr-only">工作区导航</Dialog.Title><Dialog.Description className="sr-only">选择页面或连接</Dialog.Description><Dialog.Close asChild><Button variant="ghost" className="icon-button mobile-nav-close" aria-label="关闭导航"><X size={19} /></Button></Dialog.Close><Sidebar {...sidebarProps} /></Dialog.Content></Dialog.Portal></Dialog.Root><Breadcrumb page={page} connectionName={currentConnection?.name} navigate={c.navigate} /><div className="topbar-actions"><Button variant="ghost" className="update-trigger" aria-busy={updating} onClick={() => c.openModal({type: 'update'})}>{updating ? <Spinner /> : <RefreshCw size={16} />}<span>{updating ? updateJob.operation === 'checking' ? '正在检查更新' : updateJob.operation === 'downloading' ? '正在下载更新' : '正在准备安装' : updateJob?.phase === 'available' ? '发现更新' : '检查更新'}</span></Button></div></div>{backend.close?.phase && backend.close.phase !== 'confirm' && <div className={cn('job-inline', backend.close.phase === 'blocked' && 'field-error')} role="status">{backend.close.message}</div>}{backend.relay?.message?.startsWith('上次的') && <div className="job-inline field-error" role="alert">{backend.relay.message}<Button onClick={() => c.toggleAccess(false)}>恢复配置</Button></div>}<main id="main" className={cn('page-content', page === 'plans' && 'plans-page')} tabIndex={-1} aria-busy={c.loading || c.busy} inert={c.busy ? true : undefined}>{c.loading ? <section className="panel loading-skeleton" aria-label="正在读取工作区"><div /><div /><div /></section> : c.loadError ? <Empty title="无法读取配置" action={<Button onClick={c.load}>重试</Button>}>{c.loadError}</Empty> : page === 'plans' ? <PlanWorkspace store={store} select={c.select} edit={c.editPlan} save={() => c.commitPlan(false)} apply={() => c.commitPlan(true)} restore={c.restorePlan} copy={c.copyPlan} remove={c.removePlan} create={() => c.openModal({type: 'plan'})} toggle={c.toggleAccess} openConnection={c.openConnection} /> : page === 'connections' ? <ConnectionsPage store={store} openConnection={c.openConnection} addConnection={() => c.openModal({type: 'connection'})} copyConnection={c.copyConnection} removeConnection={c.removeConnection} /> : page === 'connection' ? <ConnectionPage key={connectionID} store={store} id={connectionID} tab={c.tab} setTab={c.setTab} change={c.editConnection} copy={() => c.copyConnection(connectionID)} remove={() => c.removeConnection(connectionID)} add={() => c.openModal({type: 'connection'})} openModel={id => c.openModal({type: 'model', id})} move={c.moveModel} jobs={jobs} start={c.start} cancel={c.cancel} save={c.commitConnection} restore={c.restoreConnection} reset={c.resetAdvanced} /> : page === 'plugins' ? <PluginsPage backend={backend} updateAction={c.updateAction} navigate={c.navigate} /> : <HelpPage navigate={c.navigate} openDiagnostics={() => c.openModal({type: 'diagnostics'})} />}</main></div></div><Modal open={Boolean(modal)} title={modal?.type === 'plan' ? '新建配置' : modal?.type === 'connection' ? '添加连接' : modal?.type === 'model' ? modal.id ? '模型设置' : '手动添加模型' : modal?.type === 'diagnostics' ? '最近请求' : '应用更新'} onClose={() => c.setModal(null)} opener={opener}>{modal?.type === 'plan' || modal?.type === 'connection' ? <NewEntityForm key={modal.type} kind={modal.type} submit={modal.type === 'plan' ? c.createPlan : c.createConnection} close={() => c.setModal(null)} /> : modal?.type === 'model' && currentConnection ? <ModelForm key={modal.id || 'new'} model={currentConnection.models.find(m => m.id === modal.id)} c={currentConnection} close={() => c.setModal(null)} submit={m => {c.editConnection(connection => ({...connection, models: modal.id ? connection.models.map(item => item.id === modal.id ? m : item) : [...connection.models, m], defaultID: connection.defaultID || m.id})); c.setModal(null);}} /> : modal?.type === 'diagnostics' ? <RequestDiagnostics relay={backend.relay} /> : modal?.type === 'update' ? <UpdatePanel state={backend.update} version={backend.version} updateAction={c.updateAction} dirty={c.dirty} close={() => c.setModal(null)} /> : null}</Modal><Confirm data={confirm} close={c.closeConfirm} opener={opener} /><div className="toast-region" role="status" aria-live="polite">{c.toast && <div className="toast"><Check size={17} /><span>{c.toast}</span><IconButton label="关闭提示" onClick={() => c.setToast('')}><X size={16} /></IconButton></div>}</div></Tooltip.Provider>;
+  return <Tooltip.Provider delayDuration={350}><a className="skip-link" href="#main">跳到主内容</a><div className={cn("app-shell", "macos-settings", "macos-workspace", sidebarCollapsed && "sidebar-collapsed")} data-page={page}><aside className="sidebar"><Sidebar {...sidebarProps} /></aside><div className="app-main"><div className="topbar"><Dialog.Root open={c.mobileNav} onOpenChange={c.setMobileNav}><Dialog.Trigger asChild><Button variant="ghost" className="icon-button mobile-nav-trigger" aria-label="打开导航"><Menu size={20} /></Button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="mobile-sidebar macos-settings"><Dialog.Title className="sr-only">工作区导航</Dialog.Title><Dialog.Description className="sr-only">选择页面或连接</Dialog.Description><Dialog.Close asChild><Button variant="ghost" className="icon-button mobile-nav-close" aria-label="关闭导航"><X size={19} /></Button></Dialog.Close><Sidebar {...sidebarProps} /></Dialog.Content></Dialog.Portal></Dialog.Root><div className="topbar-actions"><UpdateTrigger job={updateJob} onClick={sidebarProps.onUpdate} /></div></div>{backend.close?.phase && backend.close.phase !== 'confirm' && <div className={cn('job-inline', backend.close.phase === 'blocked' && 'field-error')} role="status">{backend.close.message}</div>}{backend.relay?.message?.startsWith('上次的') && <div className="job-inline field-error" role="alert">{backend.relay.message}<Button onClick={() => c.toggleAccess(false)}>恢复配置</Button></div>}<main id="main" className={cn('page-content', page === 'plans' && 'plans-page', page === 'usage' && 'usage-page')} tabIndex={-1} aria-busy={c.loading || c.busy} inert={c.busy && !['connection-save', 'plan-save'].includes(c.pending?.kind) ? true : undefined}>{c.loading ? <section className="panel loading-skeleton" aria-label="正在读取工作区"><div /><div /><div /></section> : c.loadError ? <Empty title="无法读取配置" action={<Button onClick={c.load}>重试</Button>}>{c.loadError}</Empty> : page === 'usage' ? <UsagePage view={usageView} onChange={setUsageView} connections={store.savedConnections} requestGate={usageGate.current} /> : page === 'plans' ? <PlanWorkspace store={store} busy={c.busy} pending={c.pending} select={c.select} edit={c.editPlan} save={() => c.commitPlan(false)} apply={() => c.commitPlan(true)} restore={c.restorePlan} copy={c.copyPlan} remove={c.removePlan} create={() => c.openModal({type: 'plan'})} toggle={c.toggleAccess} openConnection={c.openConnection} /> : (page === 'connections' || page === 'connection') ? <ConnectionsWorkspace store={store} id={connectionID} openConnection={c.openConnection} addConnection={() => c.openModal({type: 'connection'})}><ConnectionPage embedded key={connectionID} store={store} busy={c.busy} pending={c.pending} id={connectionID} tab={c.tab} setTab={c.setTab} change={c.editConnection} copy={() => c.copyConnection(connectionID)} remove={() => c.removeConnection(connectionID)} add={() => c.openModal({type: 'connection'})} openModel={id => c.openModal({type: 'model', id})} move={c.moveModel} jobs={jobs} start={c.start} cancel={c.cancel} save={c.commitConnection} restore={c.restoreConnection} reset={c.resetAdvanced} /></ConnectionsWorkspace> : page === 'plugins' ? <PluginsPage backend={backend} updateAction={c.updateAction} navigate={c.navigate} /> : <HelpPage navigate={c.navigate} openDiagnostics={() => c.openModal({type: 'diagnostics'})} />}</main></div></div><Modal open={Boolean(modal)} title={modal?.type === 'plan' ? '新建配置' : modal?.type === 'connection' ? '添加连接' : modal?.type === 'model' ? modal.id ? '模型设置' : '手动添加模型' : modal?.type === 'diagnostics' ? '最近请求' : '应用更新'} onClose={() => c.setModal(null)} opener={opener}>{modal?.type === 'plan' || modal?.type === 'connection' ? <NewEntityForm key={modal.type} kind={modal.type} submit={modal.type === 'plan' ? c.createPlan : c.createConnection} close={() => c.setModal(null)} /> : modal?.type === 'model' && currentConnection ? <ModelForm key={modal.id || 'new'} model={currentConnection.models.find(m => m.id === modal.id)} c={currentConnection} close={() => c.setModal(null)} submit={m => {c.editConnection(connection => ({...connection, models: modal.id ? connection.models.map(item => item.id === modal.id ? m : item) : [...connection.models, m], defaultID: connection.defaultID || m.id})); c.setModal(null);}} /> : modal?.type === 'diagnostics' ? <RequestDiagnostics relay={backend.relay} /> : modal?.type === 'update' ? <UpdatePanel state={backend.update} version={backend.version} updateAction={c.updateAction} dirty={c.dirty} close={() => c.setModal(null)} /> : null}</Modal><Confirm data={confirm} close={c.closeConfirm} opener={opener} /><div className="toast-region" role="status" aria-live="polite">{c.toast && <div className="toast"><Check size={17} /><span>{c.toast}</span><IconButton label="关闭提示" onClick={() => c.setToast('')}><X size={16} /></IconButton></div>}</div></Tooltip.Provider>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);

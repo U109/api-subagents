@@ -18,6 +18,7 @@ import (
 	"github.com/U109/api-subagents/internal/cpacompat"
 	"github.com/U109/api-subagents/internal/platform"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 )
 
 const maxResponse = 8 * 1024 * 1024
@@ -121,7 +122,8 @@ func RequestSpec(p configstore.Profile, history []any, system string, tools []sh
 }
 
 // FetchReply 按首次数据与空闲时间计时，心跳也刷新活跃时间；不重发失败或断流请求。
-func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, endpoint string, headers http.Header, body shared.Object, progress func(shared.Object)) (shared.Object, error) {
+func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, endpoint string, headers http.Header, body shared.Object, progress func(shared.Object)) (reply shared.Object, failure error) {
+	ctx = usage.EnsureCall(ctx, profile, "", "proposal", "generate")
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	first := p.FirstWait
@@ -182,7 +184,12 @@ func (p *Provider) FetchReply(ctx context.Context, profile configstore.Profile, 
 		}
 		return nil, fmt.Errorf("连接模型服务失败：%w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if failure != nil {
+			usage.MarkFailure(ctx)
+		}
+		res.Body.Close()
+	}()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, fmt.Errorf("模型 API 返回 HTTP %d：%s", res.StatusCode, readUpstreamError(res.Body))
 	}
