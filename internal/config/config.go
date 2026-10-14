@@ -38,6 +38,7 @@ type Profile struct {
 	ModelOfficialContexts map[string]int                `json:"modelOfficialContexts,omitempty"`
 	ModelCompatibility    map[string]string             `json:"modelCompatibility,omitempty"`
 	ModelImageInputs      map[string]bool               `json:"modelImageInputs,omitempty"`
+	ModelFastModes        map[string]bool               `json:"modelFastModes,omitempty"`
 	ModelOutputs          map[string]ModelOutputSetting `json:"modelOutputs,omitempty"`
 	MaxTokens             int                           `json:"maxTokens"`
 	AdvancedOverride      *bool                         `json:"advancedOverride,omitempty"`
@@ -133,8 +134,12 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 			return c, fmt.Errorf("%s: 不支持的接口类型。", name)
 		}
 		p.Model = strings.TrimSpace(p.Model)
+		// 旧版 Ultra 收敛到仍可选择的 Max，升级不能因已保存档位而丢失整个配置。
+		if p.ReasoningEffort == "ultra" {
+			p.ReasoningEffort = "max"
+		}
 		if !ValidReasoningEffort(p.ReasoningEffort) {
-			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high、xhigh、max 或 ultra。")
+			return c, errors.New("思考等级需为服务默认、none、minimal、low、medium、high、xhigh 或 max。")
 		}
 		if (requireModel && p.Model == "") || len([]rune(p.Model)) > 200 || strings.IndexFunc(p.Model, unicode.IsControl) >= 0 {
 			return c, fmt.Errorf("%s: 请填写有效模型 ID。", name)
@@ -167,6 +172,10 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 			return c, fmt.Errorf("%s: %w", name, err)
 		}
 		p.ModelImageInputs = normalizeModelImageInputs(p)
+		p.ModelFastModes, err = normalizeModelFastModes(p)
+		if err != nil {
+			return c, err
+		}
 		p.ModelOutputs, err = normalizeModelOutputs(p)
 		if err != nil {
 			return c, fmt.Errorf("%s: %w", name, err)
@@ -197,7 +206,7 @@ func ValidateConfig(data []byte, requireModel bool) (Config, error) {
 // ValidReasoningEffort 限定可保存的推理档位；空值保持旧配置行为，不向服务强加推理参数。
 func ValidReasoningEffort(effort string) bool {
 	switch effort {
-	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
 		return true
 	default:
 		return false
@@ -255,6 +264,7 @@ func Editable(c Config) Config {
 		p.ModelOfficialContexts = maps.Clone(p.ModelOfficialContexts)
 		p.ModelCompatibility = maps.Clone(p.ModelCompatibility)
 		p.ModelImageInputs = maps.Clone(p.ModelImageInputs)
+		p.ModelFastModes = maps.Clone(p.ModelFastModes)
 		p.ModelOutputs = maps.Clone(p.ModelOutputs)
 		if p.AdvancedOverride != nil {
 			value := *p.AdvancedOverride

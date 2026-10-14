@@ -16,6 +16,7 @@ type observer struct {
 	buffer, line, event                            []byte
 	overflow, lineOverflow, eventOverflow, afterCR bool
 	terminal                                       string
+	serviceTier                                    string
 	tokens                                         Tokens
 	reported, totalReported                        bool
 }
@@ -135,6 +136,13 @@ func (o *observer) accept(data []byte) {
 	if response := object(value["response"]); response != nil {
 		root = response
 	}
+	// 只允许固定档位进入账本；降级到普通速度时按普通价结算，不保存任意上游文本。
+	if tier, ok := root["service_tier"].(string); ok {
+		switch tier {
+		case "default", "standard", "priority", "fast", "flex", "scale", "ultrafast":
+			o.serviceTier = tier
+		}
+	}
 	usage := object(root["usage"])
 	if o.protocol == "anthropic" {
 		if message := object(value["message"]); message != nil {
@@ -148,6 +156,9 @@ func (o *observer) accept(data []byte) {
 			o.terminal = "failed"
 		}
 		if usage != nil {
+			if speed, ok := usage["speed"].(string); ok && (speed == "fast" || speed == "standard") {
+				o.serviceTier = speed
+			}
 			o.reported = true
 			// Claude 普通输入不含缓存；初始 usage 的标准缓存字段不存在时保留未知。
 			assign(&o.tokens.Read, usage["cache_read_input_tokens"])

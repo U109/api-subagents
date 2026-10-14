@@ -1036,3 +1036,274 @@
 @media (prefers-reduced-motion: reduce) {
   .dialog-content *, .menu-content *, .toast *, .mobile-sidebar * {transition: none !important; animation: none !important;}
 }
+
+/* Fast 工作区标识使用现有强调色与模型行间距，SVG 雷电不改变操作按钮或拖动区域。 */
+.model-fast-mark {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  vertical-align: middle;
+}
+
+.model-fast-mark > svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+/* 仅复用上下文设置卡片的结构，不新增独立主题或改变弹窗宽度。 */
+.model-fast-setting {
+  gap: 8px;
+}
+
+/* Fast 卡片增加了内容高度；只让模型表单主体滚动，窄屏仍能看到标题、取消和保存。 */
+.dialog-content:has(.model-settings-form) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog-content:has(.model-settings-form) > .dialog-heading,
+.model-settings-form > .dialog-actions {
+  flex-shrink: 0;
+}
+
+.model-settings-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.model-settings-form > .dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 桌面接入配置按真实剩余高度分配空间，不再用固定像素估算标题与状态卡片。 */
+@media (min-width: 901px) and (min-height: 600px) {
+  .app-shell.macos-workspace[data-page="plans"] {
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .macos-workspace[data-page="plans"] > .app-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .macos-workspace[data-page="plans"] .page-content.plans-page {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .macos-workspace[data-page="plans"] .plan-page-intro,
+  .macos-workspace[data-page="plans"] .access-status {
+    flex-shrink: 0;
+  }
+
+  .macos-workspace[data-page="plans"] .plan-workspace.mac-plan-workspace {
+    flex: 1 1 0%;
+    grid-template-rows: minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
+  }
+
+  /* 溢出的模型内容仍能滚动，不隐藏页面滚动条来掩盖高度错误。 */
+  .macos-workspace[data-page="plans"] .plan-editor .editor-content {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scroll-padding-block: 16px;
+  }
+
+  .macos-workspace[data-page="plans"] .mac-plan-workspace > .plan-list {
+    min-height: 0;
+    height: auto;
+  }
+
+  .macos-workspace[data-page="plans"] .plan-list-items {
+    max-height: none;
+    min-height: 0;
+  }
+}
+
+/* 标注修订仅作用于独立工作区，沿用已确认工作区的字号、配色和控件形态。 */
+.macos-settings .plan-list-connections {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.macos-workspace .connection-workbench .connection-directory-open {
+  min-height: 60px;
+  padding: 8px 12px;
+}
+.macos-workspace .connection-workbench .directory-provider-copy { gap: 3px; }
+
+/* 保存反馈靠上显示；保留原有按主工作区居中的响应式定位。 */
+.toast-region { top: calc(20px + env(safe-area-inset-top)); bottom: auto; }
+/* 打开弹窗时轻量提示退到遮罩下，避免窄屏标题和关闭按钮被刚保存的提示遮住；关闭后仍恢复置顶显示。 */
+body:has(.dialog-overlay[data-state="open"]) .toast-region { z-index: calc(var(--z-overlay) - 1); }
+
+.model-unavailable-mark {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  color: var(--danger);
+  cursor: help;
+  border-radius: 4px;
+}
+.model-unavailable-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.macos-settings .scope-model-row .capacity.is-unconfirmed {
+  color: var(--mac-warning);
+  background: #fff9e9;
+  border-color: #f4e3b8;
+}
+
+.macos-workspace .u-heading { justify-content: flex-start; column-gap: 20px; }
+.macos-workspace .u-heading .u-tabs { margin-left: 0; }
+/* 提示的 left/top 由实际悬停点计算，取消旧的右上角固定定位，文字增长仍限制在图表宽度内。 */
+.u-chart-tooltip { right: auto; max-width: calc(100% - 24px); }
+.u-chart-tooltip > div > span { min-width: 0; overflow-wrap: anywhere; }
+.u-chart-tooltip b { flex: 0 0 auto; }
+.macos-workspace .u-overview-grid.without-breakdown { grid-template-columns: minmax(0, 1fr); }
+
+/* 更新弹窗只滚动状态正文，偏好与按钮各自留白；标题、关闭及取消不随正文滚走。 */
+.dialog-content:has(.update-panel) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog-content:has(.update-panel) > .dialog-heading,
+.update-panel-footer { flex-shrink: 0; }
+.update-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 0;
+}
+.update-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+.update-panel-body h2 { padding: 0; text-wrap: balance; }
+.update-panel-body p { padding: 0; text-wrap: pretty; }
+.update-panel-body .update-versions { margin: 24px 0 0; }
+.update-panel-body .update-versions dd { overflow-wrap: anywhere; }
+.update-panel-body > :is(.operation-progress, .release-notes, .field-error) { margin-top: 16px; }
+/* 长版本说明沿用正文的唯一滚动容器，避免旧样式在弹窗内再创建一层滚动区。 */
+.update-panel-body .release-notes { max-height: none; overflow: visible; }
+.update-panel .update-preference {
+  min-height: 44px;
+  padding: 0 24px 20px;
+  line-height: 1.5;
+}
+.update-preference .checkbox { flex-shrink: 0; }
+.update-panel .dialog-actions { gap: 12px; padding: 16px 24px; }
+@media (max-width: 640px) {
+  .update-panel-body { padding: 20px 16px; }
+  .update-panel .update-preference { padding-right: 16px; padding-left: 16px; }
+  .update-panel .dialog-actions { padding: 16px; }
+}
+
+/* 筛选项复用应用单选菜单；触发器的长模型名截断，菜单中仍可完整阅读。 */
+.u-filter-field, .u-analysis-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-body);
+  color: var(--muted);
+}
+.usage-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--control-line);
+  border-radius: 7px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.usage-select-trigger:hover { border-color: var(--muted); }
+.usage-select-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.usage-select-trigger[data-state="open"] { border-color: var(--focus); }
+.usage-select-trigger > svg { flex: 0 0 auto; color: var(--muted); }
+.usage-select-value { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.usage-select-menu {
+  z-index: var(--z-menu);
+  width: var(--radix-dropdown-menu-trigger-width);
+  min-width: 180px;
+  max-width: calc(100vw - 24px);
+  max-height: min(320px, var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: 0 4px 20px rgb(29 29 31 / .12);
+}
+.usage-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: var(--text-body);
+  line-height: 1.4;
+  cursor: pointer;
+  outline: none;
+}
+.usage-select-item > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.usage-select-item > span:last-child svg { flex: 0 0 auto; }
+.usage-select-item[data-state="checked"] { background: var(--accent-soft); color: var(--accent); }
+.usage-select-item[data-highlighted] { background: var(--surface-hover); outline: 2px solid var(--focus); outline-offset: -2px; }
+.u-analysis-group .usage-select-trigger { width: 144px; }
+
+@media (max-width: 640px), (pointer: coarse) {
+  .usage-select-trigger, .usage-select-item { min-height: 44px; font-size: var(--text-touch); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-select-trigger, .usage-select-menu, .usage-select-item { animation: none !important; transition: none !important; }
+}
+
+/* 价格的普通、Fast 和长上下文分组共用紧凑表单；窄屏保留标签与金额输入。 */
+.u-price-origin { font-size: var(--text-body); color: var(--muted); margin: 0 0 10px; }
+.u-fast-status { margin-left: 12px; color: var(--accent); }
+.u-price-note { font-size: var(--text-body); color: var(--muted); margin: 0 0 12px; }
+.u-rate-group + .u-rate-group { margin-top: 16px; }
+.u-rate-group h3 { font-size: var(--text-body); font-weight: 600; margin: 0 0 8px; }
+.u-rate-group > div { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+@media (max-width:640px) { .u-rate-group > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }

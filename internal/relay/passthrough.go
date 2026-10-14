@@ -27,6 +27,18 @@ func (r *Relay) forwardResponses(w http.ResponseWriter, req *http.Request, origi
 		replyError(w, http.StatusBadRequest, "请求 JSON 无效")
 		return
 	}
+	// 生成请求由实际路由模型控制 Fast；compact 不接受服务档位，不能把生成参数带过去。
+	if req.URL.Path == "/v1/responses/compact" {
+		body, err = sjson.DeleteBytes(body, "service_tier")
+	} else if profile.FastMode() {
+		body, err = sjson.SetBytes(body, "service_tier", "priority")
+	} else if tier := gjson.GetBytes(body, "service_tier").String(); tier == "fast" || tier == "priority" || tier == "ultrafast" {
+		body, err = sjson.SetBytes(body, "service_tier", "default")
+	}
+	if err != nil {
+		replyError(w, http.StatusBadRequest, "无法设置模型 Fast 档位")
+		return
+	}
 	// null、零值或非标准输出字段也视为调用方显式参数，交给上游校验；压缩接口不接受生成额度。
 	if req.URL.Path == "/v1/responses" && !gjson.GetBytes(original, "max_output_tokens").Exists() && !gjson.GetBytes(original, "max_tokens").Exists() && !gjson.GetBytes(original, "max_completion_tokens").Exists() {
 		if limit := profile.OutputLimit(profile.Model); limit > 0 {

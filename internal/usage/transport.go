@@ -47,7 +47,16 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	record.Attempt = value.sequence.Add(1)
 	record.StartedAt = start.UnixMilli()
 	record.FirstByteMS = -1
-	prices, _ := t.Store.Prices()
+	prices, pricesError := t.Store.Prices()
+	if prices.Rates == nil || pricesError != nil {
+		prices.Rates = map[string]Price{}
+	}
+	key := Key(record.ConnectionID, record.Model)
+	if _, exists := prices.Rates[key]; !exists && pricesError == nil {
+		if price, known := OfficialPrice(record.Model); known {
+			prices.Rates[key] = price
+		}
+	}
 	response, err := t.Base.RoundTrip(req)
 	if err != nil {
 		record.DurationMS = time.Since(start).Milliseconds()
@@ -112,6 +121,10 @@ func (b *observedBody) Close() error {
 		b.observer.finish()
 		b.record.DurationMS = time.Since(b.start).Milliseconds()
 		b.record.Tokens = b.observer.tokens
+		if b.observer.serviceTier != "" {
+			b.record.ServiceTier = b.observer.serviceTier
+			b.record.Fast = b.observer.serviceTier == "priority" || b.observer.serviceTier == "fast"
+		}
 		b.record.Outcome = b.observer.terminal
 		if b.record.Outcome == "" {
 			b.record.Outcome = "unknown"

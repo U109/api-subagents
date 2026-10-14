@@ -553,9 +553,19 @@ func (r *Relay) forward(w http.ResponseWriter, req *http.Request, input shared.O
 	if profile.Protocol == "compatible" {
 		r.chatHistory.restore(historyScope, converted)
 	}
-	requestBody = shared.Marshal(converted)
 	profile.Stream = upstreamStream
 	endpoint, headers, _ := providers.RequestSpec(profile, nil, "", nil)
+	// 转换后的正文才是真实上游请求；不能只在 RequestSpec 的未使用示例正文中开启 Fast。
+	if profile.Protocol == "compatible" {
+		if tier := shared.Str(converted["service_tier"]); !profile.FastMode() && (tier == "priority" || tier == "fast" || tier == "ultrafast") {
+			converted["service_tier"] = "default"
+		}
+	} else {
+		delete(converted, "service_tier")
+		delete(converted, "speed")
+	}
+	providers.ApplyFast(profile, headers, converted)
+	requestBody = shared.Marshal(converted)
 	upstream, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(requestBody))
 	if err != nil {
 		replyError(w, 400, "API 地址无效。")

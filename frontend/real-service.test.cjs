@@ -118,6 +118,7 @@ async function main() {
     await page.getByRole('spinbutton', {name: '上下文大小（tokens）', exact: true}).fill('96000');
     await page.getByRole('spinbutton', {name: '插件输出上限（可选）', exact: true}).fill('2048');
     await page.getByRole('combobox', {name: '图像输入', exact: true}).selectOption('no');
+    await page.getByRole('switch', {name: 'Fast 模式', exact: true}).click();
     await page.getByRole('button', {name: '保存模型', exact: true}).click();
     await page.getByRole('button', {name: '手动添加', exact: true}).click();
     await page.getByRole('textbox', {name: '模型 ID', exact: true}).fill('local-manual');
@@ -231,6 +232,16 @@ async function main() {
     await page.getByRole('button', {name: '保存费率', exact: true}).click(); assert.equal((await restorePrice).status(), 200);
     passed('延迟旧的真实读取后发起新读取，旧响应不能回退费率或重置已保存表单');
 
+    // 真实 Go 按精确模型 ID 提供官方默认，未选目录模型不补价；不调用官网或付费接口。
+    const beforeDefaults = (await request(service, '/api/config')).config;
+    const priceProfile = {...beforeDefaults.models['local-two'], relayModels: [...(beforeDefaults.models['local-two'].relayModels || []), 'gpt-5.4'], modelCatalog: [...(beforeDefaults.models['local-two'].modelCatalog || []), {id: 'gpt-5.4'}, {id: 'gpt-6-astra'}]};
+    await request(service, '/api/config/save', {name: 'local-two', config: {...beforeDefaults, models: {...beforeDefaults.models, 'local-two': priceProfile}}});
+    const defaultPrices = (await request(service, '/api/usage', {})).prices;
+    const official = defaultPrices.rates[JSON.stringify([twoID, 'gpt-5.4'])];
+    assert.equal(official.input, 2.5); assert.equal(official.fast.input, 5); assert.equal(official.checkedAt, '2026-10-14');
+    assert.equal(Object.hasOwn(defaultPrices.rates, JSON.stringify([twoID, 'gpt-6-astra'])), false);
+    passed('真实 Go 返回已选模型官方普通与 Fast 默认费率，不补未选目录或私有别名');
+
     await navigate(page, '我的连接'); await page.getByRole('button', {name: '管理连接 local-newer-draft', exact: true}).click();
     await page.getByRole('button', {name: '测试连接', exact: true}).click(); await page.getByRole('status').filter({hasText: '连接测试成功'}).waitFor();
     const ledger = await request(service, '/api/usage', {}); assert.equal(ledger.records.length, 1); assert.equal(ledger.records[0].source, 'test'); assert.equal(ledger.records[0].input, 100); assert.equal(ledger.records[0].output, 20); assert.equal(ledger.records[0].costMicroUSD, 280);
@@ -240,7 +251,7 @@ async function main() {
     await until(() => mock.state.aborted === 1, '取消未传递到 Go 和上游'); mock.state.slow = false;
     await navigate(page, '用量统计'); await page.getByRole('tab', {name: '概览', exact: true}).click();
     await page.locator('.u-kpi strong').first().waitFor(); assert.equal(await page.locator('.u-kpi strong').first().innerText(), '0');
-    await page.getByRole('combobox', {name: '用量来源', exact: true}).selectOption('test');
+    await page.getByRole('button', {name: '用量来源', exact: true}).click(); await page.getByRole('menuitemradio', {name: '连接测试', exact: true}).click();
     await page.getByRole('tab', {name: '请求明细', exact: true}).click(); assert.match(await page.locator('.usage-reference').innerText(), /local-alpha/);
     passed('真实测试请求、Token 与历史计价、测试来源隔离；取消穿过浏览器、Go 到达上游');
 

@@ -13,7 +13,7 @@ if (licenseStart >= 0) await writeFile(scriptPath, script.slice(0, licenseStart)
 const css = spawnSync(process.execPath, [path.join(root, 'node_modules/@tailwindcss/cli/dist/index.mjs'), '-i', 'src/styles.css', '-o', 'workbench-app.css', '--minify'], {cwd: root, stdio: 'inherit'});
 if (css.status !== 0) process.exit(css.status || 1);
 // 按顺序追加页面样式；共用接入配置的视觉令牌，最后补齐其他工作区页面，不引入原型脚本或本机资源。
-const additions = await Promise.all(['usage.css', 'workbench-master.css', 'review-polish.css', 'reference-labels.css', 'macos-settings.css', 'macos-workspace.css'].map(name => readFile(path.join(root, 'src', name), 'utf8')));
+const additions = await Promise.all(['usage.css', 'workbench-master.css', 'review-polish.css', 'reference-labels.css', 'macos-settings.css', 'macos-workspace.css', 'model-fast.css'].map(name => readFile(path.join(root, 'src', name), 'utf8')));
 await writeFile(path.join(root, 'workbench-app.css'), (await readFile(path.join(root, 'workbench-app.css'), 'utf8')) + '\n' + additions.join('\n'));
 
 // packageForInput 向上查找实际入包源码的 npm 包根目录；不把开发工具或包内无名称的配置误认为运行依赖。

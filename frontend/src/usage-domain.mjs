@@ -38,6 +38,17 @@ export function usageModels(rows, connections) {
   return ordered.map((model,index) => ({...model, color: seriesColors[index % seriesColors.length]}));
 }
 
+/** 价格页只展示已保存连接中已选的模型；历史模型和未选目录仍可用于用量筛选，但不会混入价格表。 */
+export function configuredPriceModels(connections) {
+  return Object.values(connections).flatMap(connection => (connection.models || []).filter(model => model.selected).map(model => ({id: usageKey(connection.id, model.id), connection: connection.name, model: model.id, fast: model.fast === true, label: `${connection.name} · ${model.name || model.id}`})));
+}
+
+/** 图表图例仅保留当前筛选有记录的模型；未知用量仍算有记录，保留全账本确定的顺序和颜色。 */
+export function usageSeriesModels(rows, models) {
+  const recorded = new Set(rows.map(row => row.modelKey));
+  return models.filter(model => recorded.has(model.id));
+}
+
 /** 范围使用真实查询时点与 UTC 毫秒，不在正式程序中保留演示日期。 */
 export function usageRange(range, now = Date.now()) {const span = (range === '24h' ? 1 : range === '7d' ? 7 : 30) * 86400000; return {from: now - span, to: now + 1, span};}
 
@@ -75,6 +86,12 @@ export function usageBreakdown(rows) {
     {id:'write',label:'缓存创建',color:'#ec4899',value:known.reduce((s,r)=>s+r.write,0)}
   ];
   return {total: missing ? null : total, known: known.length, items: items.map(item => ({...item, value: missing ? null : item.value, percent: missing ? null : total ? item.value / total : 0}))};
+}
+
+/** 拆分展示只保留已知且大于零的分类；隐藏零值和未上报项，不改变完整记录的扣减、合计或统计口径。 */
+export function usageVisibleBreakdown(rows) {
+  const breakdown = usageBreakdown(rows);
+  return {...breakdown, items: breakdown.items.filter(item => Number.isFinite(item.value) && item.value > 0)};
 }
 
 /** 连续时间桶只汇总实际已知用量；没有用量的请求仍保留数量，模型数超过六项时颜色循环。 */

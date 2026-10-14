@@ -20,6 +20,7 @@ import (
 
 	configstore "github.com/U109/api-subagents/internal/config"
 	"github.com/U109/api-subagents/internal/shared"
+	"github.com/U109/api-subagents/internal/usage"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -266,6 +267,23 @@ func TestCloseCancelsActiveStream(t *testing.T) {
 	case <-finished:
 	case <-time.After(time.Second):
 		t.Fatal("gateway request remained open")
+	}
+	// 客户端结束早于服务端关闭回调；等待本地结算落盘后再清理 TempDir，避免 Windows 与账本写入竞争。
+	for deadline := time.Now().Add(2 * time.Second); ; {
+		rows, _, err := a.service.Usage.List(usage.Query{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) == 1 {
+			if rows[0].Outcome != "cancelled" {
+				t.Fatal("close did not settle cancelled usage", rows[0])
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("cancelled usage did not settle before test cleanup")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	assertCloseRestored(t, a)
 }

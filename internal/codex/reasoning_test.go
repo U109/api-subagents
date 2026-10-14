@@ -6,10 +6,10 @@ import (
 	"github.com/U109/api-subagents/internal/shared"
 )
 
-// TestCatalogReasoningLevels 保证目录完整且按强度排列，并能保留 max/ultra 默认值。
+// TestCatalogReasoningLevels 保证目录完整且按强度排列，并能保留 max 默认值。
 func TestCatalogReasoningLevels(t *testing.T) {
-	want := []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
-	for _, effort := range []string{"", "max", "ultra"} {
+	want := []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+	for _, effort := range []string{"", "max"} {
 		model := catalogModel("mock", "mock", "", effort, 0, 256000, false)
 		levels := shared.Arr(model["supported_reasoning_levels"])
 		if len(levels) != len(want) {

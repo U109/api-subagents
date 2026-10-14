@@ -45,7 +45,7 @@ let page = 'detail', activeTab = 'model', overviewQuery = '', connectionsCollaps
 const catalogStatus = new Map();
 const credentialSources = new WeakMap();
 const purposeExamples = ['审查代码结构、逻辑边界与潜在问题，提出可验证的修改建议。','整理技术文档、使用说明与变更记录，保持术语一致和内容准确。','按明确规则执行批量修改，并检查结果与兼容性。'];
-const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '最少 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh', max: '最高 · max', ultra: '极高 · ultra'};
+const reasoningLevels = {'': '服务默认', none: '不思考 · none', minimal: '最少 · minimal', low: '低 · low', medium: '中 · medium', high: '高 · high', xhigh: '超高 · xhigh', max: '最高 · max'};
 const removeDialog = byId('remove-dialog');
 const menu = byId('model-menu');
 let pendingRemoval = null;

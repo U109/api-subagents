@@ -160,7 +160,7 @@ async function main() {
       assert.equal(connectionStyle.appearance.background, planStyle.background);
       assert.equal(connectionStyle.appearance.shadow, planStyle.shadow);
       assert.equal(connectionStyle.appearance.heading, planStyle.heading);
-      assert.equal(connectionStyle.appearance.cardPadding, '12px');
+      assert.equal(connectionStyle.appearance.cardPadding, '8px 12px');
       assert.equal(await page.locator('.app-shell.macos-settings.macos-workspace').count(), 1);
       assert.equal(connectionStyle.left, 12);
       assert.equal(connectionStyle.right, 13);
@@ -235,11 +235,17 @@ async function main() {
       await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.waitForFunction(() => window.__mock.snapshot().saved.accessConfigs[1].defaultKey === '["review","review-model"]');
       assert.equal((await snapshot(page)).saved.models.cpa.model, 'gpt-5-extra');
       await page.getByRole('checkbox', {name: '配置中选择 review / review-model', exact: true}).click();
-      assert.equal(await page.getByRole('button', {name: '保存并启用', exact: true}).isDisabled(), true);
+      assert.equal(await page.getByRole('button', {name: '保存并启用', exact: true}).isEnabled(), true);
+      await page.getByRole('button', {name: '保存并启用', exact: true}).click();
+      await page.getByRole('alertdialog').waitFor(); assert.match(await page.getByRole('alertdialog').innerText(), /请星标/);
+      await page.keyboard.press('Escape');
       assert.equal(await page.locator('.inline-error').count(), 0);
       assert.equal(await page.locator('.editor-footer .save-message').count(), 0);
       assert.equal((await page.locator('.plan-editor').innerText()).includes('请星标'), false);
-      assert.equal(await page.getByRole('button', {name: '仅保存', exact: true}).isDisabled(), true);
+      assert.equal(await page.getByRole('button', {name: '仅保存', exact: true}).isEnabled(), true);
+      await page.getByRole('button', {name: '仅保存', exact: true}).click();
+      await page.getByRole('alertdialog').waitFor(); assert.match(await page.getByRole('alertdialog').innerText(), /请星标/);
+      await page.keyboard.press('Escape');
       assert.equal(await page.getByRole('button', {name: /配置模型排序操作/}).count(), 0);
       await page.getByRole('checkbox', {name: '配置中选择 cpa / gpt-5.1-fast-high', exact: true}).check();
       await page.getByRole('button', {name: '设为此配置默认 cpa / gpt-5.1-fast-high', exact: true}).click();

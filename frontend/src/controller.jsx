@@ -80,6 +80,10 @@ export function useWorkbench({extraDirty = false} = {}) {
   /** 先保存提交副本再明确启用；等待期间的新编辑保留为草稿，启用只使用后台已保存范围。 */
   async function commitPlan(enable) {
     const id = current.current.selected;
+    const draft = current.current.plans.find(plan => plan.id === id);
+    if (!draft) return false;
+    const validation = validatePlan(draft, current.current.savedConnections, current.current.connections);
+    if (validation) {ask({kind: 'notice', title: enable ? '暂时无法启用配置' : '暂时无法保存配置', description: validation}); return false;}
     return operation(async () => {
       const plan = clone(current.current.plans.find(p => p.id === id)), error = validatePlan(plan, current.current.savedConnections, current.current.connections);
       if (error) throw new Error(error);

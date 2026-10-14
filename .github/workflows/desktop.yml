@@ -57,6 +57,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node frontend/macos-settings.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/model-fast.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node frontend/usage.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $env:GO_EXE = (Get-Command go.exe).Source

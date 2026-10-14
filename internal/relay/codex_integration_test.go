@@ -53,7 +53,7 @@ func TestCodexPrimaryModel(t *testing.T) {
 	bin := codexBinary(t)
 	for _, tc := range []struct{ protocol, effort string }{
 		{"compatible", "high"}, {"responses", "high"}, {"anthropic", "high"}, {"gemini", "high"},
-		{"compatible", "max"}, {"compatible", "ultra"}, {"responses", "max"}, {"responses", "ultra"},
+		{"compatible", "max"}, {"responses", "max"},
 	} {
 		protocol, effort := tc.protocol, tc.effort
 		t.Run(protocol+"/"+effort, func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestCodexPrimaryModel(t *testing.T) {
 	}
 }
 
-// TestCodexModelList 检查桌面使用的 app-server 模型列表会显示默认路由、单独连接及 max/ultra 档位。
+// TestCodexModelList 检查桌面使用的 app-server 模型列表会显示默认路由、单独连接及 max 档位。
 func TestCodexModelList(t *testing.T) {
 	bin := codexBinary(t)
 	r := testRelay(t, "compatible", "http://127.0.0.1:9", true)
@@ -169,7 +169,7 @@ func TestCodexModelList(t *testing.T) {
 			for _, raw := range shared.Arr(model["supportedReasoningEfforts"]) {
 				efforts[shared.Str(shared.Obj(raw)["reasoningEffort"])] = true
 			}
-			for _, effort := range []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"} {
+			for _, effort := range []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"} {
 				if !efforts[effort] {
 					t.Fatal("reasoning picker option missing", effort, model)
 				}

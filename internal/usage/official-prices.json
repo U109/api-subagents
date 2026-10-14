@@ -1,0 +1,877 @@
+{
+  "claude-fable-5-1": {
+    "input": 10,
+    "write": 12.5,
+    "read": 0.25,
+    "output": 50,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-mythos-5-1": {
+    "input": 10,
+    "write": 12.5,
+    "read": 0.25,
+    "output": 50,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-fable-5": {
+    "input": 10,
+    "write": 12.5,
+    "read": 1,
+    "output": 50,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-mythos-5": {
+    "input": 10,
+    "write": 12.5,
+    "read": 1,
+    "output": 50,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-opus-5-5": {
+    "input": 4,
+    "write": 5,
+    "read": 0.2,
+    "output": 20,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 8,
+      "output": 40,
+      "read": 0.4,
+      "write": 10
+    }
+  },
+  "claude-opus-5": {
+    "input": 5,
+    "write": 6.25,
+    "read": 0.5,
+    "output": 25,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 10,
+      "output": 50,
+      "read": 1,
+      "write": 12.5
+    }
+  },
+  "claude-opus-4-8": {
+    "input": 5,
+    "write": 6.25,
+    "read": 0.5,
+    "output": 25,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 10,
+      "output": 50,
+      "read": 1,
+      "write": 12.5
+    }
+  },
+  "claude-opus-4-7": {
+    "input": 5,
+    "write": 6.25,
+    "read": 0.5,
+    "output": 25,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-opus-4-6": {
+    "input": 5,
+    "write": 6.25,
+    "read": 0.5,
+    "output": 25,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-opus-4-5": {
+    "input": 5,
+    "write": 6.25,
+    "read": 0.5,
+    "output": 25,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-sonnet-5-5": {
+    "input": 2,
+    "write": 2.5,
+    "read": 0.1,
+    "output": 10,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-sonnet-5": {
+    "input": 2,
+    "write": 2.5,
+    "read": 0.2,
+    "output": 10,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-sonnet-4-6": {
+    "input": 3,
+    "write": 3.75,
+    "read": 0.3,
+    "output": 15,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-sonnet-4-5": {
+    "input": 3,
+    "write": 3.75,
+    "read": 0.3,
+    "output": 15,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-haiku-5-5": {
+    "input": 0.1,
+    "write": 0.125,
+    "read": 0.01,
+    "output": 0.5,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 100000,
+      "rate": {
+        "input": 0.5,
+        "output": 2.5,
+        "read": 0.05,
+        "write": 0.625
+      }
+    }
+  },
+  "claude-haiku-4-5": {
+    "input": 1,
+    "write": 1.25,
+    "read": 0.1,
+    "output": 5,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "claude-haiku-4-5-20251001": {
+    "input": 1,
+    "write": 1.25,
+    "read": 0.1,
+    "output": 5,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gemini-4-argon": {
+    "input": 2,
+    "output": 10,
+    "read": 0.1,
+    "write": 2,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-3.8-flash": {
+    "input": 0.75,
+    "output": 3.75,
+    "read": 0.075,
+    "write": 0.75,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-3.1-pro-preview": {
+    "input": 2,
+    "output": 12,
+    "read": 0.2,
+    "write": 2,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 200000,
+      "rate": {
+        "input": 4,
+        "output": 18,
+        "read": 0.4,
+        "write": 4
+      }
+    },
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-3.1-pro-preview-customtools": {
+    "input": 2,
+    "output": 12,
+    "read": 0.2,
+    "write": 2,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 200000,
+      "rate": {
+        "input": 4,
+        "output": 18,
+        "read": 0.4,
+        "write": 4
+      }
+    },
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-3.1-flash-lite": {
+    "input": 0.25,
+    "output": 1.5,
+    "read": 0.025,
+    "write": 0.25,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-2.5-pro": {
+    "input": 1.25,
+    "output": 10,
+    "read": 0.125,
+    "write": 1.25,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 200000,
+      "rate": {
+        "input": 2.5,
+        "output": 15,
+        "read": 0.25,
+        "write": 2.5
+      }
+    },
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-2.5-flash": {
+    "input": 0.3,
+    "output": 2.5,
+    "read": 0.03,
+    "write": 0.3,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gemini-2.5-flash-lite": {
+    "input": 0.1,
+    "output": 0.4,
+    "read": 0.01,
+    "write": 0.1,
+    "source": "https://ai.google.dev/gemini-api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "付费标准文本费率；不含音频差价、缓存存储和搜索等额外费用。"
+  },
+  "gpt-6-astra": {
+    "input": 10,
+    "read": 1,
+    "write": 12.5,
+    "output": 50,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 20,
+      "read": 2,
+      "write": 25,
+      "output": 100
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 20,
+        "read": 2,
+        "write": 25,
+        "output": 75
+      },
+      "fast": {
+        "input": 40,
+        "read": 4,
+        "write": 50,
+        "output": 150
+      }
+    }
+  },
+  "gpt-6.1-sol": {
+    "input": 2,
+    "read": 0.1,
+    "write": 2.5,
+    "output": 10,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 4,
+      "read": 0.2,
+      "write": 5,
+      "output": 20
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 4,
+        "read": 0.2,
+        "write": 5,
+        "output": 15
+      },
+      "fast": {
+        "input": 8,
+        "read": 0.4,
+        "write": 10,
+        "output": 30
+      }
+    }
+  },
+  "gpt-6-luna": {
+    "input": 0.1,
+    "read": 0.01,
+    "write": 0.125,
+    "output": 0.5,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.2,
+      "read": 0.02,
+      "write": 0.25,
+      "output": 1
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 0.2,
+        "read": 0.02,
+        "write": 0.25,
+        "output": 0.75
+      },
+      "fast": {
+        "input": 0.4,
+        "read": 0.04,
+        "write": 0.5,
+        "output": 1.5
+      }
+    }
+  },
+  "gpt-6-sol": {
+    "input": 2,
+    "read": 0.2,
+    "write": 2.5,
+    "output": 10,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 4,
+      "read": 0.4,
+      "write": 5,
+      "output": 20
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 4,
+        "read": 0.4,
+        "write": 5,
+        "output": 15
+      },
+      "fast": {
+        "input": 8,
+        "read": 0.8,
+        "write": 10,
+        "output": 30
+      }
+    }
+  },
+  "gpt-5.6-sol": {
+    "input": 4,
+    "read": 0.4,
+    "write": 5,
+    "output": 20,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 8,
+      "read": 0.8,
+      "write": 10,
+      "output": 40
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 8,
+        "read": 0.8,
+        "write": 10,
+        "output": 30
+      },
+      "fast": {
+        "input": 16,
+        "read": 1.6,
+        "write": 20,
+        "output": 60
+      }
+    }
+  },
+  "gpt-5.6-terra": {
+    "input": 2,
+    "read": 0.2,
+    "write": 2.5,
+    "output": 12,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 4,
+      "read": 0.4,
+      "write": 5,
+      "output": 24
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 4,
+        "read": 0.4,
+        "write": 5,
+        "output": 18
+      },
+      "fast": {
+        "input": 8,
+        "read": 0.8,
+        "write": 10,
+        "output": 36
+      }
+    }
+  },
+  "gpt-5.6-luna": {
+    "input": 0.2,
+    "read": 0.02,
+    "write": 0.25,
+    "output": 1.2,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.4,
+      "read": 0.04,
+      "write": 0.5,
+      "output": 2.4
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 0.4,
+        "read": 0.04,
+        "write": 0.5,
+        "output": 1.8
+      },
+      "fast": {
+        "input": 0.8,
+        "read": 0.08,
+        "write": 1,
+        "output": 3.6
+      }
+    }
+  },
+  "gpt-5.5": {
+    "input": 5,
+    "read": 0.5,
+    "write": 5,
+    "output": 30,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 12.5,
+      "read": 1.25,
+      "write": 12.5,
+      "output": 75
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 10,
+        "read": 1,
+        "write": 10,
+        "output": 45
+      }
+    }
+  },
+  "gpt-5.5-pro": {
+    "input": 30,
+    "read": 30,
+    "write": 30,
+    "output": 180,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 60,
+        "read": 60,
+        "write": 60,
+        "output": 270
+      }
+    }
+  },
+  "gpt-5.4": {
+    "input": 2.5,
+    "read": 0.25,
+    "write": 2.5,
+    "output": 15,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 5,
+      "read": 0.5,
+      "write": 5,
+      "output": 30
+    },
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 5,
+        "read": 0.5,
+        "write": 5,
+        "output": 22.5
+      }
+    }
+  },
+  "gpt-5.4-mini": {
+    "input": 0.75,
+    "read": 0.075,
+    "write": 0.75,
+    "output": 4.5,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 1.5,
+      "read": 0.15,
+      "write": 1.5,
+      "output": 9
+    }
+  },
+  "gpt-5.4-nano": {
+    "input": 0.2,
+    "read": 0.02,
+    "write": 0.2,
+    "output": 1.25,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-5.4-pro": {
+    "input": 30,
+    "read": 30,
+    "write": 30,
+    "output": 180,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "longContext": {
+      "above": 272000,
+      "rate": {
+        "input": 60,
+        "read": 60,
+        "write": 60,
+        "output": 270
+      }
+    }
+  },
+  "gpt-5.2": {
+    "input": 1.75,
+    "read": 0.175,
+    "write": 1.75,
+    "output": 14,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 3.5,
+      "read": 0.35,
+      "write": 3.5,
+      "output": 28
+    }
+  },
+  "gpt-5.2-pro": {
+    "input": 21,
+    "read": 21,
+    "write": 21,
+    "output": 168,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-5.1": {
+    "input": 1.25,
+    "read": 0.125,
+    "write": 1.25,
+    "output": 10,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 2.5,
+      "read": 0.25,
+      "write": 2.5,
+      "output": 20
+    }
+  },
+  "gpt-5": {
+    "input": 1.25,
+    "read": 0.125,
+    "write": 1.25,
+    "output": 10,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 2.5,
+      "read": 0.25,
+      "write": 2.5,
+      "output": 20
+    }
+  },
+  "gpt-5-mini": {
+    "input": 0.25,
+    "read": 0.025,
+    "write": 0.25,
+    "output": 2,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.45,
+      "read": 0.045,
+      "write": 0.45,
+      "output": 3.6
+    }
+  },
+  "gpt-5-nano": {
+    "input": 0.05,
+    "read": 0.005,
+    "write": 0.05,
+    "output": 0.4,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-5-pro": {
+    "input": 15,
+    "read": 15,
+    "write": 15,
+    "output": 120,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-4.1": {
+    "input": 2,
+    "read": 0.5,
+    "write": 2,
+    "output": 8,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 3.5,
+      "read": 0.875,
+      "write": 3.5,
+      "output": 14
+    }
+  },
+  "gpt-4.1-mini": {
+    "input": 0.4,
+    "read": 0.1,
+    "write": 0.4,
+    "output": 1.6,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.7,
+      "read": 0.175,
+      "write": 0.7,
+      "output": 2.8
+    }
+  },
+  "gpt-4.1-nano": {
+    "input": 0.1,
+    "read": 0.025,
+    "write": 0.1,
+    "output": 0.4,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.2,
+      "read": 0.05,
+      "write": 0.2,
+      "output": 0.8
+    }
+  },
+  "gpt-4o": {
+    "input": 2.5,
+    "read": 1.25,
+    "write": 2.5,
+    "output": 10,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 4.25,
+      "read": 2.125,
+      "write": 4.25,
+      "output": 17
+    }
+  },
+  "gpt-4o-2024-05-13": {
+    "input": 5,
+    "read": 5,
+    "write": 5,
+    "output": 15,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 8.75,
+      "read": 8.75,
+      "write": 8.75,
+      "output": 26.25
+    }
+  },
+  "gpt-4o-mini": {
+    "input": 0.15,
+    "read": 0.075,
+    "write": 0.15,
+    "output": 0.6,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 0.25,
+      "read": 0.125,
+      "write": 0.25,
+      "output": 1
+    }
+  },
+  "o1": {
+    "input": 15,
+    "read": 7.5,
+    "write": 15,
+    "output": 60,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "o1-pro": {
+    "input": 150,
+    "read": 150,
+    "write": 150,
+    "output": 600,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "o3-pro": {
+    "input": 20,
+    "read": 20,
+    "write": 20,
+    "output": 80,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "o3": {
+    "input": 2,
+    "read": 0.5,
+    "write": 2,
+    "output": 8,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 3.5,
+      "read": 0.875,
+      "write": 3.5,
+      "output": 14
+    }
+  },
+  "o4-mini": {
+    "input": 1.1,
+    "read": 0.275,
+    "write": 1.1,
+    "output": 4.4,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14",
+    "fast": {
+      "input": 2,
+      "read": 0.5,
+      "write": 2,
+      "output": 8
+    }
+  },
+  "o3-mini": {
+    "input": 1.1,
+    "read": 0.55,
+    "write": 1.1,
+    "output": 4.4,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-4-turbo-2024-04-09": {
+    "input": 10,
+    "read": 10,
+    "write": 10,
+    "output": 30,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-4-0613": {
+    "input": 30,
+    "read": 30,
+    "write": 30,
+    "output": 60,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-3.5-turbo": {
+    "input": 0.5,
+    "read": 0.5,
+    "write": 0.5,
+    "output": 1.5,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-3.5-turbo-0125": {
+    "input": 0.5,
+    "read": 0.5,
+    "write": 0.5,
+    "output": 1.5,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-3.5-turbo-1106": {
+    "input": 1,
+    "read": 1,
+    "write": 1,
+    "output": 2,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "gpt-3.5-turbo-instruct": {
+    "input": 1.5,
+    "read": 1.5,
+    "write": 1.5,
+    "output": 2,
+    "source": "https://developers.openai.com/api/docs/pricing",
+    "checkedAt": "2026-10-14"
+  },
+  "deepseek-flash": {
+    "input": 0.3,
+    "output": 1.2,
+    "read": 0.006,
+    "write": 0.3,
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "官网高峰参考价；低峰与中国法定节假日减半，可按实际计费覆盖。"
+  },
+  "deepseek-v4-flash": {
+    "input": 0.3,
+    "output": 1.2,
+    "read": 0.006,
+    "write": 0.3,
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "官网高峰参考价；低峰与中国法定节假日减半，可按实际计费覆盖。"
+  },
+  "deepseek-v4-flash-vision-exp": {
+    "input": 0.3,
+    "output": 1.2,
+    "read": 0.006,
+    "write": 0.3,
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "官网高峰参考价；低峰与中国法定节假日减半，可按实际计费覆盖。"
+  },
+  "deepseek-v4-pro": {
+    "input": 1.32,
+    "output": 3.96,
+    "read": 0.044,
+    "write": 1.32,
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "checkedAt": "2026-10-14",
+    "note": "官网高峰参考价；低峰与中国法定节假日减半，可按实际计费覆盖。"
+  }
+}

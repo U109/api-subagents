@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createUsageView, normalizeUsage, usageSummary, usageBreakdown, usageCost, usageModels, selectUsageRows, usageKey} from './usage-domain.mjs';
+import {createUsageView, normalizeUsage, usageSummary, usageBreakdown, usageVisibleBreakdown, usageCost, usageModels, usageSeriesModels, selectUsageRows, usageKey} from './usage-domain.mjs';
 
 const now = Date.now();
 const base = {id: 'attempt-a', logicalId: 'request-a', attempt: 1, startedAt: now-1000, connectionId: 'conn-a', connection: '连接 A', model: 'model-a', source: 'main', outcome: 'success', quality: 'complete', durationMS: 1000, input: 100, output: 20, total: 120, read: 10, write: 5, reasoning: 4, costMicroUSD: 300};
@@ -32,6 +32,29 @@ test('模型来自保存连接与历史，而不是模拟目录', () => {
   const rows=normalizeUsage([base]), models=usageModels(rows,{});
   assert.equal(models.length,1); assert.equal(models[0].id,usageKey('conn-a','model-a'));
   assert.equal(usageModels([],{}).length,0);
+});
+
+test('零值与未上报拆分只隐藏展示，不改变已知合计或缓存与推理扣减', () => {
+  const rows = normalizeUsage([{...base, read: 0, write: 0, reasoning: 0}]);
+  const visible = usageVisibleBreakdown(rows), full = usageBreakdown(rows);
+  assert.deepEqual(visible.items.map(item => item.id), ['input', 'output']);
+  assert.equal(visible.total, full.total);
+  assert.equal(visible.known, full.known);
+  assert.equal(visible.items.reduce((sum, item) => sum + item.value, 0), 120);
+  assert.equal(visible.items.reduce((sum, item) => sum + item.percent, 0), 1);
+  assert.deepEqual(usageVisibleBreakdown([]).items, []);
+  assert.deepEqual(usageVisibleBreakdown(normalizeUsage([{...base, read: null}])).items, []);
+  assert.equal(usageVisibleBreakdown(normalizeUsage([{...base, read: null}])).total, null);
+});
+
+test('图例仅保留当前筛选有记录的模型，未知用量仍保留，目录顺序与配色不变', () => {
+  const rows = normalizeUsage([base, {...base, id: 'unknown', logicalId: 'unknown', model: 'unknown-model', input: null, output: null, total: null}]);
+  const models = usageModels(rows, {'conn-a': {id: 'conn-a', name: '连接 A', models: [{id: 'unused'}]}});
+  const original = structuredClone(models);
+  assert.deepEqual(usageSeriesModels([], models), []);
+  assert.deepEqual(usageSeriesModels(rows.filter(row => row.model === 'unknown-model'), models), models.filter(model => model.id === usageKey('conn-a', 'unknown-model')));
+  assert.equal(usageSeriesModels(rows, models).length, 2);
+  assert.deepEqual(models, original);
 });
 
 test('有用量的趋势系列优先使用蓝绿黄，未使用模型与连接测试不抢占配色', () => {

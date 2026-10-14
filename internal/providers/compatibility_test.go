@@ -39,10 +39,10 @@ func TestProviderCompatibilityMappings(t *testing.T) {
 		{"gemini", "gemini-3.8-flash", "none", `{"reasoning_effort":"minimal"}`, false},
 		{"gemini", "gemini-3-pro", "medium", `{"reasoning_effort":"high"}`, false},
 		{"generic", "any-upstream-alias", "high", `{"reasoning_effort":"high"}`, false},
-		{"deepseek", "deepseek-v4-pro", "ultra", `{"reasoning_effort":"high","thinking":{"type":"enabled"}}`, false},
+		{"deepseek", "deepseek-v4-pro", "ultra", ``, true},
 		{"kimi", "kimi-k3", "max", `{"reasoning_effort":"max"}`, false},
-		{"kimi-coding", "k3", "ultra", `{"thinking":{"effort":"max","type":"enabled"}}`, false},
-		{"glm", "glm-5.3", "ultra", `{"reasoning_effort":"max","thinking":{"type":"enabled"}}`, false},
+		{"kimi-coding", "k3", "ultra", ``, true},
+		{"glm", "glm-5.3", "ultra", ``, true},
 		{"gemini", "gemini-3-pro", "max", `{"reasoning_effort":"high"}`, false},
 	}
 	for _, tc := range cases {

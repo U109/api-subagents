@@ -46,7 +46,11 @@ func NewConfigService(store *configstore.ConfigStore) *ConfigService {
 // Handle 处理固定路由，网络测试不占写锁；定点保存、复制和删除只修改目标连接，其他草稿不会写入。
 func (s *ConfigService) Handle(ctx context.Context, route string, body []byte) (shared.Object, error) {
 	if route == "/api/usage" || route == "/api/usage/prices" {
-		return s.Usage.Handle(route, body)
+		c, err := s.Store.Read()
+		if err != nil {
+			return nil, err
+		}
+		return s.Usage.HandleConfig(route, body, c)
 	}
 	if len(body) > 300000 {
 		return nil, errors.New("配置过大。")

@@ -14,7 +14,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import {clsx} from 'clsx';
 import {twMerge} from 'tailwind-merge';
 import {Layers as LayersIcon, Plug as PlugIcon, Link as LinkIcon, SlidersHorizontal as SlidersHorizontalIcon, GitBranch as GitBranchIcon, Brain as BrainIcon, Plus as PlusIcon, Search as SearchIcon, Check as CheckIcon, X as XIcon, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, MoreHorizontal as MoreHorizontalIcon, Copy as CopyIcon, Trash2 as Trash2Icon, Star as StarIcon, RefreshCw as RefreshCwIcon, ArrowUp as ArrowUpIcon, ArrowDown as ArrowDownIcon, ArrowRight as ArrowRightIcon, Menu as MenuIcon, Power as PowerIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, Download as DownloadIcon, HelpCircle as HelpCircleIcon, ShieldCheck as ShieldCheckIcon, Settings2 as Settings2Icon, CircleAlert as CircleAlertIcon} from 'lucide-react';
-import {PanelsTopLeft as WorkspaceIcon, Puzzle as PuzzleIcon, Cable as CableIcon, Server as ServerIcon, CircleCheck as CircleCheckIcon, PencilLine as PencilLineIcon} from 'lucide-react';
+import {PanelsTopLeft as WorkspaceIcon, Puzzle as PuzzleIcon, Cable as CableIcon, Server as ServerIcon, CircleCheck as CircleCheckIcon, PencilLine as PencilLineIcon, Zap as ZapIcon} from 'lucide-react';
 import {useWorkbench, updateJob as toUpdateJob} from './controller.jsx';
 import {RequestDiagnostics} from './diagnostics.jsx';
 import {UsagePage} from './usage-page.jsx';
@@ -29,9 +29,19 @@ function decorativeIcon(Icon) {
   return function DecorativeIcon(props) {return <Icon strokeWidth={1.75} {...props} aria-hidden="true" focusable="false" />;};
 }
 const [Layers, Plug, Link, SlidersHorizontal, GitBranch, Brain, Plus, Search, Check, X, ChevronLeft, ChevronRight, MoreHorizontal, Copy, Trash2, Star, RefreshCw, ArrowUp, ArrowDown, ArrowRight, Menu, Power, Eye, EyeOff, Download, HelpCircle, ShieldCheck, Settings2, CircleAlert] = [LayersIcon, PlugIcon, LinkIcon, SlidersHorizontalIcon, GitBranchIcon, BrainIcon, PlusIcon, SearchIcon, CheckIcon, XIcon, ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon, CopyIcon, Trash2Icon, StarIcon, RefreshCwIcon, ArrowUpIcon, ArrowDownIcon, ArrowRightIcon, MenuIcon, PowerIcon, EyeIcon, EyeOffIcon, DownloadIcon, HelpCircleIcon, ShieldCheckIcon, Settings2Icon, CircleAlertIcon].map(decorativeIcon);
-const [Workspace, Puzzle, Cable, Server, CircleCheck, PencilLine] = [WorkspaceIcon, PuzzleIcon, CableIcon, ServerIcon, CircleCheckIcon, PencilLineIcon].map(decorativeIcon);
+const [Workspace, Puzzle, Cable, Server, CircleCheck, PencilLine, Zap] = [WorkspaceIcon, PuzzleIcon, CableIcon, ServerIcon, CircleCheckIcon, PencilLineIcon, ZapIcon].map(decorativeIcon);
 
 const UsageIcon = decorativeIcon(UsageRaw);
+
+/** 仅给显式开启 Fast 的模型显示雷电；独立标识提供读屏名称，不根据模型 ID 猜测状态。 */
+function ModelFastMark({enabled}) {
+  return enabled ? <span className="model-fast-mark" role="img" aria-label="Fast 已开启" title="Fast 已开启"><Zap size={14} fill="currentColor" /></span> : null;
+}
+
+/** 不可用模型用红色状态图标代替长错误文字；鼠标悬浮和键盘聚焦都能读取原因，不切换模型勾选。 */
+function MissingModelMark() {
+  return <Tooltip.Root><Tooltip.Trigger asChild><span className="model-unavailable-mark" role="img" aria-label="连接中已不可用" tabIndex={0} onClick={event => event.preventDefault()}><CircleAlert size={15} /></span></Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="tooltip" side="top" sideOffset={7}>连接中已不可用，请更新连接的模型选择。<Tooltip.Arrow className="tooltip-arrow" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root>;
+}
 
 /** 合并组件变体与 Tailwind 类，避免布局覆盖互相冲突。 */
 function cn(...values) { return twMerge(clsx(...values)); }
@@ -165,11 +175,11 @@ function PlanList({store, select, create}) {
     <ul className="plan-list-items">{store.plans.map(p => <li key={p.id}>
       <button data-plan-id={p.id} className={cn('plan-list-item', store.selected === p.id && 'selected')} onClick={() => select(p.id)} aria-pressed={store.selected === p.id}>
         <div className="plan-list-title"><strong title={p.name}>{p.name}</strong>{store.enabled && store.active?.id === p.id && <Badge tone="active" icon={CircleCheck}>使用中</Badge>}{isDirty(p, store.savedPlans[p.id]) && <span className="draft-dot" title="未保存" aria-label="未保存" />}</div>
-        <span className="plan-list-connections">{p.connectionIDs.map(cid => store.savedConnections[cid]?.name || cid).join(' + ') || '未添加连接'}</span>
+        <span className="plan-list-connections" title={p.connectionIDs.map(cid => store.savedConnections[cid]?.name || cid).join(' + ') || '未添加连接'}>{p.connectionIDs.map(cid => store.savedConnections[cid]?.name || cid).join(' + ') || '未添加连接'}</span>
         <span className="plan-list-meta">{planModels(p, store.savedConnections).length} 个模型</span>
       </button>
     </li>)}</ul>
-    {!store.plans.length ? <Empty title="还没有接入配置" action={<Button onClick={create}>新建配置</Button>} /> : <p className="plan-list-note">选择配置仅查看和编辑，<br />不会切换当前接入。</p>}
+    {!store.plans.length && <Empty title="还没有接入配置" action={<Button onClick={create}>新建配置</Button>} />}
   </aside>;
 }
 
@@ -224,8 +234,8 @@ function ScopeModelRow({plan, cid, name, model, edit}) {
   return <div ref={setNodeRef} role="listitem" data-scoped-model={key} style={{transform: CSS.Transform.toString(transform)}} className={cn('scope-model-row', 'scope-sort-row', isDefault && 'is-default', model.missing && 'missing-model', isDragging && 'is-dragging', isOver && !isDragging && 'is-drop-target')}>
     <Button ref={setActivatorNodeRef} variant="ghost" className="icon-button scope-drag-handle" {...attributes} {...listeners} disabled={!checked || model.missing} aria-label={`拖动排序 ${name} / ${model.id}`} aria-description="仅调整此配置的已选模型顺序。空格抓取，方向键移动，空格放下，Escape 取消。"><Menu size={13} /></Button>
     <Tick id={checkboxID} checked={checked} label={`配置中选择 ${name} / ${model.id}`} onChange={value => edit(next => choosePlanModel(next, cid, model.id, value))} disabled={Boolean(model.missing && !checked)} />
-    <label htmlFor={checkboxID} className="scope-model-name"><span className="model-id" title={model.id}>{model.name || model.id}</span>{model.missing ? <small className="field-error">连接中已不可用</small> : isDefault && <small className="default-caption">配置默认</small>}</label>
-    <span className="capacity">{capacity(effectiveContext(model))}</span>
+    <label htmlFor={checkboxID} className="scope-model-name"><span className="model-id" title={model.id}>{model.name || model.id}</span>{model.missing ? <MissingModelMark /> : isDefault && <small className="default-caption">配置默认</small>}<ModelFastMark enabled={!model.missing && model.fast} /></label>
+    <span className={cn('capacity', !effectiveContext(model) && 'is-unconfirmed')}>{capacity(effectiveContext(model))}</span>
     <IconButton className={cn('star-button', isDefault && 'is-starred')} label={`${isDefault ? '此配置默认模型' : '设为此配置默认'} ${name} / ${model.id}`} aria-pressed={isDefault} disabled={!checked || model.missing} onClick={() => edit(next => ({...next, defaultKey: key}))}><Star size={17} fill={isDefault ? 'currentColor' : 'none'} /></IconButton>
   </div>;
 }
@@ -266,15 +276,15 @@ function ScopedModels({plan, store, edit}) {
   return <section className="scoped-models" aria-label="Codex 模型预览"><div className="section-line"><h2>Codex 模型预览</h2><span className="model-count" aria-live="polite">已选 {selected.length} / {total}</span></div><div className="scoped-toolbar"><SearchField value={query} onChange={setQuery} placeholder="搜索模型名称或 ID" /><div className="segmented" role="group" aria-label="配置模型筛选"><button className={!selectedOnly ? 'selected' : ''} aria-pressed={!selectedOnly} onClick={() => setSelectedOnly(false)}>全部</button><button className={selectedOnly ? 'selected' : ''} aria-pressed={selectedOnly} onClick={() => setSelectedOnly(true)}>已选</button></div></div>{!plan.connectionIDs.length ? <Empty title="先添加一个连接" /> : plan.connectionIDs.map(cid => <ScopeModelGroup key={cid} plan={plan} cid={cid} store={store} edit={edit} query={query} selectedOnly={selectedOnly} />)}</section>;
 }
 
-/** 配置保留独立草稿与校验；底栏明确保存／启用进度，等待期间继续编辑，冲突操作锁定且启用须明确触发。 */
+/** 配置底栏只展示保存状态；校验失败在用户尝试保存或启用时弹窗说明，不在编辑过程中反复打断。 */
 function PlanEditor({store, edit, save, apply, restore, copy, remove, back, openConnection, create, busy = false, pending}) {
   const p = store.plans.find(p => p.id === store.selected);
   if (!p) return <section className="plan-editor panel"><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><Empty title="还没有接入配置" action={<Button onClick={create}><Plus size={16} />新建配置</Button>}>{store.actionError && <span className="field-error" role="status">{store.actionError.message}</span>}</Empty></section>;
-  const dirty = isDirty(p, store.savedPlans[p.id]), applied = store.enabled && isApplied(store, p), validation = validatePlan(p, store.savedConnections, store.connections), error = store.actionError?.target === p.id ? store.actionError.message : validation;
+  const dirty = isDirty(p, store.savedPlans[p.id]), applied = store.enabled && isApplied(store, p), validation = validatePlan(p, store.savedConnections, store.connections), error = store.actionError?.target === p.id ? store.actionError.message : '';
   const feedback = error === '请星标一个已选模型作为此配置的默认模型。' ? '' : error;
   const saving = pending?.target === p.id && pending.kind === 'plan-save', enabling = pending?.target === p.id && pending.kind === 'plan-enable';
   const saveStatus = dirty ? '有未保存的修改' : applied ? '已与当前接入同步' : store.enabled && store.active?.id === p.id ? '已保存 · 等待更新接入' : '配置已保存';
-  return <section className="plan-editor panel" aria-label="配置编辑器"><div className="editor-title-line"><div><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><h2 className="sr-only">编辑接入配置</h2><Field className="editor-name-field" label="配置名称" title="点击编辑配置名称" size={nameInputSize(p.name)} maxLength={60} value={p.name} onChange={e => edit(next => ({...next, name: e.target.value}))} error={!p.name.trim() ? '请填写配置名称。' : ''} suffix={applied ? <Badge tone="active" icon={CircleCheck}>当前使用</Badge> : dirty ? <Badge tone="warning" icon={PencilLine}>未保存</Badge> : <Badge>未启用</Badge>} /></div><div className="editor-item-actions"><IconButton label={`复制配置 ${p.name}`} onClick={copy}><Copy size={17} /></IconButton><IconButton label={`删除配置 ${p.name}`} className="icon-delete" disabled={busy} onClick={remove}><Trash2 size={17} /></IconButton></div></div><div className="editor-content"><PlanConnections plan={p} store={store} edit={edit} openConnection={openConnection} /><ScopedModels key={p.id} plan={p} store={store} edit={edit} /></div><footer className="editor-footer">{feedback ? <div className="save-message field-error" role="alert">{feedback}</div> : <div className={cn('editor-save-status', dirty && 'is-dirty')} role="status">{dirty ? <PencilLine size={14} /> : <CircleCheck size={14} />}<span>{saveStatus}</span></div>}<div className="save-actions"><Button variant="ghost" disabled={busy || !dirty} onClick={restore}>还原</Button><Button disabled={busy || !dirty || Boolean(validation)} aria-busy={saving} aria-description={validation || undefined} onClick={save}>{saving && <Spinner />}{saving ? '正在保存' : '仅保存'}</Button><Button variant="primary" className={cn(applied && 'button-applied')} disabled={busy || applied || Boolean(validation)} aria-busy={enabling} aria-description={validation || undefined} onClick={apply}>{enabling ? <Spinner /> : applied ? <Check size={16} /> : <Power size={16} />}{enabling ? '正在启用' : applied ? '正在使用' : dirty ? store.enabled && store.active?.id === p.id ? '保存并更新接入' : '保存并启用' : '启用此配置'}</Button></div></footer></section>;
+  return <section className="plan-editor panel" aria-label="配置编辑器"><div className="editor-title-line"><div><Button variant="ghost" className="back-to-plans" onClick={back}><ChevronLeft size={17} />全部配置</Button><h2 className="sr-only">编辑接入配置</h2><Field className="editor-name-field" label="配置名称" title="点击编辑配置名称" size={nameInputSize(p.name)} maxLength={60} value={p.name} onChange={e => edit(next => ({...next, name: e.target.value}))} error={!p.name.trim() ? '请填写配置名称。' : ''} suffix={applied ? <Badge tone="active" icon={CircleCheck}>当前使用</Badge> : dirty ? <Badge tone="warning" icon={PencilLine}>未保存</Badge> : <Badge>未启用</Badge>} /></div><div className="editor-item-actions"><IconButton label={`复制配置 ${p.name}`} onClick={copy}><Copy size={17} /></IconButton><IconButton label={`删除配置 ${p.name}`} className="icon-delete" disabled={busy} onClick={remove}><Trash2 size={17} /></IconButton></div></div><div className="editor-content"><PlanConnections plan={p} store={store} edit={edit} openConnection={openConnection} /><ScopedModels key={p.id} plan={p} store={store} edit={edit} /></div><footer className="editor-footer">{feedback ? <div className="save-message field-error" role="alert">{feedback}</div> : <div className={cn('editor-save-status', dirty && 'is-dirty')} role="status">{dirty ? <PencilLine size={14} /> : <CircleCheck size={14} />}<span>{saveStatus}</span></div>}<div className="save-actions"><Button variant="ghost" disabled={busy || !dirty} onClick={restore}>还原</Button><Button disabled={busy || !dirty} aria-busy={saving} aria-description={validation || undefined} onClick={save}>{saving && <Spinner />}{saving ? '正在保存' : '仅保存'}</Button><Button variant="primary" className={cn(applied && 'button-applied')} disabled={busy || applied} aria-busy={enabling} aria-description={validation || undefined} onClick={apply}>{enabling ? <Spinner /> : applied ? <Check size={16} /> : <Power size={16} />}{enabling ? '正在启用' : applied ? '正在使用' : dirty ? store.enabled && store.active?.id === p.id ? '保存并更新接入' : '保存并启用' : '启用此配置'}</Button></div></footer></section>;
 }
 
 /** 配置页采用连贯的主从工作区；头部只新建配置，窄屏让目录与详情纵向排布，业务操作沿用原控制器。 */
@@ -296,7 +306,7 @@ function ConnectionModelRow({c, model: m, change, editModel}) {
   return <div ref={setNodeRef} role="listitem" style={{transform: CSS.Transform.toString(transform)}} className={cn('connection-model-row', isDefault && 'is-default', isDragging && 'is-dragging', isOver && !isDragging && 'is-drop-target')} data-connection-model={m.id}>
     <Button variant="ghost" ref={setActivatorNodeRef} className="icon-button drag-handle" {...attributes} {...listeners} aria-label={`拖动排序 ${m.id}`}><Menu size={13} /></Button>
     <Tick checked={m.selected} label={`连接中选择模型 ${m.id}`} onChange={selected => change(next => {const model = next.models.find(item => item.id === m.id); model.selected = selected; if (!selected && next.defaultID === m.id) next.defaultID = next.models.find(item => item.selected)?.id || ''; return next;})} />
-    <div className="connection-model-name"><span className="model-id">{m.name || m.id}</span>{m.name && <small>{m.id}</small>}{isDefault && <small className="default-caption">默认</small>}</div>
+    <div className="connection-model-name"><span className="model-id">{m.name || m.id}</span>{m.name && <small>{m.id}</small>}{isDefault && <small className="default-caption">默认</small>}<ModelFastMark enabled={m.fast} /></div>
     <div className="model-row-actions">
       <IconButton label={`模型设置 ${m.id}`} onClick={() => editModel(m.id)}><SlidersHorizontal size={16} /></IconButton>
       <IconButton label={`设为连接默认 ${m.id}`} disabled={!m.selected} aria-pressed={isDefault} className={cn('star-button', isDefault && 'is-starred')} onClick={() => change(next => ({...next, defaultID: m.id}))}><Star size={17} fill={isDefault ? 'currentColor' : 'none'} /></IconButton>
@@ -336,7 +346,7 @@ function ConnectionModels({c, change, openModel, move, refresh, job}) {
       <div className="connection-model-table"><div className="model-table-head" aria-hidden="true"><span>模型名称</span><span>操作</span></div><SortableContext items={visibleIDs} strategy={verticalListSortingStrategy}><div role="list" aria-label="连接模型目录">{visible.map(m => <ConnectionModelRow key={m.id} c={c} model={m} change={change} editModel={openModel} />)}</div></SortableContext>{!visible.length && <Empty title="没有匹配的模型" action={<Button onClick={() => {setQuery(''); setOnlySelected(false);}}>显示全部模型</Button>} />}</div>
       {createPortal(<DragOverlay transition="none" dropAnimation={null} zIndex={20}>{draggedModel && <div className="model-drag-preview" style={{width: dragging.width}} aria-hidden="true"><Menu size={13} /><span className="model-id">{draggedModel.name || draggedModel.id}</span>{draggedModel.id === c.defaultID && <small className="default-caption">默认</small>}</div>}</DragOverlay>, document.body)}
     </DndContext>
-    <div className="reasoning-section"><div className="section-line"><h2>思考强度</h2><span className="muted">{c.effort === 'default' ? '服务默认' : c.effort}</span></div><div className="effort-options" role="group" aria-label="思考强度">{[['default', '默认'], ['none', '无'], ['minimal', '极低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '很高'], ['max', '最大'], ['ultra', '极致']].map(([value, label]) => <button key={value} className={cn(c.effort === value && 'selected')} aria-pressed={c.effort === value} onClick={() => change(next => ({...next, effort: value}))}>{label}</button>)}</div></div>
+    <div className="reasoning-section"><div className="section-line"><h2>思考强度</h2><span className="muted">{c.effort === 'default' ? '服务默认' : c.effort}</span></div><div className="effort-options" role="group" aria-label="思考强度">{[['default', '默认'], ['none', '无'], ['minimal', '极低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '很高'], ['max', '最大']].map(([value, label]) => <button key={value} className={cn(c.effort === value && 'selected')} aria-pressed={c.effort === value} onClick={() => change(next => ({...next, effort: value}))}>{label}</button>)}</div></div>
   </Panel>;
 }
 
@@ -367,7 +377,7 @@ function connectionErrors(c) {
   return errors;
 }
 
-/** 连接四页签保留草稿；保存提供等待反馈而不锁输入，删除和还原等冲突操作等待保存完成。 */
+/** 连接四页签共用 Radix Tabs 并保留草稿；标题首字母仅装饰，辅助技术只朗读连接名称。 */
 function ConnectionPage({store, id, tab, setTab, change, copy, remove, add, openModel, move, jobs, start, cancel, save, restore, reset, embedded = false, busy = false, pending}) {
   const c = store.connections[id], [attempted, setAttempted] = useState(false);
   if (!c) return <><PageHeading title="我的连接"><Button onClick={add}><Plus size={16} />添加连接</Button></PageHeading><Empty title="还没有连接" action={<Button onClick={add}>添加连接</Button>} /></>;
@@ -378,12 +388,12 @@ function ConnectionPage({store, id, tab, setTab, change, copy, remove, add, open
   return <><PageHeading level={embedded ? 2 : 1} title={<span className="connection-page-title"><span className="avatar avatar-large" aria-hidden="true"><Server size={21} /></span>{c.name || '未命名连接'}</span>}><IconButton label={`复制连接 ${c.name}`} onClick={copy}><Copy size={17} /></IconButton><IconButton label={`删除连接 ${c.name}`} className="icon-delete" disabled={busy} onClick={remove}><Trash2 size={17} /></IconButton></PageHeading><Tabs.Root value={tab} onValueChange={setTab} className="connection-tabs"><Tabs.List className="tabs-list" aria-label="连接设置">{[['info', Link, '连接信息'], ['models', Brain, '模型选择'], ['purpose', GitBranch, '任务分工'], ['advanced', SlidersHorizontal, '高级设置']].map(([value, Icon, label]) => <Tabs.Trigger className="tab-trigger" key={value} value={value}><Icon size={17} aria-hidden="true" />{label}{value === 'models' && <span className="tab-number">{c.models.filter(m => m.selected).length}</span>}</Tabs.Trigger>)}</Tabs.List><Tabs.Content value="info"><ConnectionInfo c={c} change={change} errors={shownErrors} job={jobs[`test-${id}`]} cancel={() => cancel(`test-${id}`)} test={() => start(`test-${id}`, '正在测试连接')} /></Tabs.Content><Tabs.Content value="models"><ConnectionModels c={c} change={change} openModel={openModel} move={move} job={jobs[`catalog-${id}`]} refresh={() => start(`catalog-${id}`, '正在刷新模型')} /></Tabs.Content><Tabs.Content value="purpose"><ConnectionPurpose c={c} change={change} /></Tabs.Content><Tabs.Content value="advanced"><ConnectionAdvanced c={c} change={change} reset={reset} errors={shownErrors} /></Tabs.Content></Tabs.Root><footer className="connection-save-bar editor-footer">{(store.actionError?.target === id || attempted && Object.keys(errors).length > 0) && <div className="save-message field-error" role="alert">{store.actionError?.target === id ? store.actionError.message : Object.values(errors)[0]}</div>}<div className="save-actions"><Button variant="ghost" disabled={busy || !dirty} onClick={() => {restore(); setAttempted(false);}}>还原</Button><Button variant="primary" disabled={busy || !dirty} aria-busy={saving} onClick={trySave}>{saving && <Spinner />}{saving ? '正在保存' : '保存连接'}</Button></div></footer></>;
 }
 
-/** 插件卡片直接展示 Go 检测的安装、附带及可用版本，操作复用原型按钮和等待组件。 */
+/** 插件卡片按绑定状态展示版本；检查等待仅由按钮反馈，保留下载进度、取消及其他结果或错误提示。 */
 function PluginsPage({backend, updateAction, navigate}) {
   const p = backend.plugin || {}, update = backend.pluginUpdate || {};
   const job = toUpdateJob(p.phase === 'installing' ? {...update, phase: 'installing', message: p.message} : update);
   const busy = job.phase === 'loading', installed = Boolean(p.installedVersion), available = ['available', 'downloaded'].includes(update.phase);
-  const message = p.phase === 'error' || p.phase === 'manual' ? p.message : job.label;
+  const message = p.phase === 'error' || p.phase === 'manual' ? p.message : busy && job.operation === 'checking' ? '' : job.label;
   return <><PageHeading title="插件管理" /><div className="section-line plugin-list-heading"><h2>当前插件</h2><span>1 个插件</span></div><div className="plugin-grid"><Panel className="plugin-panel"><div className="plugin-content"><div className="plugin-title"><span className="plugin-avatar"><Plug size={23} /></span><div><h2>API Subagents</h2><small>Codex 插件</small></div><Badge tone={busy ? 'neutral' : installed && !available ? 'active' : 'warning'} icon={busy ? undefined : installed && !available ? CircleCheck : Download}>{busy ? '处理中' : available ? '可更新' : installed ? '已安装' : '未安装'}</Badge></div><p>把边界明确的代码、文档与图像任务交给其他模型，由主任务审查结果。</p><div className="plugin-capabilities"><Badge>模型委派</Badge><Badge>文档与图像</Badge></div></div><div className="plugin-install"><dl><div><dt>已安装版本</dt><dd>{p.installedVersion || '未安装'}</dd></div><div><dt>App 附带版本</dt><dd>{p.bundledVersion || '不可用'}</dd></div></dl>{message && <div className={cn('job-inline', (job.phase === 'error' || p.phase === 'error') && 'field-error')} role="status">{message}</div>}{busy && update.phase === 'downloading' && <progress className="operation-progress" aria-label="插件下载进度" value={update.progress || 0} max={1} />}<div className="plugin-actions"><Button disabled={busy} aria-busy={busy} onClick={() => updateAction('checkPluginUpdate', true)}>{busy && job.operation === 'checking' ? <Spinner /> : <RefreshCw size={16} />}{busy && job.operation === 'checking' ? '正在检查' : '检查更新'}</Button><Button variant="primary" disabled={busy || !available && (!p.bundledVersion || p.installedVersion === p.bundledVersion)} aria-busy={busy} onClick={() => updateAction(available ? 'updatePlugin' : 'installPlugin', true)}>{busy && job.operation === 'installing' ? <Spinner /> : <Download size={16} />}{busy && job.operation === 'installing' ? '正在安装' : available || installed ? '更新插件' : '安装插件'}</Button>{busy && ['checking', 'downloading'].includes(update.phase) && <Button variant="ghost" onClick={() => updateAction('cancelPluginUpdate', true)}>取消</Button>}</div></div></Panel></div><div className="plugin-help"><HelpCircle size={20} /><div><strong>安装后，在新聊天中加载插件</strong><p>已有聊天继续使用原来的插件进程。</p></div><Button variant="ghost" onClick={() => navigate('help')}>使用帮助<ArrowRight size={16} /></Button></div></>;
 }
 
@@ -397,9 +407,9 @@ function HelpPage({navigate, openDiagnostics}) {
 function Modal({open, onClose, title, children, opener, wide}) {
   return <Dialog.Root open={open} onOpenChange={value => {if (!value) onClose();}}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className={cn('dialog-content', wide && 'dialog-wide')} onCloseAutoFocus={e => {if (opener.current?.isConnected) {e.preventDefault(); opener.current.focus();}}}><div className="dialog-heading"><Dialog.Title>{title}</Dialog.Title><Dialog.Close asChild><Button variant="ghost" className="icon-button" aria-label="关闭弹窗"><X size={19} /></Button></Dialog.Close></div><Dialog.Description className="sr-only">设置操作，关闭弹窗不会提交未保存的输入。</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
-/** 破坏性操作必须明确确认；取消默认获焦，不自动删连接或切换接入。 */
+/** 破坏性操作必须明确确认；提示类弹窗仅需确认阅读，支持 Escape 并恢复触发按钮焦点。 */
 function Confirm({data, close, opener}) {
-  return <AlertDialog.Root open={Boolean(data)} onOpenChange={value => {if (!value) close();}}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content confirm-dialog" onCloseAutoFocus={e => {if (opener.current?.isConnected) {e.preventDefault(); opener.current.focus();}}}><AlertDialog.Title>{data?.title}</AlertDialog.Title><AlertDialog.Description>{data?.description}</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><Button>取消</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button variant="destructive" onClick={() => {data?.run(); close();}}>{data?.action || '确认'}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
+  return <AlertDialog.Root open={Boolean(data)} onOpenChange={value => {if (!value) close();}}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content confirm-dialog" onEscapeKeyDown={event => {if (data?.kind === 'notice') {event.preventDefault(); close();}}} onCloseAutoFocus={e => {if (opener.current?.isConnected) {e.preventDefault(); opener.current.focus();}}}><AlertDialog.Title>{data?.title}</AlertDialog.Title><AlertDialog.Description>{data?.description}</AlertDialog.Description><div className="dialog-actions">{data?.kind === 'notice' ? <AlertDialog.Cancel asChild><Button variant="primary">知道了</Button></AlertDialog.Cancel> : <><AlertDialog.Cancel asChild><Button>取消</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button variant="destructive" onClick={() => {data?.run(); close();}}>{data?.action || '确认'}</Button></AlertDialog.Action></>}</div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
 }
 
 /** 新建实体表单保持输入与错误，提交失败不关闭，原生 submit 支持 Enter。 */
@@ -410,11 +420,11 @@ function NewEntityForm({kind, submit, close}) {
   return <form onSubmit={handleSubmit}><div className="dialog-body"><Field autoFocus label={kind === 'plan' ? '配置名称' : '连接名称'} maxLength={60} value={name} onChange={e => {setName(e.target.value); setErrors({...errors, name: ''});}} error={errors.name} />{kind === 'connection' && <><label className="field"><span>接口类型</span><select className="input" value={protocol} onChange={e => {const defaults = {responses: 'https://api.openai.com/v1', compatible: 'https://api.openai.com/v1', anthropic: 'https://api.anthropic.com/v1', gemini: 'https://generativelanguage.googleapis.com/v1beta'}; if (url === defaults[protocol]) setURL(defaults[e.target.value]); setProtocol(e.target.value);}}><option value="responses">Responses</option><option value="compatible">OpenAI Chat Completions</option><option value="anthropic">Anthropic Messages</option><option value="gemini">Gemini</option></select></label><Field label="API 地址" value={url} error={errors.url} onChange={e => {setURL(e.target.value); setErrors({...errors, url: ''});}} /></>}</div><div className="dialog-actions"><Button onClick={close}>取消</Button><Button variant="primary" type="submit">{kind === 'plan' ? '创建配置' : '添加连接'}</Button></div></form>;
 }
 
-/** 模型设置保留原生容量，覆盖开关仅控制是否写入自定义值；取消不修改连接草稿。 */
+/** 模型设置独立编辑上下文和模型级 Fast 设置；保存写入连接草稿，取消不修改任何模型。 */
 function ModelForm({model, c, submit, close}) {
   const policy = contextSettings(model);
-  const [value, setValue] = useState(model ? {...clone(model), ...policy, contextOverride: policy.contextOverride ?? defaultContextSettings(model.context).contextOverride ?? ''} : {id: '', name: '', context: null, contextEnabled: false, contextOverride: '', selected: true, image: 'auto', output: ''}), [errors, setErrors] = useState({});
-  const contextID = useId(), contextHintID = useId();
+  const [value, setValue] = useState(model ? {...clone(model), fast: model.fast === true, ...policy, contextOverride: policy.contextOverride ?? defaultContextSettings(model.context).contextOverride ?? ''} : {id: '', name: '', context: null, contextEnabled: false, contextOverride: '', selected: true, image: 'auto', output: '', fast: false}), [errors, setErrors] = useState({});
+  const contextID = useId(), contextHintID = useId(), fastID = useId(), fastHintID = useId();
   /** 开启时上下文必须是正整数；关闭时提交 null 覆盖值，绝不改写原生容量或模型勾选。 */
   function handleSubmit(e) {
     e.preventDefault(); const next = {};
@@ -424,9 +434,13 @@ function ModelForm({model, c, submit, close}) {
     if (Object.keys(next).length) {setErrors(next); requestAnimationFrame(() => e.target.querySelector('[aria-invalid="true"]')?.focus()); return;}
     submit({...value, id: value.id.trim(), contextOverride: value.contextEnabled ? Number(value.contextOverride) : null});
   }
-  return <form noValidate onSubmit={handleSubmit}><div className="dialog-body">
+  return <form className="model-settings-form" noValidate onSubmit={handleSubmit}><div className="dialog-body">
     <Field autoFocus label="模型 ID" readOnly={Boolean(model)} value={value.id} onChange={e => {setValue({...value, id: e.target.value}); setErrors({...errors, id: ''});}} error={errors.id} />
     <Field label="显示名称（可选）" maxLength={200} value={value.name} onChange={e => setValue({...value, name: e.target.value})} />
+    <section className="context-setting model-fast-setting" aria-labelledby={fastID}>
+      <div className="context-setting-heading"><label id={fastID} htmlFor={fastID + '-switch'}>Fast 模式</label><Switch.Root id={fastID + '-switch'} className="switch" aria-labelledby={fastID} aria-describedby={fastHintID} disabled={c.protocol === 'gemini'} checked={value.fast} onCheckedChange={fast => setValue({...value, fast})}><Switch.Thumb className="switch-thumb" /></Switch.Root></div>
+      <p id={fastHintID} className="context-setting-hint">{c.protocol === 'gemini' ? 'Gemini 原生协议暂不支持此开关。' : '开启后请求上游 Fast / Priority 档位，费用可能增加；需上游模型及账号支持。'}</p>
+    </section>
     <section className="context-setting" aria-labelledby={contextID}>
       <div className="context-setting-heading"><label id={contextID} htmlFor={contextID + '-switch'}>设置上下文</label><Switch.Root id={contextID + '-switch'} className="switch" aria-labelledby={contextID} aria-describedby={contextHintID} checked={value.contextEnabled} onCheckedChange={enabled => {setValue({...value, contextEnabled: enabled}); setErrors({...errors, contextOverride: ''});}}><Switch.Thumb className="switch-thumb" /></Switch.Root></div>
       <fieldset disabled={!value.contextEnabled}><Field label="上下文大小（tokens）" type="number" min={1} step={1} value={value.contextEnabled ? value.contextOverride : ''} placeholder="使用模型自带上下文" error={errors.contextOverride} onChange={e => {setValue({...value, contextOverride: e.target.value}); setErrors({...errors, contextOverride: ''});}} /></fieldset>
@@ -436,13 +450,27 @@ function ModelForm({model, c, submit, close}) {
   </div><div className="dialog-actions"><Button onClick={close}>取消</Button><Button variant="primary" type="submit">保存模型</Button></div></form>;
 }
 
-/** 更新弹窗保留原型的图标、标签和等待位置，版本、校验、下载、取消和安装全部使用真实后台。 */
+/** 更新弹窗将可滚动正文与偏好、操作区分开；回调及草稿安装保护不变，窄矮窗口仍可关闭或取消。 */
 function UpdatePanel({state = {}, version, updateAction, close, dirty}) {
   const phase = state.phase || 'idle', busy = ['checking', 'downloading', 'installing'].includes(phase);
-  return <div className="update-panel"><div className="update-state-icon">{busy ? <Spinner /> : phase === 'error' ? <CircleAlert size={30} /> : <RefreshCw size={30} />}</div><h2>{busy ? phase === 'checking' ? '正在检查更新' : phase === 'downloading' ? '正在下载更新' : '正在准备安装' : phase === 'available' ? '发现新版本' : phase === 'downloaded' ? '更新已准备好' : ['latest', 'current'].includes(phase) ? '已是最新版本' : phase === 'error' ? '暂时无法检查更新' : '检查应用更新'}</h2><p role="status">{state.message || '检查新的功能与修复'}</p><dl className="update-versions"><div><dt>当前版本</dt><dd>{state.version || version || '—'}</dd></div><div><dt>可用版本</dt><dd>{state.availableVersion || '—'}</dd></div></dl>{phase === 'downloading' && <progress className="operation-progress" aria-label="应用下载进度" value={state.progress || 0} max={1} />}{state.releaseNotes && <div className="release-notes">{state.releaseNotes}</div>}<label className="update-preference"><Tick checked={state.autoCheck !== false} label="打开更新窗口时自动检查" onChange={enabled => updateAction('setUpdateAutoCheck', false, enabled)} /><span>打开更新窗口时自动检查</span></label>{dirty && phase === 'downloaded' && <div className="field-error" role="status">请先保存或还原草稿再安装更新。</div>}<div className="dialog-actions">{busy ? phase !== 'installing' && <Button onClick={() => updateAction('cancelUpdate')}>取消操作</Button> : phase === 'available' ? <><Button variant="ghost" onClick={() => updateAction('skipUpdate')}>跳过此版本</Button><Button onClick={close}>稍后</Button><Button variant="primary" onClick={() => updateAction('downloadUpdate')}><Download size={16} />下载更新</Button></> : phase === 'downloaded' ? <Button variant="primary" disabled={dirty} onClick={() => updateAction('installUpdate')}>重启并安装</Button> : phase === 'manual' ? <Button variant="primary" onClick={() => updateAction('openReleases')}>查看发布页<ArrowRight size={16} /></Button> : <Button variant="primary" onClick={() => updateAction('checkUpdate')}><RefreshCw size={16} />{phase === 'error' ? '重试' : '检查更新'}</Button>}</div></div>;
+  return <div className="update-panel">
+    <div className="update-panel-body">
+      <div className="update-state-icon">{busy ? <Spinner /> : phase === 'error' ? <CircleAlert size={30} /> : <RefreshCw size={30} />}</div>
+      <h2>{busy ? phase === 'checking' ? '正在检查更新' : phase === 'downloading' ? '正在下载更新' : '正在准备安装' : phase === 'available' ? '发现新版本' : phase === 'downloaded' ? '更新已准备好' : ['latest', 'current'].includes(phase) ? '已是最新版本' : phase === 'error' ? '暂时无法检查更新' : '检查应用更新'}</h2>
+      <p role="status">{state.message || '检查新的功能与修复'}</p>
+      <dl className="update-versions"><div><dt>当前版本</dt><dd>{state.version || version || '—'}</dd></div><div><dt>可用版本</dt><dd>{state.availableVersion || '—'}</dd></div></dl>
+      {phase === 'downloading' && <progress className="operation-progress" aria-label="应用下载进度" value={state.progress || 0} max={1} />}
+      {state.releaseNotes && <div className="release-notes">{state.releaseNotes}</div>}
+      {dirty && phase === 'downloaded' && <div className="field-error" role="status">请先保存或还原草稿再安装更新。</div>}
+    </div>
+    <div className="update-panel-footer">
+      <label className="update-preference"><Tick checked={state.autoCheck !== false} label="打开更新窗口时自动检查" onChange={enabled => updateAction('setUpdateAutoCheck', false, enabled)} /><span>打开更新窗口时自动检查</span></label>
+      <div className="dialog-actions">{busy ? phase !== 'installing' && <Button onClick={() => updateAction('cancelUpdate')}>取消操作</Button> : phase === 'available' ? <><Button variant="ghost" onClick={() => updateAction('skipUpdate')}>跳过此版本</Button><Button onClick={close}>稍后</Button><Button variant="primary" onClick={() => updateAction('downloadUpdate')}><Download size={16} />下载更新</Button></> : phase === 'downloaded' ? <Button variant="primary" disabled={dirty} onClick={() => updateAction('installUpdate')}>重启并安装</Button> : phase === 'manual' ? <Button variant="primary" onClick={() => updateAction('openReleases')}>查看发布页<ArrowRight size={16} /></Button> : <Button variant="primary" onClick={() => updateAction('checkUpdate')}><RefreshCw size={16} />{phase === 'error' ? '重试' : '检查更新'}</Button>}</div>
+    </div>
+  </div>;
 }
 
-/** 共用已确认主题与 Go/API 状态；父级持有费率草稿和请求门控，跨页面不丢输入或解除正在进行的写锁。 */
+/** 各工作区页面共用已确认的接入配置主题；页面标识只限定样式，业务状态仍来自固定 Go/API 适配层。 */
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false), [usageView, setUsageView] = useState(createUsageView);
   const usageGate = useRef(createUsageGate());

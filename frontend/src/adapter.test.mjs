@@ -5,6 +5,15 @@ import {clone, choosePlanModel, contextSettings, modelKey, reorderModels, reorde
 import {fixtureConfig} from '../tests/fixtures.mjs';
 
 test('正式首次启动无示例连接、范围或默认模型', () => {assert.deepEqual(emptyStore().connections, {}); assert.equal(emptyStore().active, null); assert.deepEqual(decodeConfig({models: {}}).plans, []);});
+test('模型 Fast 仅按显式设置往返，名称不隐式启用，未选模型不写入连接且旧 Ultra 迁移到 Max', () => {
+  const config = fixtureConfig(); config.models.cpa.modelFastModes = {[config.models.cpa.model]: true}; config.models.cpa.reasoningEffort = 'ultra';
+  const connection = decodeConfig(config).connections.cpa;
+  assert.equal(connection.effort, 'max'); assert.equal(connection.models.find(model => model.id === connection.defaultID).fast, true);
+  const other = connection.models.find(model => model.id !== connection.defaultID); other.fast = true; other.selected = false;
+  const encoded = encodeConnection(connection); assert.equal(encoded.modelFastModes[connection.defaultID], true); assert.equal(Object.hasOwn(encoded.modelFastModes, other.id), false);
+  delete config.models.cpa.modelFastModes;
+  assert.ok(decodeConfig(config).connections.cpa.models.every(model => model.fast === false));
+});
 test('脱敏连接往返保留协议、原生容量、模型顺序、环境 Key 及独立范围', () => {
   const config = fixtureConfig(), store = decodeConfig(config), c = store.connections.cpa;
   assert.equal(c.models.length, 8); assert.equal(c.models.filter(m => m.selected).length, 6); assert.equal(c.models[0].contextOverride, 256000); assert.equal(c.models[2].contextOverride, 128000);

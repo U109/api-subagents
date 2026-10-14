@@ -17,6 +17,9 @@ func TestReasoningPersistence(t *testing.T) {
 		}
 		c, err := ValidateConfig(shared.Marshal(shared.Object{"version": 1, "models": shared.Object{"demo": profile}}), true)
 		text, isString := effort.(string)
+		if text == "ultra" {
+			text = "max"
+		}
 		valid := effort == nil || isString && text != "invalid"
 		if !valid {
 			if err == nil {

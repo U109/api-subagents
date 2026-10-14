@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,14 +50,36 @@ type Record struct {
 	Tokens
 	CostMicroUSD *int64 `json:"costMicroUSD"`
 	PriceVersion string `json:"priceVersion,omitempty"`
+	Fast         bool   `json:"fast,omitempty"`
+	ServiceTier  string `json:"serviceTier,omitempty"`
 }
 
-// Price 表示用户明确配置的 USD / 百万 Token 单价，不内置真实或示例模型价格。
-type Price struct {
+// Rate 使用 USD / 百万 Token，普通输入不重复计入缓存；未知 Fast 价格不视为免费。
+type Rate struct {
 	Input  float64 `json:"input"`
 	Output float64 `json:"output"`
 	Read   float64 `json:"read"`
 	Write  float64 `json:"write"`
+}
+
+// ContextPrice 保存官网长上下文阈值与完整费率，不按模型名称猜测加价倍率。
+type ContextPrice struct {
+	Above int64 `json:"above"`
+	Rate  Rate  `json:"rate"`
+	Fast  *Rate `json:"fast,omitempty"`
+}
+
+// Price 保存普通、Fast 和可选长上下文价格；用户覆盖优先于有核对日期的官方默认值。
+type Price struct {
+	Input       float64       `json:"input"`
+	Output      float64       `json:"output"`
+	Read        float64       `json:"read"`
+	Write       float64       `json:"write"`
+	Fast        *Rate         `json:"fast,omitempty"`
+	LongContext *ContextPrice `json:"longContext,omitempty"`
+	Source      string        `json:"source,omitempty"`
+	CheckedAt   string        `json:"checkedAt,omitempty"`
+	Note        string        `json:"note,omitempty"`
 }
 type Prices struct {
 	Revision string           `json:"revision"`
@@ -111,10 +134,8 @@ func (s *Store) SavePrices(prices Prices) (Prices, error) {
 		if json.Unmarshal([]byte(key), &identity) != nil || len(identity) != 2 || len(key) > 1024 {
 			return prices, errors.New("费率模型标识无效")
 		}
-		for _, value := range []float64{price.Input, price.Output, price.Read, price.Write} {
-			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 10000 {
-				return prices, errors.New("单价须为 0–10000 的有限数值")
-			}
+		if err := validatePrice(price); err != nil {
+			return prices, err
 		}
 	}
 	current, err := s.Prices()
@@ -140,9 +161,24 @@ func (s *Store) Save(record Record, prices Prices) {
 		s.lost.Add(1)
 		return
 	}
-	record.CostMicroUSD = cost(record.Tokens, prices.Rates[Key(record.ConnectionID, record.Model)], prices.Rates, Key(record.ConnectionID, record.Model))
+	key := Key(record.ConnectionID, record.Model)
+	record.CostMicroUSD = nil
+	price, known := prices.Rates[key]
+	// 只给当前价格表覆盖的普通／Fast 档位估算，其他真实档位不能套用普通费率。
+	if record.ServiceTier == "flex" || record.ServiceTier == "scale" || record.ServiceTier == "ultrafast" {
+		known = false
+	}
+	if known {
+		price, known = settlementPrice(price, record.Fast, record.Tokens)
+	}
+	if known {
+		record.CostMicroUSD = cost(record.Tokens, price, map[string]Price{key: price}, key)
+	}
 	if record.CostMicroUSD != nil {
 		record.PriceVersion = prices.Revision
+		if record.PriceVersion == "" {
+			record.PriceVersion = "official-" + OfficialPriceDate
+		}
 	}
 	day := time.UnixMilli(record.StartedAt).UTC().Format("2006-01-02")
 	if err := shared.AtomicWrite(filepath.Join(s.Root, "records", day, record.ID+".json"), shared.Marshal(record), 0600); err != nil {
@@ -216,15 +252,29 @@ func (s *Store) Handle(route string, body []byte) (shared.Object, error) {
 	}
 	if route == "/api/usage/prices" {
 		var fields struct {
-			Rates map[string]map[string]*float64 `json:"rates"`
+			Rates map[string]map[string]json.RawMessage `json:"rates"`
 		}
 		if json.Unmarshal(body, &fields) != nil || fields.Rates == nil {
 			return nil, errors.New("费率格式无效")
 		}
 		for _, price := range fields.Rates {
 			for _, field := range []string{"input", "output", "read", "write"} {
-				if price[field] == nil {
+				if len(price[field]) == 0 || string(price[field]) == "null" {
 					return nil, errors.New("请完整填写四项单价，不能将缺失价格当成零")
+				}
+			}
+			if raw := price["fast"]; len(raw) > 0 && string(raw) != "null" {
+				if !completeRate(raw) {
+					return nil, errors.New("请完整填写 Fast 的四项单价")
+				}
+			}
+			if raw := price["longContext"]; len(raw) > 0 && string(raw) != "null" {
+				var long map[string]json.RawMessage
+				if json.Unmarshal(raw, &long) != nil || !completeRate(long["rate"]) {
+					return nil, errors.New("请完整填写长上下文的四项单价")
+				}
+				if fast := long["fast"]; len(fast) > 0 && string(fast) != "null" && !completeRate(fast) {
+					return nil, errors.New("请完整填写长上下文 Fast 的四项单价")
 				}
 			}
 		}
@@ -253,7 +303,7 @@ func (s *Store) Handle(route string, body []byte) (shared.Object, error) {
 	return shared.Object{"records": rows, "prices": prices, "skipped": skipped, "lost": s.lost.Load(), "now": time.Now().UnixMilli()}, nil
 }
 
-// cost 用整数微美元结算，避免金额浮点累加；缺少必要缓存字段且费率不等价时不冒充完整估算。
+// cost 用十进制有理数合计后截取微美元，避免先将极小单价舍入成零；缺必要缓存字段时不冒充完整估算。
 func cost(tokens Tokens, price Price, rates map[string]Price, key string) *int64 {
 	if _, ok := rates[key]; !ok || tokens.Input == nil || tokens.Output == nil {
 		return nil
@@ -273,7 +323,7 @@ func cost(tokens Tokens, price Price, rates map[string]Price, key string) *int64
 	if ordinary < 0 {
 		return nil
 	}
-	result := new(big.Int)
+	amount := new(big.Rat)
 	for _, term := range []struct {
 		count int64
 		rate  float64
@@ -281,10 +331,14 @@ func cost(tokens Tokens, price Price, rates map[string]Price, key string) *int64
 		if term.count < 0 || math.IsNaN(term.rate) || math.IsInf(term.rate, 0) || term.rate < 0 || term.rate > 10000 {
 			return nil
 		}
-		product := new(big.Int).Mul(big.NewInt(term.count), big.NewInt(int64(math.Round(term.rate*1000000))))
-		result.Add(result, product)
+		rate, ok := new(big.Rat).SetString(strconv.FormatFloat(term.rate, 'f', -1, 64))
+		if !ok {
+			return nil
+		}
+		product := new(big.Rat).Mul(new(big.Rat).SetInt64(term.count), rate)
+		amount.Add(amount, product)
 	}
-	result.Quo(result, big.NewInt(1000000))
+	result := new(big.Int).Quo(amount.Num(), amount.Denom())
 	if !result.IsInt64() {
 		return nil
 	}
@@ -309,7 +363,7 @@ func WithSource(ctx context.Context, source, task, connection string) context.Co
 	return context.WithValue(ctx, sourceKey, sourceInfo{source, task, connection})
 }
 
-// EnsureCall 将连接稳定身份绑定到一轮生成；转换层复用原逻辑请求，不重复创建业务请求。
+// EnsureCall 将连接稳定身份绑定到一轮生成；转换层复用原逻辑请求，压缩不发送 Fast，不能沿用生成的费率兜底。
 func EnsureCall(ctx context.Context, profile configstore.Profile, connection, fallback, operation string) context.Context {
 	if ctx.Value(callKey) != nil {
 		return ctx
@@ -332,7 +386,7 @@ func EnsureCall(ctx context.Context, profile configstore.Profile, connection, fa
 		}
 		return text
 	}
-	value := &call{record: Record{LogicalID: shared.UUID(), ConnectionID: clean(id), Connection: clean(connection), Model: clean(profile.Model), Source: info.source, TaskID: clean(info.task), Operation: operation}}
+	value := &call{record: Record{LogicalID: shared.UUID(), ConnectionID: clean(id), Connection: clean(connection), Model: clean(profile.Model), Source: info.source, TaskID: clean(info.task), Operation: operation, Fast: operation != "compact" && profile.FastMode()}}
 	return WithProtocol(context.WithValue(ctx, callKey, value), profile.Protocol)
 }
 

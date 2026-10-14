@@ -61,6 +61,7 @@ func RequestSpec(p configstore.Profile, history []any, system string, tools []sh
 		h.Set("x-api-key", p.APIKey)
 		h.Set("anthropic-version", "2023-06-01")
 		b := shared.Object{"model": p.Model, "stream": p.Stream, "max_tokens": p.MaxTokens, "system": system, "messages": history}
+		ApplyFast(p, h, b)
 		if len(tools) > 0 {
 			items := []any{}
 			for _, t := range tools {
@@ -93,6 +94,7 @@ func RequestSpec(p configstore.Profile, history []any, system string, tools []sh
 			h.Set("Authorization", "Bearer "+p.APIKey)
 		}
 		b := shared.Object{"model": p.Model, "stream": p.Stream, "instructions": system, "input": history, "store": false, "include": []string{"reasoning.encrypted_content"}, "max_output_tokens": p.MaxTokens}
+		ApplyFast(p, h, b)
 		if len(tools) > 0 {
 			items := []any{}
 			for _, item := range functions {
@@ -110,6 +112,7 @@ func RequestSpec(p configstore.Profile, history []any, system string, tools []sh
 		}
 		messages := append([]any{shared.Object{"role": "system", "content": system}}, history...)
 		b := shared.Object{"model": p.Model, "stream": p.Stream, "messages": messages, "max_tokens": p.MaxTokens}
+		ApplyFast(p, h, b)
 		if len(tools) > 0 {
 			items := []any{}
 			for _, f := range functions {
