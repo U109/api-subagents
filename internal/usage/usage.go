@@ -52,6 +52,7 @@ type Record struct {
 	PriceVersion string `json:"priceVersion,omitempty"`
 	Fast         bool   `json:"fast,omitempty"`
 	ServiceTier  string `json:"serviceTier,omitempty"`
+	generation   string
 }
 
 // Rate 使用 USD / 百万 Token，普通输入不重复计入缓存；未知 Fast 价格不视为免费。
@@ -92,9 +93,10 @@ type Query struct {
 
 // Store 按尝试 UUID 原子写入独立文件，多个 worker 无需争用同一个追加文件。
 type Store struct {
-	Root string
-	mu   sync.Mutex
-	lost atomic.Int64
+	Root      string
+	mu        sync.Mutex
+	recordsMu sync.RWMutex
+	lost      atomic.Int64
 }
 
 // New 创建轻量账本句柄，不访问磁盘，不读取连接配置，也不调用模型。
@@ -161,6 +163,30 @@ func (s *Store) Save(record Record, prices Prices) {
 		s.lost.Add(1)
 		return
 	}
+	s.recordsMu.RLock()
+	defer s.recordsMu.RUnlock()
+	if err := os.MkdirAll(s.Root, 0700); err != nil {
+		s.lost.Add(1)
+		return
+	}
+	root, err := os.OpenRoot(s.Root)
+	if err != nil {
+		s.lost.Add(1)
+		return
+	}
+	defer root.Close()
+	state, err := readLedgerState(root)
+	if err != nil {
+		s.lost.Add(1)
+		return
+	}
+	if err := checkLedgerDirectory(root, state.directory()); err != nil {
+		s.lost.Add(1)
+		return
+	}
+	if record.generation != "" && record.generation != state.directory() || record.generation == "" && state.ClearedAt > 0 && record.StartedAt <= state.ClearedAt {
+		return
+	}
 	key := Key(record.ConnectionID, record.Model)
 	record.CostMicroUSD = nil
 	price, known := prices.Rates[key]
@@ -181,13 +207,20 @@ func (s *Store) Save(record Record, prices Prices) {
 		}
 	}
 	day := time.UnixMilli(record.StartedAt).UTC().Format("2006-01-02")
-	if err := shared.AtomicWrite(filepath.Join(s.Root, "records", day, record.ID+".json"), shared.Marshal(record), 0600); err != nil {
+	name := filepath.Join(state.directory(), day, record.ID+".json")
+	if err := writeLedgerFile(root, name, shared.Marshal(record)); err != nil {
 		s.lost.Add(1)
+	}
+	// 另一个 worker 可能在写入中切换代次；移除自己的迟到文件，且旧目录不再被任何读取采用。
+	if latest, err := readLedgerState(root); err == nil && latest.Generation != state.Generation {
+		_ = root.Remove(name)
 	}
 }
 
 // List 按 UTC 时间范围读取白名单记录；不跟随链接，损坏记录标示降级，超大范围要求缩小筛选。
 func (s *Store) List(query Query) ([]Record, int, error) {
+	s.recordsMu.RLock()
+	defer s.recordsMu.RUnlock()
 	now := time.Now().UnixMilli()
 	if query.To == 0 {
 		query.To = now
@@ -200,16 +233,36 @@ func (s *Store) List(query Query) ([]Record, int, error) {
 	}
 	rows := []Record{}
 	skipped := 0
+	root, err := os.OpenRoot(s.Root)
+	if os.IsNotExist(err) {
+		return rows, skipped, nil
+	}
+	if err != nil {
+		return nil, skipped, errors.New("无法读取本地用量账本")
+	}
+	defer root.Close()
+	state, err := readLedgerState(root)
+	if err != nil {
+		return nil, skipped, err
+	}
+	if err := checkLedgerDirectory(root, state.directory()); err != nil {
+		return nil, skipped, err
+	}
 	for day := time.UnixMilli(query.From).UTC().Truncate(24 * time.Hour); day.UnixMilli() < query.To; day = day.Add(24 * time.Hour) {
-		directory := filepath.Join(s.Root, "records", day.Format("2006-01-02"))
-		info, err := os.Lstat(directory)
+		directory := filepath.Join(state.directory(), day.Format("2006-01-02"))
+		info, err := root.Lstat(directory)
 		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return nil, skipped, errors.New("无法读取本地用量账本")
 		}
-		entries, err := os.ReadDir(directory)
+		folder, err := root.Open(directory)
+		if err != nil {
+			return nil, skipped, errors.New("无法读取本地用量账本")
+		}
+		entries, err := folder.ReadDir(-1)
+		_ = folder.Close()
 		if err != nil {
 			return nil, skipped, errors.New("无法读取本地用量账本")
 		}
@@ -218,11 +271,11 @@ func (s *Store) List(query Query) ([]Record, int, error) {
 				continue
 			}
 			info, err := entry.Info()
-			if err != nil || info.Size() > 16*1024 {
+			if err != nil || !info.Mode().IsRegular() || info.Size() > 16*1024 {
 				skipped++
 				continue
 			}
-			data, err := os.ReadFile(filepath.Join(directory, entry.Name()))
+			data, err := root.ReadFile(filepath.Join(directory, entry.Name()))
 			var record Record
 			if err != nil || json.Unmarshal(data, &record) != nil || record.ID == "" || record.LogicalID == "" {
 				skipped++
@@ -245,10 +298,13 @@ func (s *Store) List(query Query) ([]Record, int, error) {
 	return rows, skipped, nil
 }
 
-// Handle 只提供查询与费率保存，不允许前端传入文件路径、SQL 或任意命令。
+// Handle 只提供固定的查询、费率保存与显式确认清除，不接受路径、SQL 或任意命令。
 func (s *Store) Handle(route string, body []byte) (shared.Object, error) {
 	if len(body) > 256*1024 {
 		return nil, errors.New("用量请求过大")
+	}
+	if route == "/api/usage/clear" {
+		return s.Clear(body)
 	}
 	if route == "/api/usage/prices" {
 		var fields struct {

@@ -24,9 +24,12 @@
   "version": "0.0.0",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test src/adapter.test.mjs src/usage-domain.test.mjs src/usage-state.test.mjs src/usage-tooltip.test.mjs",
+    "test": "node --test src/adapter.test.mjs src/usage-domain.test.mjs src/usage-state.test.mjs src/usage-tooltip.test.mjs src/model-prices.test.mjs",
     "test:browser": "node workbench.test.cjs",
     "test:real-service": "node real-service.test.cjs",
+    "test:refinements": "node workbench-refinements.test.cjs",
+    "test:usage": "node usage.test.cjs",
+    "test:fast": "node model-fast.test.cjs",
     "test:visual": "node approved-visual.test.cjs",
     "test:macos": "node macos-settings.test.cjs",
     "test:workspace-design": "node workspace-design.test.cjs"

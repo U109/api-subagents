@@ -6,8 +6,9 @@
 }
 .macos-workspace:not([data-page="plans"]) .page-heading {margin-bottom: 24px; align-items: flex-start;}
 .macos-workspace:not([data-page="plans"]) .page-heading p {font-size: var(--text-emphasis); line-height: 1.5; margin-top: 6px;}
-.macos-workspace:not([data-page="plans"]) .button {min-height: 34px; padding: 7px 11px; border-radius: 7px; font-size: var(--text-body);}
-.macos-workspace:not([data-page="plans"]) .icon-button {width: 32px; height: 32px; min-height: 32px; padding: 0;}
+/* 侧栏边缘拉手是跨页共用控件，保持接入配置的尺寸和圆角，不继承页面内按钮样式。 */
+.macos-workspace:not([data-page="plans"]) .button:not(.sidebar-edge-toggle) {min-height: 34px; padding: 7px 11px; border-radius: 7px; font-size: var(--text-body);}
+.macos-workspace:not([data-page="plans"]) .icon-button:not(.sidebar-edge-toggle) {width: 32px; height: 32px; min-height: 32px; padding: 0;}
 .macos-workspace:not([data-page="plans"]) .button-primary:disabled {background: var(--surface-hover); border-color: var(--line); color: var(--muted); box-shadow: none;}
 .macos-workspace:not([data-page="plans"]) .panel {border-color: var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgb(29 29 31 / .025);}
 .macos-workspace:not([data-page="plans"]) .panel-heading {min-height: 56px; padding: 16px 20px; gap: 12px;}
@@ -225,13 +226,13 @@
   .dialog-body, .dialog-heading {padding: 16px;}
 }
 @media (pointer: coarse) {
-  .macos-workspace:not([data-page="plans"]) .button,
+  .macos-workspace:not([data-page="plans"]) .button:not(.sidebar-edge-toggle),
   .macos-workspace .connection-workbench-editor .tab-trigger,
   .macos-workspace .connection-model-toolbar .segmented button,
   .macos-workspace .effort-options button,
   .macos-workspace .u-tabs button,
   .dialog-content .button {min-height: 44px;}
-  .macos-workspace:not([data-page="plans"]) .icon-button,
+  .macos-workspace:not([data-page="plans"]) .icon-button:not(.sidebar-edge-toggle),
   .macos-workspace .connection-model-row .icon-button,
   .dialog-content .icon-button {width: 44px; height: 44px; min-height: 44px;}
   .macos-settings .editor-item-actions .icon-button,

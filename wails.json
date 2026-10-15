@@ -11,7 +11,7 @@
   },
   "info": {
     "productName": "API Subagents",
-    "productVersion": "0.5.9",
+    "productVersion": "0.5.10",
     "comments": "Go + Wails desktop and standalone MCP worker"
   }
 }

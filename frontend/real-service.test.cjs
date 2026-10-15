@@ -171,6 +171,7 @@ async function main() {
     const planArrived = deferred(), planRelease = deferred();
     await page.route('**/api/access/save', async route => {const result = await route.fetch(); planArrived.resolve(); await planRelease.promise; await route.fulfill({response: result});});
     await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.getByRole('button', {name: '正在保存', exact: true}).waitFor(); await planArrived.promise;
+    await page.getByRole('button', {name: '编辑配置名称', exact: true}).click();
     await page.getByRole('textbox', {name: '配置名称', exact: true}).fill('scope-one-later-draft');
     const planResponse = page.waitForResponse(value => value.url().endsWith('/api/access/save')); planRelease.resolve(); assert.equal((await planResponse).status(), 200);
     await page.unroute('**/api/access/save');
@@ -208,6 +209,7 @@ async function main() {
     await page.getByRole('button', {name: '保存费率', exact: true}).click(); assert.match(await page.locator('#usage-price-error').innerText(), /草稿已保留/);
     await page.getByRole('button', {name: '载入最新费率', exact: true}).click(); await page.getByRole('button', {name: '保留草稿', exact: true}).click(); assert.equal(await price.inputValue(), '1.5');
     await page.getByRole('button', {name: '载入最新费率', exact: true}).click(); await page.getByRole('button', {name: '放弃草稿并载入', exact: true}).click(); assert.equal(await price.inputValue(), '3');
+    await page.getByRole('button', {name: '统一采用 local-newer-draft 的费率', exact: true}).click();
     await price.fill('2');
     const priceResponse = page.waitForResponse(value => value.url().endsWith('/api/usage/prices'));
     await page.getByRole('button', {name: '保存费率', exact: true}).click(); assert.equal((await priceResponse).status(), 200);
@@ -228,6 +230,7 @@ async function main() {
     const olderRead = page.waitForResponse(value => value.url().endsWith('/api/usage')); readRelease.resolve(); await olderRead;
     await page.unroute('**/api/usage');
     assert.equal(await price.inputValue(), '5');
+    await page.getByRole('button', {name: '统一采用 local-newer-draft 的费率', exact: true}).click();
     await price.fill('2'); const restorePrice = page.waitForResponse(value => value.url().endsWith('/api/usage/prices'));
     await page.getByRole('button', {name: '保存费率', exact: true}).click(); assert.equal((await restorePrice).status(), 200);
     passed('延迟旧的真实读取后发起新读取，旧响应不能回退费率或重置已保存表单');
@@ -243,7 +246,7 @@ async function main() {
     passed('真实 Go 返回已选模型官方普通与 Fast 默认费率，不补未选目录或私有别名');
 
     await navigate(page, '我的连接'); await page.getByRole('button', {name: '管理连接 local-newer-draft', exact: true}).click();
-    await page.getByRole('button', {name: '测试连接', exact: true}).click(); await page.getByRole('status').filter({hasText: '连接测试成功'}).waitFor();
+    await page.getByRole('button', {name: '测试连接', exact: true}).click(); await page.locator('.connection-status-pill').filter({hasText: '正常'}).waitFor();
     const ledger = await request(service, '/api/usage', {}); assert.equal(ledger.records.length, 1); assert.equal(ledger.records[0].source, 'test'); assert.equal(ledger.records[0].input, 100); assert.equal(ledger.records[0].output, 20); assert.equal(ledger.records[0].costMicroUSD, 280);
     mock.state.slow = true; await page.getByRole('button', {name: '测试连接', exact: true}).click();
     await until(() => mock.state.requests.filter(value => value.path === '/v1/responses').length === 2, '测试请求未到达真实上游');
@@ -255,10 +258,22 @@ async function main() {
     await page.getByRole('tab', {name: '请求明细', exact: true}).click(); assert.match(await page.locator('.usage-reference').innerText(), /local-alpha/);
     passed('真实测试请求、Token 与历史计价、测试来源隔离；取消穿过浏览器、Go 到达上游');
 
+    // 真实清除仅作用于专用测试目录；价格及配置保留，重启后仍不能显示旧账本。
+    const beforeClear = (await request(service, '/api/config')).config;
+    const clearResponse = page.waitForResponse(value => value.url().endsWith('/api/usage/clear'));
+    await page.getByRole('button', {name: '清除全部请求统计', exact: true}).click();
+    await page.getByRole('button', {name: '清除全部记录', exact: true}).click(); assert.equal((await clearResponse).status(), 200);
+    await page.getByRole('alertdialog').waitFor({state: 'hidden'});
+    const cleared = await request(service, '/api/usage', {});
+    assert.equal(cleared.records.length, 0); assert.equal(cleared.prices.rates[key].input, 2);
+    assert.deepEqual((await request(service, '/api/config')).config, beforeClear);
+    passed('真实清除所有请求统计保留价格/连接/接入配置，使用固定受权路由');
+
     await page.close(); service.process.kill(); await new Promise(resolve => service.process.once('exit', resolve)); service = await startService(executable, env);
     await open(); config = (await request(service, '/api/config')).config;
     assert.equal(config.models['local-newer-draft'].id, oneID); assert.equal(config.models['local-two'].id, twoID); assert(config.accessConfigs.some(value => value.id === planID));
     assert.equal((await request(service, '/api/usage', {})).prices.rates[key].input, 2);
+    assert.equal((await request(service, '/api/usage', {})).records.length, 0);
     await navigate(page, '我的连接'); await page.getByRole('button', {name: '管理连接 local-newer-draft', exact: true}).click();
     await page.getByRole('button', {name: '删除连接 local-newer-draft', exact: true}).click(); await page.getByRole('button', {name: '取消', exact: true}).click();
     assert((await request(service, '/api/config')).config.models['local-newer-draft']);

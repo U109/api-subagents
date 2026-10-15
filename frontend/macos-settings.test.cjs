@@ -168,6 +168,7 @@ async function main() {
     report.checks.push('查看配置 B 不会保存或替换运行中的配置 A');
 
     await page.locator('[data-plan-id="plan-a"]').click();
+    await page.getByRole('button', {name: '编辑配置名称', exact: true}).click();
     await page.getByRole('textbox', {name: '配置名称', exact: true}).fill('开发配置');
     await page.locator('.editor-save-status').getByText('有未保存的修改', {exact: true}).waitFor();
     await shot('1200-macos-draft');
@@ -212,7 +213,7 @@ async function main() {
     report.checks.push('搜索与清空、键盘焦点和减少动态效果');
     const dismissToast = page.getByRole('button', {name: '关闭提示', exact: true});
     if (await dismissToast.isVisible()) await dismissToast.click();
-    await page.getByRole('heading', {name: '接入配置', exact: true}).click();
+    await page.getByRole('heading', {name: '全部配置', exact: true}).click();
 
     for (const width of [1440, 1280, 1200, 1024, 900, 768, 640, 639, 375, 320]) {
       await page.setViewportSize({width, height: 878});
@@ -225,6 +226,7 @@ async function main() {
     }
     await page.setViewportSize({width: 1200, height: 560});
     assert.ok(await page.locator('.save-actions').isVisible());
+    await page.getByRole('button', {name: '编辑配置名称', exact: true}).click();
     await page.getByRole('textbox', {name: '配置名称', exact: true}).fill('用于验证配置名称在较窄窗口中自然换行且状态不被挤出的长名称'.repeat(2));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     report.checks.push('320–1440px、短窗口和长名称不产生横向溢出');

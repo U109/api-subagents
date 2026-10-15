@@ -156,15 +156,15 @@ async function main() {
         const button = node.querySelector('.connection-directory-open[aria-pressed="true"]'), card = getComputedStyle(button), panel = node.getBoundingClientRect(), rect = button.getBoundingClientRect();
         return {appearance: {width: panel.width, padding: getComputedStyle(node).padding, heading: getComputedStyle(node.querySelector('h2')).fontSize, background: card.backgroundColor, border: card.borderColor, shadow: card.boxShadow, cardPadding: card.padding}, left: rect.left - panel.left, right: panel.right - rect.right};
       });
-      assert.equal(connectionStyle.appearance.width, planStyle.width);
+      assert.equal(connectionStyle.appearance.width, 188);
       assert.equal(connectionStyle.appearance.background, planStyle.background);
-      assert.equal(connectionStyle.appearance.shadow, planStyle.shadow);
+      assert.equal(connectionStyle.appearance.shadow, 'none');
       assert.equal(connectionStyle.appearance.heading, planStyle.heading);
-      assert.equal(connectionStyle.appearance.cardPadding, '8px 12px');
+      assert.equal(connectionStyle.appearance.cardPadding, '10px 12px');
       assert.equal(await page.locator('.app-shell.macos-settings.macos-workspace').count(), 1);
-      assert.equal(connectionStyle.left, 12);
-      assert.equal(connectionStyle.right, 13);
-      assert.equal(await page.locator('.connection-workbench-list .directory-provider-icon').first().isVisible(), false);
+      assert.equal(connectionStyle.left, 10);
+      assert.equal(connectionStyle.right, 11);
+      assert.equal(await page.locator('.connection-workbench-list .directory-provider-icon').first().isVisible(), true);
       assert.ok(await page.locator('.connection-workbench-editor').evaluate(node => node.getBoundingClientRect().width >= 560));
       await page.getByRole('button', {name: '管理连接 worker', exact: true}).click();
       assert.equal(await page.getByRole('textbox', {name: '连接名称', exact: true}).inputValue(), 'worker');
@@ -173,7 +173,7 @@ async function main() {
       await layout(page, '1067-matched-connection-list', report); await shot(page, '1067-matched-connection-list', report);
       await page.setViewportSize({width: 375, height: 884});
       const columns = await page.locator('.connection-list-items').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length);
-      assert.equal(columns, 2);
+      assert.equal(columns, 1);
       await layout(page, '375-matched-connection-list', report); await shot(page, '375-matched-connection-list', report);
     });
     await check('各页面共用材质侧栏、主从面板与蓝色选中项，键盘焦点和保存边界保持不变', async page => {
@@ -223,6 +223,7 @@ async function main() {
       value = await snapshot(page); assert.deepEqual(value.state.relay.access.connectionIDs, ['cpa', 'review']); assert.equal(value.state.relay.access.modelIDs.cpa.length, 1); assert.deepEqual(value.saved.models, before.saved.models);
     });
     await check('失败保存保留草稿并可重试，错误不只在 toast', async page => {
+      await page.getByRole('button', {name: '编辑配置名称', exact: true}).click();
       await page.getByRole('textbox', {name: '配置名称', exact: true}).fill('修改后的 A');
       await page.evaluate(() => {window.__mock.failure = '/api/access/save';});
       await page.getByRole('button', {name: '仅保存', exact: true}).click(); await page.getByText('synthetic operation failed', {exact: true}).waitFor();

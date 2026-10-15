@@ -14,12 +14,18 @@ export function useWorkbench({extraDirty = false} = {}) {
   const [store, setStore] = useState(emptyStore), [backend, setBackend] = useState({}), [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(''), [busy, setBusy] = useState(false);
   const [page, setPage] = useState('plans'), [connectionID, setConnectionID] = useState(''), [tab, setTab] = useState('info'), [modal, setModal] = useState(null), [confirm, setConfirm] = useState(null), [toast, setToast] = useState(''), [mobileNav, setMobileNav] = useState(false), [jobs, setJobs] = useState({});
   const [pending, setPending] = useState(null);
-  const opener = useRef(null), toastTimer = useRef(null), current = useRef(store), desktop = useRef(backend), locked = useRef(false), requests = useRef({}), epochs = useRef({});
+  const opener = useRef(null), toastTimer = useRef(null), current = useRef(store), desktop = useRef(backend), locked = useRef(false), requests = useRef({}), epochs = useRef({}), sources = useRef(Object.create(null));
   // 草稿引用只由 changeStore 更新，渲染中的旧快照不能回退事件刚写入的最新输入。
   desktop.current = backend;
 
-  /** 同步替换内存草稿及 React 状态，后续异步步骤始终读取已合并的最新对象。 */
-  function changeStore(update) {const next = typeof update === 'function' ? update(current.current) : update; current.current = next; setStore(next);}
+  /** 同步更新草稿；来源变化只递增数字代次，使旧测试失效而不把 API Key 复制进任务状态。 */
+  function changeStore(update) {
+    const previous = current.current, next = typeof update === 'function' ? update(previous) : update;
+    for (const [id, connection] of Object.entries(next.connections)) {
+      if (!sameCatalogSource(previous.connections[id], connection)) sources.current[id] = (sources.current[id] || 0) + 1;
+    }
+    current.current = next; setStore(next);
+  }
   /** 简短反馈仅用于成功；操作失败另外展示在当前表单旁，不只依赖 toast。 */
   function notify(message) {setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4500);}
   /** 状态事件只更新运行开关和后台操作；不会把正在查看的配置当作运行对象。 */
@@ -142,26 +148,33 @@ export function useWorkbench({extraDirty = false} = {}) {
   function moveModel(id, targetID, visibleIDs) {editConnection(c => ({...c, models: reorderModels(c.models, id, targetID, visibleIDs)}));}
   /** 高级重置保持凭据和模型设置，并等待用户明确保存。 */
   function resetAdvanced() {ask({title: '恢复高级设置默认值？', description: '仅还原运行参数，修改仍需保存连接。', action: '恢复默认', run: () => editConnection(c => ({...c, override: false, maxTokens: 4096, firstTimeout: 180, idleTimeout: 120, taskTimeout: 15, response: 'stream'}))});}
-  /** 执行可取消的测试和目录查询；请求身份或地址、协议、凭据改变后，不把旧结果合入新草稿。 */
+  /** 执行可取消的真实请求并记录耗时；任务仅保存来源代次，身份或凭据改变后不合入旧目录。 */
   async function start(key, label) {
     if (requests.current[key]) return;
     const c = clone(current.current.connections[connectionID]), requestId = crypto.randomUUID(), abort = new AbortController();
-    requests.current[key] = abort; epochs.current[key] = requestId; setJobs(prev => ({...prev, [key]: {phase: 'loading', label}}));
+    const source = sources.current[c.id] || 0, started = performance.now();
+    requests.current[key] = abort; epochs.current[key] = requestId; setJobs(prev => ({...prev, [key]: {phase: 'loading', label, source}}));
     try {
       const catalog = key.startsWith('catalog-'), result = await api(catalog ? '/api/models' : '/api/probe', {name: c.name, requestId, config: {version: 1, models: {[c.name]: encodeConnection(c)}}}, abort.signal);
       if (epochs.current[key] !== requestId) return;
       if (!sameCatalogSource(current.current.connections[c.id], c)) throw new Error(catalog ? '连接已修改，请重新刷新模型。' : '连接已修改，请重新测试。');
       if (catalog) changeStore(prev => ({...prev, connections: {...prev.connections, [c.id]: mergeCatalog(prev.connections[c.id], result)}}));
-      setJobs(prev => ({...prev, [key]: {phase: 'success', label: catalog ? `已读取 ${result.models.length} 个模型${result.truncated ? ' · 目录已截断' : ''}` : `连接测试成功${result.reply ? ' · ' + result.reply : ''}`}}));
-    } catch (error) {if (epochs.current[key] === requestId) setJobs(prev => ({...prev, [key]: {phase: 'error', label: error.message}}));} finally {if (epochs.current[key] === requestId) delete requests.current[key];}
+      setJobs(prev => ({...prev, [key]: {phase: 'success', source, elapsedMS: Math.round(performance.now() - started), label: catalog ? `已读取 ${result.models.length} 个模型${result.truncated ? ' · 目录已截断' : ''}` : `连接测试成功${result.reply ? ' · ' + result.reply : ''}`}}));
+    } catch (error) {if (epochs.current[key] === requestId) setJobs(prev => ({...prev, [key]: {phase: 'error', source, label: error.message}}));} finally {if (epochs.current[key] === requestId) delete requests.current[key];}
   }
   /** 取消同步撤销请求身份，迟到的成功响应不会覆盖取消提示；桌面绑定同时中止上游请求。 */
-  function cancel(key) {const id = epochs.current[key]; requests.current[key]?.abort(); delete requests.current[key]; epochs.current[key] = ''; if (id && window.desktopApp) void desktopAction('cancelProbe', id).catch(() => {}); setJobs(prev => ({...prev, [key]: {phase: 'cancelled', label: '已取消'}}));}
+  function cancel(key) {const id = epochs.current[key]; requests.current[key]?.abort(); delete requests.current[key]; epochs.current[key] = ''; if (id && window.desktopApp) void desktopAction('cancelProbe', id).catch(() => {}); setJobs(prev => ({...prev, [key]: {...prev[key], phase: 'cancelled', label: '已取消'}}));}
   /** 更新与插件操作完全使用真实 Go 状态，前端仅提前展示等待，不用定时器模拟结果。 */
   async function updateAction(name, plugin = false, arg) {
     const field = plugin ? 'pluginUpdate' : 'update';
     try {acceptState(await desktopAction(name, ...(arg === undefined ? [] : [arg])));} catch (error) {setBackend(prev => ({...prev, [field]: {...prev[field], phase: 'error', message: error.message}}));}
   }
   const allJobs = {...jobs, update: updateJob(backend.update)};
+  // 保留进行中的取消入口；来源改变后不展示旧测试结论，目录错误仍留在查询操作旁。
+  for (const [key, job] of Object.entries(jobs)) {
+    if (!key.startsWith('test-') || job.phase === 'loading') continue;
+    const id = key.slice(5);
+    if (!store.connections[id] || job.source !== (sources.current[id] || 0)) delete allJobs[key];
+  }
   return {store, backend, loading, loadError, load, busy, pending, page, connectionID, tab, setTab, modal, setModal, confirm, closeConfirm, toast, setToast, mobileNav, setMobileNav, opener, jobs: allJobs, dirty, openModal, navigate, openConnection, editPlan, editConnection, commitPlan, toggleAccess, restorePlan, copyPlan, removePlan, createPlan, createConnection, copyConnection, removeConnection, commitConnection, restoreConnection, moveModel, resetAdvanced, start, cancel, updateAction, select: id => changeStore(prev => ({...prev, selected: id, actionError: null}))};
 }

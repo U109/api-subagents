@@ -3,11 +3,12 @@ import * as Tabs from '@radix-ui/react-tabs';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import {BarChart3, Activity, List, CircleDollarSign, RefreshCw, X, ChevronDown, Check} from 'lucide-react';
+import {BarChart3, Activity, List, CircleDollarSign, RefreshCw, X, ChevronDown, Check, Trash2} from 'lucide-react';
 import {USAGE_SOURCES, USAGE_RESULTS, usageKey, normalizeUsage, usageModels, configuredPriceModels, usageSeriesModels, selectUsageRows, usageSummary, usageVisibleBreakdown, usageBuckets, usageGroups, usageCost} from './usage-domain.mjs';
 import {placeUsageTooltip} from './usage-tooltip.mjs';
 import {api} from './transport.mjs';
-import {createUsageGate, priceForm, editPrice, parsePrices} from './usage-state.mjs';
+import {createUsageGate, priceForm} from './usage-state.mjs';
+import {groupModelPrices, editModelPrice, unifyModelPrice, modelPricePayload} from './model-prices.mjs';
 
 const tabItems = [['overview', BarChart3, '概览'], ['analysis', Activity, '分析'], ['requests', List, '请求明细'], ['prices', CircleDollarSign, '价格统计']];
 
@@ -133,29 +134,39 @@ function Analysis({rows, view, update}) {
   return <section className="u-panel"><div className="u-panel-heading"><h2>用量分析</h2><div className="u-analysis-group"><UsageSelect label="分析分组" value={view.group} options={[["model", "按模型"], ["connection", "按连接"], ["source", "按来源"]]} onChange={group => update({group})} /></div></div><div className="u-table-wrap"><table className="u-table"><thead><tr><th>分组</th><th>请求数</th><th>输入 Token</th><th>输出 Token</th><th>总 Token</th><th>成功率</th><th>估算费用</th></tr></thead><tbody>{groups.map(group => <tr key={group.id}><td>{view.group === 'source' ? USAGE_SOURCES[group.id] : group.id}</td><td>{number(group.requests)}</td><td>{number(group.input)}</td><td>{number(group.output)}</td><td>{number(group.total)}</td><td>{percent(group.successRate)}</td><td>{money(group.cost)}</td></tr>)}</tbody></table></div>{!groups.length && <div className="u-empty">当前筛选下暂无请求</div>}</section>;
 }
 
-/** 请求列表分页并保留未知字段；查看详情只展开脱敏合成元数据，不展示提示词和响应正文。 */
+/** 请求表格独立滚动并保留分页与未知字段；表头和分页保持可见，详情只展开脱敏元数据。 */
 function Requests({rows, view, update, openDetail}) {
   const page = Math.min(view.page, Math.max(0, Math.ceil(rows.length / 8) - 1)), slice = rows.slice(page * 8, page * 8 + 8);
-  return <section className="u-panel"><div className="u-panel-heading"><h2>请求明细</h2><span>{number(rows.length)} 条请求</span></div><div className="u-table-wrap"><table className="u-table u-request-table"><thead><tr><th>时间</th><th>连接 / 模型</th><th>来源</th><th>请求结果</th><th>总 Token</th><th>估算费用</th><th>操作</th></tr></thead><tbody>{slice.map(row => <tr key={row.id}><td>{timeLabel(row.startedAt)}</td><td><strong>{row.connection}</strong><small className="u-mono">{row.model}</small></td><td>{USAGE_SOURCES[row.source]}</td><td><span className={`u-result u-result-${row.result}`}>{USAGE_RESULTS[row.result]}</span></td><td>{number(row.total)}{row.total == null && <small>未上报</small>}</td><td>{money(usageCost(row, view.rates))}</td><td><UsageButton onClick={() => openDetail(row.id)} aria-label={`查看请求 ${row.id}`}>详情</UsageButton></td></tr>)}</tbody></table></div>{!rows.length && <div className="u-empty">当前筛选下暂无请求</div>}<div className="u-pagination"><span>{rows.length ? `${page * 8 + 1}–${Math.min(rows.length, page * 8 + 8)}` : '0'} / {number(rows.length)}</span><div><UsageButton disabled={page === 0} onClick={() => update({page: page - 1})}>上一页</UsageButton><UsageButton disabled={(page + 1) * 8 >= rows.length} onClick={() => update({page: page + 1})}>下一页</UsageButton></div></div></section>;
+  // 分页与筛选标识滚动容器，重建后不继承旧列表的键盘滚动；详情开关不改变标识，保留原按钮焦点。
+  const scrollKey = JSON.stringify([page, view.filters.range, view.filters.model, view.filters.connection, view.filters.source]);
+  return <section className="u-panel u-requests-panel">
+    <div className="u-panel-heading"><h2>请求明细</h2><span>{number(rows.length)} 条请求</span></div>
+    <div key={scrollKey} className="u-table-wrap" role="region" aria-label="请求明细列表" tabIndex={0}>
+      <table className="u-table u-request-table"><thead><tr><th>时间</th><th>连接 / 模型</th><th>来源</th><th>请求结果</th><th>总 Token</th><th>估算费用</th><th>操作</th></tr></thead><tbody>{slice.map(row => <tr key={row.id}><td>{timeLabel(row.startedAt)}</td><td><strong>{row.connection}</strong><small className="u-mono">{row.model}</small></td><td>{USAGE_SOURCES[row.source]}</td><td><span className={`u-result u-result-${row.result}`}>{USAGE_RESULTS[row.result]}</span></td><td>{number(row.total)}{row.total == null && <small>未上报</small>}</td><td>{money(usageCost(row, view.rates))}</td><td><UsageButton onClick={() => openDetail(row.id)} aria-label={`查看请求 ${row.id}`}>详情</UsageButton></td></tr>)}</tbody></table>
+      {!rows.length && <div className="u-empty">当前筛选下暂无请求</div>}
+    </div>
+    <div className="u-pagination"><span>{rows.length ? `${page * 8 + 1}–${Math.min(rows.length, page * 8 + 8)}` : '0'} / {number(rows.length)}</span><div><UsageButton disabled={page === 0} onClick={() => update({page: page - 1})}>上一页</UsageButton><UsageButton disabled={(page + 1) * 8 >= rows.length} onClick={() => update({page: page + 1})}>下一页</UsageButton></div></div>
+  </section>;
 }
 
-/** 费率表不重复展示说明，受控草稿跨页面保留；外部修订冲突须核对，重新载入前确认放弃输入。 */
+/** 精确模型 ID 只展示一组完整分层费率；连接差异须显式统一，草稿、修订和隐藏费率保持不变。 */
 function Prices({rates, models, revision, draft, changeDraft, save}) {
   const [error, setError] = useState(''), [saving, setSaving] = useState(false);
   const form = priceForm(draft, rates, models, revision), stale = form.dirty && form.revision !== revision;
+  const groups = groupModelPrices(models, form.rates);
   const fields = [['input', '普通输入'], ['output', '输出'], ['read', '缓存读取'], ['write', '缓存创建']];
   /** 保存普通和 Fast 的完整费率，保留隐藏项与历史快照；失败、冲突和跨窗口编辑不清除草稿。 */
   async function submit(event) {
     event.preventDefault();
     if (stale) {setError('费率已被其他窗口修改。你的草稿已保留，请载入最新费率后重新核对。'); return;}
-    let next; try {next = parsePrices(form.rates);} catch (failure) {setError(failure.message); return;}
+    let next; try {next = modelPricePayload(form.rates, models);} catch (failure) {setError(failure.message); return;}
     setSaving(true); setError('');
     try {await save(next, form.revision); changeDraft(previous => previous === draft ? null : previous);} catch (failure) {setError(failure.message);} finally {setSaving(false);}
   }
-  return <section className="u-panel"><div className="u-panel-heading"><h2>模型价格配置</h2><span>USD / 百万 Token</span></div><form onSubmit={submit} aria-busy={saving}><div className="u-prices">{models.map(model => {
-    const price = form.rates[model.id] || {}, tiers = [{key: 'standard', title: '普通模式', value: price}, {key: 'fast', title: 'Fast 模式', value: price.fast}];
+  return <section className="u-panel u-price-panel"><div className="u-panel-heading"><h2>模型价格配置</h2><span>USD / 百万 Token</span></div><form onSubmit={submit} aria-busy={saving}><div className="u-prices" role="region" aria-label="模型价格列表" tabIndex={0}>{groups.map(model => {
+    const price = model.price, tiers = [{key: 'standard', title: '普通模式', value: price}, {key: 'fast', title: 'Fast 模式', value: price.fast}];
     if (price.longContext) {tiers.push({key: 'long', title: '长上下文 · 输入 > ' + price.longContext.above.toLocaleString(), value: price.longContext.rate}); if (price.longContext.fast) tiers.push({key: 'long-fast', title: '长上下文 Fast', value: price.longContext.fast});}
-    return <fieldset key={model.id} disabled={saving}><legend>{model.label}</legend><p className="u-price-origin">{price.source ? '官网默认 · ' + price.checkedAt : fields.some(([field]) => price[field] !== '' && price[field] != null) ? '自定义费率' : '未定价'}{model.fast && <span className="u-fast-status">Fast 已开启</span>}</p>{price.note && <p className="u-price-note">{price.note}</p>}{tiers.map(tier => <section className="u-rate-group" key={tier.key}><h3>{tier.title}</h3><div>{fields.map(([field, label]) => <label key={field}>{label}<input type="number" min="0" max="10000" step="any" aria-label={model.model + ' ' + (tier.key === 'standard' ? '' : tier.title + ' ') + label + '单价'} aria-invalid={Boolean(error || stale)} aria-describedby={error || stale ? 'usage-price-error' : undefined} value={tier.value?.[field] ?? ''} onChange={event => changeDraft(previous => editPrice(previous, rates, models, revision, model.id, field, event.target.value, tier.key))} /></label>)}</div></section>)}</fieldset>;
+    return <fieldset key={model.id} disabled={saving}><legend>{model.label}</legend>{model.conflict && <div className="u-price-conflict" role="alert"><p>此模型在不同连接中的费率不一致。下方暂显示 {model.members[0]?.connection} 的费率，请选择一套完整费率统一应用，或修改差异单价。</p><div>{model.members.map(member => <UsageButton key={member.id} onClick={() => changeDraft(previous => unifyModelPrice(previous, rates, models, revision, model.model, member.id))}>统一采用 {member.connection} 的费率</UsageButton>)}</div></div>}<p className="u-price-origin">{price.source ? '官网默认 · ' + price.checkedAt : fields.some(([field]) => price[field] !== '' && price[field] != null) ? '自定义费率' : '未定价'}{model.fast && <span className="u-fast-status">Fast 已开启</span>}</p>{price.note && <p className="u-price-note">{price.note}</p>}{tiers.map(tier => <section className="u-rate-group" key={tier.key}><h3>{tier.title}</h3><div>{fields.map(([field, label]) => <label key={field}>{label}<input type="number" min="0" max="10000" step="any" aria-label={model.model + ' ' + (tier.key === 'standard' ? '' : tier.title + ' ') + label + '单价'} aria-invalid={Boolean(error || stale)} aria-describedby={error || stale ? 'usage-price-error' : undefined} value={tier.value?.[field] ?? ''} onChange={event => changeDraft(previous => editModelPrice(previous, rates, models, revision, model.model, field, event.target.value, tier.key))} /></label>)}</div></section>)}</fieldset>;
   })}</div>{!models.length && <div className="u-empty">暂无已配置模型，请先在我的连接中选择并保存模型。</div>}{(error || stale) && <p id="usage-price-error" className="u-error" role="alert">{error || '费率已被其他窗口修改。你的草稿已保留，请载入最新费率后重新核对。'}</p>}<div className="u-price-actions"><button type="submit" className="button button-primary" disabled={saving || !models.length}>{saving ? '正在保存费率' : '保存费率'}</button>{stale && <AlertDialog.Root><AlertDialog.Trigger asChild><button type="button" className="button button-secondary" disabled={saving}>载入最新费率</button></AlertDialog.Trigger><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content"><AlertDialog.Title className="dialog-title">放弃未保存费率？</AlertDialog.Title><AlertDialog.Description className="dialog-description">将放弃当前费率草稿并载入其他窗口保存的最新费率，历史请求费用不会改变。</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><button type="button" className="button button-secondary">保留草稿</button></AlertDialog.Cancel><AlertDialog.Action asChild><button type="button" className="button button-primary" onClick={() => {changeDraft(() => null); setError('');}}>放弃草稿并载入</button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>}</div></form></section>;
 }
 
@@ -164,16 +175,29 @@ function RequestDetail({row, close, rates, opener}) {
   return <Dialog.Root open={Boolean(row)} onOpenChange={open => {if (!open) close();}}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content u-detail-dialog" onCloseAutoFocus={event => {event.preventDefault(); if (opener.current?.isConnected) opener.current.focus();}}><Dialog.Title className="dialog-title">请求详情</Dialog.Title><Dialog.Description className="dialog-description">仅展示脱敏状态和用量，不含提示词、回答或 Key。</Dialog.Description><Dialog.Close asChild><button type="button" className="button button-ghost icon-button u-detail-close" aria-label="关闭请求详情"><X size={18} aria-hidden="true" /></button></Dialog.Close>{row && <dl className="u-detail-grid">{[['请求 ID', row.id], ['连接 / 模型', `${row.connection} / ${row.model}`], ['请求结果', USAGE_RESULTS[row.result]], ['调用来源', USAGE_SOURCES[row.source]], ['输入 Token', number(row.input)], ['输出 Token', number(row.output)], ['缓存读取', number(row.read)], ['缓存创建', number(row.write)], ['推理 Token', number(row.reasoning)], ['上游尝试', row.attempts], ['用量质量', row.total == null ? '未上报，不按零处理' : row.attempts > 1 ? '部分尝试未知，只合计已知值' : '已上报；仅合计已知数据'], ['估算费用', `${money(usageCost(row, rates))} · 已知费率`]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 
+/** 全部统计的清空必须经 Radix 确认；提交期间禁止重复操作，失败保留弹框及错误，关闭后回到原按钮。 */
+function ClearUsageControl({clear, busy}) {
+  const [open, setOpen] = useState(false), [error, setError] = useState(''), errorID = useId();
+  /** 阻止确认按钮默认关闭，等待后台清除成功再关闭；失败仍可取消或原地重试。 */
+  async function confirm(event) {
+    event.preventDefault(); if (busy) return;
+    setError(''); try {await clear(); setOpen(false);} catch (failure) {setError(failure.message || '清除失败，原记录已保留，请重试。');}
+  }
+  return <AlertDialog.Root open={open} onOpenChange={next => {if (!busy) {setOpen(next); setError('');}}}><AlertDialog.Trigger asChild><UsageButton className="u-clear" aria-label="清除全部请求统计" title="清除全部请求统计" disabled={busy}><Trash2 size={15} aria-hidden="true" /></UsageButton></AlertDialog.Trigger><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content confirm-dialog" aria-busy={busy} onEscapeKeyDown={event => {if (busy) event.preventDefault();}}><AlertDialog.Title className="dialog-title">清除全部请求统计？</AlertDialog.Title><AlertDialog.Description className="dialog-description">将清除所有连接、所有时间范围的请求记录及用量统计，不仅是当前筛选结果。连接、接入配置和模型价格不会被删除。此操作无法撤销。</AlertDialog.Description>{error && <p id={errorID} className="field-error usage-clear-error" role="alert">{error}</p>}<div className="dialog-actions"><AlertDialog.Cancel asChild><UsageButton disabled={busy}>取消</UsageButton></AlertDialog.Cancel><AlertDialog.Action asChild><button type="button" className="button button-destructive" disabled={busy} aria-busy={busy} aria-describedby={error ? errorID : undefined} onClick={confirm}>{busy ? '正在清除…' : '清除全部记录'}</button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
+}
+
 /** 用量页保留四个页签与受控菜单筛选；移除冗余来源文案，切换和刷新仍保留父级草稿与真实结果边界。 */
 export function UsagePage({view, onChange, connections, requestGate}) {
   const detailOpener = useRef(null), alive = useRef(true), pricesRevision = useRef(null), gate = useRef(requestGate || createUsageGate());
   const [records, setRecords] = useState([]), [now, setNow] = useState(Date.now()), [loading, setLoading] = useState(true), [readError, setReadError] = useState(''), [degraded, setDegraded] = useState('');
+  const [clearing, setClearing] = useState(false);
   const allRows = useMemo(() => normalizeUsage(records), [records]);
   const models = useMemo(() => usageModels(allRows, connections), [allRows, connections]);
   const rows = useMemo(() => selectUsageRows(allRows, view, now), [allRows, view, now]);
   const detail = allRows.find(row => row.id === view.detail);
   /** 读取最近三十天真实记录；只接受最新读取，保存费率期间的旧修订不能回写，失败保留旧数据。 */
   async function load() {
+    if (gate.current.isClearing()) return;
     const ticket = gate.current.beginRead();
     try {
       const to = Date.now(), value = await api('/api/usage', {from: to-30*86400000, to});
@@ -183,6 +207,18 @@ export function UsagePage({view, onChange, connections, requestGate}) {
     } catch (failure) {if (alive.current && gate.current.acceptsRead(ticket)) setReadError(failure.message);} finally {if (alive.current && gate.current.acceptsRead(ticket)) setLoading(false);}
   }
   useEffect(() => {alive.current=true; void load(); const timer=setInterval(load,10000); return () => {alive.current=false; gate.current.invalidate(); clearInterval(timer);};}, []);
+  /** 清除全部真实请求记录，不传当前筛选；费率及其草稿保持原样，失败不删旧列表并允许再次确认。 */
+  async function clearUsage() {
+    if (gate.current.isClearing()) return;
+    gate.current.beginClear(); setClearing(true); setLoading(false);
+    try {
+      const result = await api('/api/usage/clear', {confirm: true});
+      if (alive.current) {
+        setRecords([]); setNow(Date.now()); setReadError(''); setDegraded('');
+        onChange(previous => ({...previous, filters: {...previous.filters, model: 'all', connection: 'all', source: 'all'}, page: 0, detail: null, message: result.cleanupPending ? '全部请求统计已清除，旧账本文件清理未完成，请检查本机文件权限。' : '已清除全部请求记录及用量统计'}));
+      }
+    } finally {gate.current.endClear(); if (alive.current) setClearing(false);}
+  }
   /** 将用户单价保存至独立费率文件；后端修订检查失败时不覆盖其他窗口的新价格。 */
   async function savePrices(rates, revision) {
     gate.current.beginWrite();
@@ -207,8 +243,7 @@ export function UsagePage({view, onChange, connections, requestGate}) {
     ['connection', '连接', [['all', '全部连接'], ...[...new Set([...Object.keys(connections), ...models.map(model => model.connection)])].map(id => [id, connections[id]?.name ?? `${id}（历史连接）`])]],
     ['source', '来源', [['all', '全部业务调用'], ...Object.entries(USAGE_SOURCES)]]
   ];
-  return <div className="usage-reference" data-testid="usage-panel"><Tabs.Root value={tabItems.some(([id]) => id === view.tab) ? view.tab : 'overview'} onValueChange={tab => update({tab})}><header className="u-heading"><h1>用量统计</h1><Tabs.List className="u-tabs" aria-label="用量统计页面">{tabItems.map(([id, Icon, label]) => <Tabs.Trigger value={id} key={id}><Icon size={15} aria-hidden="true" />{label}</Tabs.Trigger>)}</Tabs.List></header>
-    <div className="u-status-line"><div className="u-collection"><span className={view.collecting ? 'u-collect-dot' : 'u-collect-dot paused'} aria-hidden="true" /><strong>本地用量记录</strong></div><UsageButton className="u-refresh" aria-label="刷新用量记录" onClick={() => void load()}><RefreshCw size={15} aria-hidden="true" /></UsageButton></div>
+  return <div className="usage-reference" data-testid="usage-panel"><Tabs.Root className="usage-tabs-root" value={tabItems.some(([id]) => id === view.tab) ? view.tab : 'overview'} onValueChange={tab => update({tab})}><header className="u-heading"><h1 className="sr-only">用量统计</h1><div className="u-heading-tools"><Tabs.List className="u-tabs" aria-label="用量统计页面">{tabItems.map(([id, Icon, label]) => <Tabs.Trigger value={id} key={id}><Icon size={15} aria-hidden="true" />{label}</Tabs.Trigger>)}</Tabs.List><ClearUsageControl clear={clearUsage} busy={clearing} /><UsageButton className="u-refresh" aria-label="刷新用量记录" disabled={clearing} onClick={() => void load()}><RefreshCw size={15} aria-hidden="true" /></UsageButton></div></header>
     {(readError || degraded) && <div className="field-error" role="alert">{readError || degraded}</div>}{loading && <p role="status">正在读取本地用量记录…</p>}<section className="u-filters" aria-label="全局用量筛选">{filters.map(([field, label, options]) => <div className="u-filter-field" key={field}><span>{label}</span><UsageSelect label={`用量${label}`} value={view.filters[field]} options={options} onChange={value => changeFilter(field, value)} /></div>)}</section>
     <Tabs.Content value="overview">{loading || readError && !records.length ? <section className="u-panel" role="status">{loading ? '正在读取本地用量…' : '无法读取记录，请刷新重试'}</section> : <Overview rows={rows} view={view} models={models} now={now} />}</Tabs.Content>
     <Tabs.Content value="analysis"><Analysis rows={rows} view={view} update={update} /></Tabs.Content>

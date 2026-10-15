@@ -46,6 +46,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	record.ID = shared.UUID()
 	record.Attempt = value.sequence.Add(1)
 	record.StartedAt = start.UnixMilli()
+	t.Store.stampRecord(&record)
 	record.FirstByteMS = -1
 	prices, pricesError := t.Store.Prices()
 	if prices.Rates == nil || pricesError != nil {

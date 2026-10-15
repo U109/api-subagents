@@ -1,17 +1,23 @@
 /** 建立用量读取身份；只有最新读取可更新记录，保存开始前或保存期间的读取不能覆盖费率。 */
 export function createUsageGate() {
-  let read = 0, prices = 0, writing = false;
+  let read = 0, prices = 0, writing = false, clearing = false;
   return {
     /** 分配读取身份，记录发起时的费率代次。 */
     beginRead() {return {read: ++read, prices};},
     /** 拒绝更早的读取及组件离开后的回调。 */
-    acceptsRead(ticket) {return ticket.read === read;},
+    acceptsRead(ticket) {return ticket.read === read && !clearing;},
     /** 费率读结果还必须没有跨越写入边界，避免读到保存前的旧修订。 */
     acceptsPrices(ticket) {return ticket.prices === prices && !writing;},
     /** 串行保存费率，跨页签重复点击不会创建第二次写入。 */
     beginWrite() {if (writing) throw new Error('正在保存费率，请稍候。'); writing = true; prices++;},
     /** 完成或失败都使写入期间的费率读取失效，下一次刷新再读取权威修订。 */
     endWrite() {writing = false; prices++;},
+    /** 清除开始即撤销旧账本读取，不影响独立的费率写入和未保存草稿。 */
+    beginClear() {if (clearing) throw new Error('正在清除请求统计，请稍候。'); clearing = true; read++;},
+    /** 成功或失败都废弃清除期间的读取，后续刷新才能接收新的账本内容。 */
+    endClear() {clearing = false; read++;},
+    /** 页面重入和定时刷新都通过同一标记避免在清除过程中发起读取。 */
+    isClearing() {return clearing;},
     /** 离开页面撤销全部读取身份，不把迟到回调应用到重新进入的页面。 */
     invalidate() {read++; prices++;}
   };

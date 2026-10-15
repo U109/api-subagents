@@ -55,6 +55,8 @@ jobs:
           $env:CHROME_PATH = node -e "console.log(require('./frontend/node_modules/playwright').chromium.executablePath())"
           node frontend/workbench.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node frontend/workbench-refinements.test.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node frontend/macos-settings.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node frontend/model-fast.test.cjs
